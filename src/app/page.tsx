@@ -1,5 +1,6 @@
 
-import { Baby, CalendarDays, Gift, MapPin } from 'lucide-react';
+import Link from 'next/link'; // Import Link
+import { Baby, CalendarDays, Gift, MapPin, LogIn } from 'lucide-react'; // Added LogIn icon
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -27,9 +28,21 @@ export default function Home() {
   const formattedTime = eventDetails.time;
 
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-8">
+    <div className="container mx-auto p-4 md:p-8 space-y-8 relative"> {/* Added relative positioning */}
+
+      {/* Admin Login Button - Top Right */}
+      <div className="absolute top-4 right-4 md:top-8 md:right-8 z-10">
+        <Link href="/admin">
+          <Button variant="outline" size="sm">
+            <LogIn className="mr-2 h-4 w-4" />
+            Admin
+          </Button>
+        </Link>
+      </div>
+
+
       {/* Header Section */}
-      <header className="text-center space-y-4">
+      <header className="text-center space-y-4 pt-12"> {/* Added padding-top to avoid overlap */}
         <Baby className="mx-auto h-16 w-16 text-secondary" />
         <h1 className="text-3xl md:text-4xl font-semibold text-primary">{eventDetails.title}</h1>
         <p className="text-lg text-muted-foreground">{eventDetails.welcomeMessage}</p>
