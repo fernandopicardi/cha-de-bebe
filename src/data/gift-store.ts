@@ -1,3 +1,4 @@
+
 'use server'; // Mark module for server-side execution if potentially used in Server Actions
 
 // Define interfaces for better type safety
@@ -36,9 +37,51 @@ let giftItems: GiftItem[] = [
   { id: '10', name: 'Pomada para Assaduras', category: 'Higiene', status: 'available', description: 'Marca Bepantol Baby ou similar.'},
 ];
 
-// In-memory store for suggestions (can be merged with giftItems if preferred)
-// For simplicity now, let's add suggestions directly to giftItems with 'pending_suggestion' status
-// let suggestions: GiftItem[] = []; // Example if kept separate
+// --- Event Settings ---
+export interface EventSettings {
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  location: string;
+  address: string;
+  welcomeMessage: string;
+  duration?: number; // Optional duration in minutes
+}
+
+// In-memory store for event settings
+let eventSettings: EventSettings = {
+  title: 'Chá de Bebê!', // Default title, admin can change this
+  date: '2024-12-15',
+  time: '14:00',
+  location: 'Salão de Festas Felicidade',
+  address: 'Rua Exemplo, 123, Bairro Alegre, Cidade Feliz - SP',
+  welcomeMessage: 'Sua presença é nosso maior presente! Esta lista é apenas um guia para os presentes.',
+  duration: 180,
+};
+
+/**
+ * Retrieves the current event settings.
+ * @returns A promise resolving to the event settings object.
+ */
+export async function getEventSettings(): Promise<EventSettings> {
+  // Simulate async if needed: await new Promise(resolve => setTimeout(resolve, 0));
+  return { ...eventSettings }; // Return a copy
+}
+
+/**
+ * (Admin) Updates the event settings.
+ * @param updates Partial data containing the updates for event settings.
+ * @returns A promise resolving to the updated event settings object.
+ */
+export async function updateEventSettings(updates: Partial<EventSettings>): Promise<EventSettings> {
+  eventSettings = {
+    ...eventSettings,
+    ...updates,
+  };
+  console.log('Event settings updated by admin.');
+  return { ...eventSettings }; // Return a copy of the updated settings
+}
+
 
 // --- Gift Item Functions ---
 
@@ -268,3 +311,5 @@ export async function exportGiftsToCSV(): Promise<string> {
 
     return [headers.join(','), ...rows].join('\n');
 }
+
+    

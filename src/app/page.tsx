@@ -1,4 +1,5 @@
 
+
 import Link from 'next/link';
 import { Baby, CalendarDays, Gift, MapPin, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,30 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GiftList from '@/components/gift-list';
 import AddToCalendarButton from '@/components/add-to-calendar-button';
 import SuggestItemButton from '@/components/suggest-item-button';
-
-// Placeholder data store/fetch function - Replace with actual data source logic
-// In a real app, this might fetch from an API, Firestore, or the in-memory store if settings are managed there.
-async function getEventDetails() {
-  // Simulating fetching data
-  await new Promise(resolve => setTimeout(resolve, 0)); // Simulate async
-  return {
-    date: '2024-12-15',
-    time: '14:00',
-    location: 'Salão de Festas Felicidade',
-    address: 'Rua Exemplo, 123, Bairro Alegre, Cidade Feliz - SP',
-    welcomeMessage: 'Sua presença é nosso maior presente! Esta lista é apenas um guia para os presentes.',
-    title: 'Chá de Bebê da Safira!', // Updated title
-    // Optional: Add duration if needed for calendar
-    duration: 180, // Duration in minutes (e.g., 3 hours)
-  };
-}
+import { getEventSettings } from '@/data/gift-store'; // Import function to get event settings
 
 // Placeholder categories - Replace or fetch if dynamic
 const categories = ['Roupas', 'Higiene', 'Brinquedos', 'Alimentação', 'Outros'];
 
 export default async function Home() {
-  // Fetch event details server-side
-  const eventDetails = await getEventDetails();
+  // Fetch event details server-side from the store
+  const eventDetails = await getEventSettings();
 
    // Formatting Date and Time - Ensure locale consistency
    let formattedDate = 'Data inválida';
@@ -66,6 +51,7 @@ export default async function Home() {
 
       <header className="text-center space-y-4 pt-12">
         <Baby className="mx-auto h-16 w-16 text-secondary" />
+        {/* Display title fetched from settings */}
         <h1 className="text-3xl md:text-4xl font-semibold text-primary">{eventDetails.title}</h1>
         <p className="text-lg text-muted-foreground">{eventDetails.welcomeMessage}</p>
       </header>
@@ -127,3 +113,5 @@ export default async function Home() {
     </div>
   );
 }
+
+    

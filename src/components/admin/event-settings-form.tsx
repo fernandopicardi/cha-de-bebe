@@ -1,6 +1,7 @@
+
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,27 +11,16 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { Save } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
+import { getEventSettings, updateEventSettings, type EventSettings } from '@/data/gift-store'; // Import store functions
 
-// Placeholder: Define where event details are stored and how they are updated.
-// For now, this component is mostly a UI placeholder.
-// In a real app, you'd fetch current settings and provide an onSave function.
-
-interface EventSettings {
-  title: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
-  location: string;
-  address: string;
-  welcomeMessage: string;
-}
 
 interface AdminEventSettingsFormProps {
-  // initialSettings?: EventSettings; // Optional initial data
-  onSave: (settings: EventSettings) => Promise<void>; // Callback to save data
+  // No initialSettings prop needed, fetch directly
+  onSave?: () => void; // Keep optional onSave callback if parent needs notification
 }
 
-// Validation Schema
+// Validation Schema - remains the same
 const settingsFormSchema = z.object({
   title: z.string().min(5, "Título muito curto."),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de data inválido (AAAA-MM-DD)."),
@@ -40,42 +30,63 @@ const settingsFormSchema = z.object({
   welcomeMessage: z.string().min(10, "Mensagem de boas-vindas muito curta.").max(200, "Mensagem muito longa."),
 });
 
-// Placeholder initial data (replace with fetched data)
-const placeholderSettings: EventSettings = {
-  date: '2024-12-15',
-  time: '14:00',
-  location: 'Salão de Festas Felicidade',
-  address: 'Rua Exemplo, 123, Bairro Alegre, Cidade Feliz - SP',
-  welcomeMessage: 'Sua presença é nosso maior presente! Esta lista é apenas um guia para os presentes.',
-  title: 'Chá de Bebê do(a) Futuro Bebê!',
-};
-
 
 export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFormProps) {
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true); // State for loading initial data
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<EventSettings>({
     resolver: zodResolver(settingsFormSchema),
-    defaultValues: placeholderSettings // Load initial/placeholder data
+    defaultValues: async () => { // Use async defaultValues to fetch
+       setIsLoading(true);
+       try {
+         const settings = await getEventSettings();
+         return settings;
+       } catch (error) {
+         console.error("Error fetching event settings:", error);
+         toast({ title: "Erro!", description: "Falha ao carregar configurações do evento.", variant: "destructive" });
+         return {}; // Return empty object or defaults on error
+       } finally {
+         setIsLoading(false);
+       }
+     }
   });
 
-   // Fetch real initial settings if provided
    // useEffect(() => {
-   //   if (initialSettings) {
-   //     reset(initialSettings);
+   //   // Fetch initial settings when component mounts
+   //   async function loadSettings() {
+   //     setIsLoading(true);
+   //     try {
+   //       const settings = await getEventSettings();
+   //       reset(settings); // Populate form with fetched data
+   //     } catch (error) {
+   //       console.error("Error fetching event settings:", error);
+   //       toast({ title: "Erro!", description: "Falha ao carregar configurações do evento.", variant: "destructive" });
+   //     } finally {
+   //       setIsLoading(false);
+   //     }
    //   }
-   // }, [initialSettings, reset]);
+   //   loadSettings();
+   // }, [reset, toast]);
 
   const onSubmit = async (data: EventSettings) => {
     try {
-       console.log("Saving event settings (placeholder):", data);
-       // await onSave(data); // Call the actual save function passed via props
-       await new Promise(resolve => setTimeout(resolve, 500)); // Simulate save
+       await updateEventSettings(data); // Use the store function to save
        toast({ title: "Sucesso!", description: "Detalhes do evento atualizados." });
+       onSave?.(); // Call optional parent callback
     } catch (error) {
       console.error("Error saving event settings:", error);
       toast({ title: "Erro!", description: "Falha ao salvar os detalhes do evento.", variant: "destructive" });
     }
   };
+
+  if (isLoading) {
+       return (
+           <div className="flex items-center justify-center p-8">
+               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+               <p className="ml-2 text-muted-foreground">Carregando configurações...</p>
+           </div>
+       );
+   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -118,10 +129,12 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
        </div>
 
       <div className="flex justify-end pt-2">
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Salvando...' : <><Save className="mr-2 h-4 w-4" /> Salvar Detalhes</>}
+          <Button type="submit" disabled={isSubmitting || isLoading}>
+            {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...</> : <><Save className="mr-2 h-4 w-4" /> Salvar Detalhes</>}
           </Button>
       </div>
     </form>
   );
 }
+
+    

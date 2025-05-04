@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -54,7 +55,7 @@ export default function AdminPage() {
       if (ALLOWED_EMAILS.includes(email) && password === ADMIN_PASSWORD) {
         setIsAuthenticated(true);
         // Fetch data immediately after successful login
-        // fetchAdminData(); // fetchAdminData will be called by the useEffect when isAuthenticated changes
+        // fetchAdminData will be called by the useEffect when isAuthenticated changes
       } else {
         setError('E-mail ou senha inválidos.');
       }
@@ -250,9 +251,8 @@ export default function AdminPage() {
             <CardDescription>Atualizar detalhes do evento e mensagens personalizadas.</CardDescription>
           </CardHeader>
           <CardContent>
-             {/* TODO: Pass relevant data and save function */}
-            <AdminEventSettingsForm onSave={() => { console.log("Event settings saved (placeholder)"); }} />
-             {/* <Button className="mt-4">Salvar Detalhes</Button> */}
+             {/* Component now fetches and saves its own data */}
+            <AdminEventSettingsForm onSave={refreshData} /> {/* Pass refreshData if updating settings might affect other admin data */}
           </CardContent>
         </Card>
 
@@ -269,3 +269,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    
