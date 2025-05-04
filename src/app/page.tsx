@@ -1,3 +1,4 @@
+
 import { Baby, CalendarDays, Gift, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,12 +66,12 @@ export default function Home() {
 
         {/* Filters and List */}
         <Tabs defaultValue="all" className="w-full">
-          {/* Adjusted grid columns to accommodate the new tab */}
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:flex lg:w-auto">
+          {/* Adjusted grid columns and added margin-bottom for mobile */}
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:flex lg:w-auto mb-4 md:mb-0">
             <TabsTrigger value="all">Todos</TabsTrigger>
             <TabsTrigger value="available">Disponíveis</TabsTrigger>
             <TabsTrigger value="selected">Selecionados</TabsTrigger>
-            <TabsTrigger value="not_needed">Não precisa</TabsTrigger> {/* Added 'Não precisa' tab */}
+            <TabsTrigger value="not_needed">Não Precisa</TabsTrigger> {/* Updated text */}
             {/* Dynamically add category filters if needed */}
             {/* categories.map(category => <TabsTrigger key={category} value={category.toLowerCase()}>{category}</TabsTrigger>) */}
           </TabsList>
