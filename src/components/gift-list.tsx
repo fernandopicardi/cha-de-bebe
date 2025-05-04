@@ -35,13 +35,13 @@ const mockGiftItems: GiftItem[] = [
 interface GiftListProps {
   filterStatus?: 'all' | 'available' | 'selected' | 'not_needed';
   filterCategory?: string;
-  showSelectedByName?: boolean; // New prop to control visibility of selector's name
+  showSelectedByName?: boolean; // Prop to control visibility of selector's name on admin page
 }
 
 export default function GiftList({
   filterStatus = 'all',
   filterCategory,
-  showSelectedByName = false // Default to hiding the name
+  showSelectedByName = false // Default to hiding the name on public page
 }: GiftListProps) {
   const [items, setItems] = useState<GiftItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,20 +64,27 @@ export default function GiftList({
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      // Explicitly show 'not_needed' items only when the 'not_needed' filter is active.
+      // Status filtering logic:
+      // If filterStatus is 'not_needed', only show 'not_needed' items.
+      // If filterStatus is anything else ('all', 'available', 'selected'), hide 'not_needed' items unless explicitly filtered for.
+      // If filterStatus is 'all', show 'available' and 'selected'.
+      // If filterStatus is 'available', show only 'available'.
+      // If filterStatus is 'selected', show only 'selected'.
+
       if (filterStatus === 'not_needed') {
         if (item.status !== 'not_needed') return false;
-      } else if (filterStatus !== 'all' && item.status === 'not_needed') {
-        // Hide 'not_needed' items for 'all', 'available', 'selected' filters
-        return false;
+      } else {
+        // Hide 'not_needed' for all other filters ('all', 'available', 'selected')
+        if (item.status === 'not_needed') return false;
+        // Apply specific status filter if not 'all'
+        if (filterStatus !== 'all' && item.status !== filterStatus) return false;
       }
 
-      // Apply status filter (if not 'all' and not handled above)
-      const statusMatch = filterStatus === 'all' || filterStatus === 'not_needed' || item.status === filterStatus;
-      // Apply category filter
+
+      // Apply category filter (if provided)
       const categoryMatch = !filterCategory || item.category.toLowerCase() === filterCategory.toLowerCase();
 
-      return statusMatch && categoryMatch;
+      return categoryMatch; // Status match is handled above
     });
   }, [items, filterStatus, filterCategory]);
 
@@ -125,7 +132,8 @@ export default function GiftList({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+      // Increased top margin from mt-4 to mt-6
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
         {[...Array(6)].map((_, index) => (
            <Card key={index} className="animate-pulse">
              <CardHeader>
@@ -153,7 +161,8 @@ export default function GiftList({
      if (filterStatus === 'not_needed') emptyMessage = "Nenhum item marcado como 'Não precisa'.";
 
     return (
-      <div className="text-center py-10 text-muted-foreground">
+       // Increased top margin from py-10 to pt-16 pb-10
+      <div className="text-center pt-16 pb-10 text-muted-foreground">
         <Gift className="mx-auto h-12 w-12 mb-4" />
         <p>{emptyMessage}</p>
         {filterStatus !== 'all' && (
@@ -168,7 +177,8 @@ export default function GiftList({
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+      {/* Increased top margin from mt-4 to mt-6 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
         {filteredItems.map((item) => (
           <Card key={item.id} className="flex flex-col justify-between shadow-md rounded-lg overflow-hidden animate-fade-in bg-card">
             <CardHeader>
@@ -186,7 +196,7 @@ export default function GiftList({
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
               {/* Pass selectedBy only if showSelectedByName is true */}
-              {getStatusBadge(item.status, showSelectedByName ? item.selectedBy : undefined)}
+              {getStatusBadge(item.status, item.selectedBy)}
               {/* Only show the button if the item is available */}
               {item.status === 'available' && (
                 <Button
