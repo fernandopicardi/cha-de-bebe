@@ -64,15 +64,23 @@ export default function GiftList({
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      // Filter out 'not_needed' items unless explicitly requested
-      if (filterStatus !== 'all' && filterStatus !== 'not_needed' && item.status === 'not_needed') {
+      // Explicitly show 'not_needed' items only when the 'not_needed' filter is active.
+      if (filterStatus === 'not_needed') {
+        if (item.status !== 'not_needed') return false;
+      } else if (filterStatus !== 'all' && item.status === 'not_needed') {
+        // Hide 'not_needed' items for 'all', 'available', 'selected' filters
         return false;
       }
-      const statusMatch = filterStatus === 'all' || item.status === filterStatus;
+
+      // Apply status filter (if not 'all' and not handled above)
+      const statusMatch = filterStatus === 'all' || filterStatus === 'not_needed' || item.status === filterStatus;
+      // Apply category filter
       const categoryMatch = !filterCategory || item.category.toLowerCase() === filterCategory.toLowerCase();
+
       return statusMatch && categoryMatch;
     });
   }, [items, filterStatus, filterCategory]);
+
 
   const handleSelectItemClick = (item: GiftItem) => {
     setSelectedItem(item);
@@ -108,8 +116,7 @@ export default function GiftList({
           </Badge>
         );
       case 'not_needed':
-         // Optionally hide 'not_needed' badge or display differently if needed
-         // For now, keep it as is unless filter handles hiding it.
+        // Display the 'Não Precisa' badge consistently
         return <Badge variant="destructive" className="bg-destructive text-destructive-foreground"><X className="mr-1 h-3 w-3" /> Não Precisa</Badge>;
       default:
         return <Badge variant="outline"><Hourglass className="mr-1 h-3 w-3" /> Indefinido</Badge>;
@@ -139,10 +146,16 @@ export default function GiftList({
   }
 
   if (filteredItems.length === 0 && !loading) {
+     // Customize message based on the filter
+     let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
+     if (filterStatus === 'available') emptyMessage = "Todos os presentes disponíveis já foram escolhidos!";
+     if (filterStatus === 'selected') emptyMessage = "Nenhum presente foi selecionado ainda.";
+     if (filterStatus === 'not_needed') emptyMessage = "Nenhum item marcado como 'Não precisa'.";
+
     return (
       <div className="text-center py-10 text-muted-foreground">
         <Gift className="mx-auto h-12 w-12 mb-4" />
-        <p>Nenhum item encontrado com os filtros selecionados.</p>
+        <p>{emptyMessage}</p>
         {filterStatus !== 'all' && (
              <Button variant="link" onClick={() => {/* Implement filter reset logic, e.g., using query params or state management */ }}>
                 Limpar filtros
@@ -174,6 +187,7 @@ export default function GiftList({
             <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
               {/* Pass selectedBy only if showSelectedByName is true */}
               {getStatusBadge(item.status, showSelectedByName ? item.selectedBy : undefined)}
+              {/* Only show the button if the item is available */}
               {item.status === 'available' && (
                 <Button
                    size="sm"
@@ -184,6 +198,7 @@ export default function GiftList({
                   <Gift className="mr-2 h-4 w-4" /> Escolher este presente
                 </Button>
               )}
+                 {/* Don't show button for 'selected' or 'not_needed' items on the public page */}
             </CardFooter>
           </Card>
         ))}

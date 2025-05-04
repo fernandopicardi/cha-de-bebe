@@ -65,28 +65,34 @@ export default function Home() {
 
         {/* Filters and List */}
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:flex lg:w-auto">
+          {/* Adjusted grid columns to accommodate the new tab */}
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:flex lg:w-auto">
             <TabsTrigger value="all">Todos</TabsTrigger>
             <TabsTrigger value="available">Disponíveis</TabsTrigger>
             <TabsTrigger value="selected">Selecionados</TabsTrigger>
+            <TabsTrigger value="not_needed">Não precisa</TabsTrigger> {/* Added 'Não precisa' tab */}
             {/* Dynamically add category filters if needed */}
             {/* categories.map(category => <TabsTrigger key={category} value={category.toLowerCase()}>{category}</TabsTrigger>) */}
           </TabsList>
 
           {/* Tab Content - Pass filter criteria to GiftList */}
           <TabsContent value="all">
-            <GiftList filterStatus="all" />
+             {/* Pass showSelectedByName=false to hide names on the public page */}
+            <GiftList filterStatus="all" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="available">
-            <GiftList filterStatus="available" />
+            <GiftList filterStatus="available" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="selected">
-            <GiftList filterStatus="selected" />
+            <GiftList filterStatus="selected" showSelectedByName={false} />
+          </TabsContent>
+           <TabsContent value="not_needed"> {/* Added content for 'Não precisa' tab */}
+            <GiftList filterStatus="not_needed" showSelectedByName={false} />
           </TabsContent>
           {/* Dynamically add category content */}
           {/* categories.map(category => (
             <TabsContent key={category} value={category.toLowerCase()}>
-              <GiftList filterCategory={category} filterStatus="available" />
+              <GiftList filterCategory={category} filterStatus="available" showSelectedByName={false} />
             </TabsContent>
           ))*/}
         </Tabs>
