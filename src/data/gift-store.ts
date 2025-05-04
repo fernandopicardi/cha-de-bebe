@@ -7,30 +7,29 @@ export interface GiftItem {
   name: string;
   description?: string;
   category: string;
-  status: 'available' | 'selected' | 'not_needed' | 'pending_suggestion'; // Added pending status
-  selectedBy?: string; // Name of the guest who selected the item
-  selectionDate?: Date; // Optional: Track when item was selected
-  suggestedBy?: string; // Name of the guest who suggested the item
-  suggestionDate?: Date; // Optional: Track when item was suggested
+  status: 'available' | 'selected' | 'not_needed'; // Removed 'pending_suggestion'
+  selectedBy?: string; // Name of the guest who selected the item (or suggested and self-selected)
+  selectionDate?: Date; // Optional: Track when item was selected/added
+  // Removed suggestedBy and suggestionDate as they are redundant now
 }
 
-// Define interface for suggestion data
+// Define interface for suggestion data (used when adding a new item directly)
 export interface SuggestionData {
   itemName: string;
   itemDescription?: string;
-  suggesterName: string;
+  suggesterName: string; // This person is now the 'selector'
 }
 
 
 // In-memory store for gift items
-// Initialize with some mock data
+// Initialize with some mock data (updated interface)
 let giftItems: GiftItem[] = [
   { id: '1', name: 'Body Manga Curta (RN)', category: 'Roupas', status: 'available', description: 'Pacote com 3 unidades, cores neutras.' },
   { id: '2', name: 'Fraldas Pampers (P)', category: 'Higiene', status: 'available', description: 'Pacote grande.' },
   { id: '3', name: 'Mamadeira Anti-cólica', category: 'Alimentação', status: 'selected', selectedBy: 'Maria Silva', selectionDate: new Date(2024, 6, 10) },
   { id: '4', name: 'Móbile Musical', category: 'Brinquedos', status: 'available' },
   { id: '5', name: 'Lenços Umedecidos', category: 'Higiene', status: 'selected', selectedBy: 'João Pereira', selectionDate: new Date(2024, 6, 11) },
-  { id: '6', name: 'Termômetro Digital', category: 'Higiene', status: 'not_needed' },
+  { id: '6', name: 'Termômetro Digital', category: 'Higiene', status: 'not_needed' }, // Example of not_needed status
   { id: '7', name: 'Macacão Pijama (M)', category: 'Roupas', status: 'available', description: 'Algodão macio.' },
   { id: '8', name: 'Chupeta Calmante', category: 'Outros', status: 'available'},
   { id: '9', name: 'Cadeirinha de Descanso', category: 'Outros', status: 'selected', selectedBy: 'Ana Costa', selectionDate: new Date(2024, 6, 12)},
@@ -50,7 +49,7 @@ export interface EventSettings {
 
 // In-memory store for event settings
 let eventSettings: EventSettings = {
-  title: 'Chá de Bebê!', // Default title, admin can change this
+  title: 'Chá de Bebê!', // Admin can change this
   date: '2024-12-15',
   time: '14:00',
   location: 'Salão de Festas Felicidade',
@@ -125,77 +124,63 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
   return updatedItem;
 }
 
-// --- Suggestion Functions ---
-
 /**
- * Adds a new item suggestion to the list with 'pending_suggestion' status.
- * @param suggestionData The data for the suggested item.
- * @returns A promise resolving to the newly added suggestion item.
+ * Marks an available gift item as 'not_needed'.
+ * @param itemId The ID of the item to mark.
+ * @returns A promise resolving to the updated item or null if not found/unavailable.
  */
-export async function addSuggestion(suggestionData: SuggestionData): Promise<GiftItem> {
-  const newItem: GiftItem = {
-    id: `suggestion-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Generate a unique ID
-    name: suggestionData.itemName,
-    description: suggestionData.itemDescription,
-    category: 'Sugestão', // Default category for suggestions
-    status: 'pending_suggestion',
-    suggestedBy: suggestionData.suggesterName,
-    suggestionDate: new Date(),
-  };
-
-  giftItems = [...giftItems, newItem];
-
-  console.log(`Suggestion "${newItem.name}" added by ${newItem.suggestedBy}.`);
-  return newItem;
-}
-
-
-// --- Admin Functions (Placeholders/Examples) ---
-
-/**
- * (Admin) Approves a suggestion, changing its status to 'available'.
- * @param suggestionId The ID of the suggestion item to approve.
- * @returns A promise resolving to the updated item or null if not found/not a suggestion.
- */
-export async function approveSuggestion(suggestionId: string): Promise<GiftItem | null> {
-    const itemIndex = giftItems.findIndex(item => item.id === suggestionId && item.status === 'pending_suggestion');
+export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | null> {
+    const itemIndex = giftItems.findIndex(item => item.id === itemId && item.status === 'available');
     if (itemIndex === -1) {
-        console.warn(`Suggestion ${suggestionId} not found or already processed.`);
+        console.warn(`Item ${itemId} not found or not available to be marked as not needed.`);
         return null;
     }
 
     const updatedItem = {
         ...giftItems[itemIndex],
-        status: 'available' as const, // Change status to available
-        category: giftItems[itemIndex].category === 'Sugestão' ? 'Outros' : giftItems[itemIndex].category, // Assign a default category or allow admin to set one
+        status: 'not_needed' as const,
+        selectedBy: undefined, // Clear potential selection info if any inconsistency occurred
+        selectionDate: undefined,
     };
 
-     giftItems = [
+    giftItems = [
         ...giftItems.slice(0, itemIndex),
         updatedItem,
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`Suggestion ${suggestionId} approved.`);
+    console.log(`Item ${itemId} marked as not needed.`);
     return updatedItem;
 }
 
+
+// --- Suggestion Function (Now Adds Directly) ---
+
 /**
- * (Admin) Rejects a suggestion by removing it.
- * @param suggestionId The ID of the suggestion item to reject.
- * @returns A promise resolving to true if successful, false otherwise.
+ * Adds a new item directly to the list with 'selected' status,
+ * based on user suggestion.
+ * @param suggestionData The data for the suggested item.
+ * @returns A promise resolving to the newly added item.
  */
-export async function rejectSuggestion(suggestionId: string): Promise<boolean> {
-    const initialLength = giftItems.length;
-    giftItems = giftItems.filter(item => !(item.id === suggestionId && item.status === 'pending_suggestion'));
-    const success = giftItems.length < initialLength;
-    if (success) {
-        console.log(`Suggestion ${suggestionId} rejected and removed.`);
-    } else {
-        console.warn(`Suggestion ${suggestionId} not found or not pending.`);
-    }
-    return success;
+export async function addSuggestion(suggestionData: SuggestionData): Promise<GiftItem> {
+  const newItem: GiftItem = {
+    id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Generate a unique ID
+    name: suggestionData.itemName,
+    description: suggestionData.itemDescription,
+    category: 'Outros', // Default category for user-added items, admin can change later
+    status: 'selected', // Add directly as selected
+    selectedBy: suggestionData.suggesterName, // The suggester is the selector
+    selectionDate: new Date(), // Record selection date
+  };
+
+  giftItems = [...giftItems, newItem];
+
+  console.log(`Item "${newItem.name}" added and selected by ${newItem.selectedBy}.`);
+  return newItem;
 }
+
+
+// --- Admin Functions ---
 
 /**
  * (Admin) Reverts a selected item back to 'available'.
@@ -203,9 +188,9 @@ export async function rejectSuggestion(suggestionId: string): Promise<boolean> {
  * @returns A promise resolving to the updated item or null if not found/not selected.
  */
 export async function revertSelection(itemId: string): Promise<GiftItem | null> {
-    const itemIndex = giftItems.findIndex(item => item.id === itemId && item.status === 'selected');
+    const itemIndex = giftItems.findIndex(item => item.id === itemId && (item.status === 'selected' || item.status === 'not_needed')); // Can revert selected or not_needed
     if (itemIndex === -1) {
-        console.warn(`Item ${itemId} not found or not selected.`);
+        console.warn(`Item ${itemId} not found or not in a revertible status.`);
         return null;
     }
 
@@ -222,7 +207,7 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`Selection for item ${itemId} reverted.`);
+    console.log(`Item ${itemId} reverted to available.`);
     return updatedItem;
 }
 
@@ -256,12 +241,22 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
      }
 
      // Ensure read-only fields like 'id' are not overwritten
-     const { id, ...safeUpdates } = updates;
+     // Ensure status update is valid
+     const { id, status, ...restUpdates } = updates;
 
-     const updatedItem = {
+     const updatedItem: GiftItem = {
          ...giftItems[itemIndex],
-         ...safeUpdates,
+         ...restUpdates,
+         // Only update status if it's a valid status and provided in updates
+         ...(status && ['available', 'selected', 'not_needed'].includes(status) && { status: status as GiftItem['status'] }),
      };
+
+      // Clear selection details if status changes from 'selected'
+      if (giftItems[itemIndex].status === 'selected' && updatedItem.status !== 'selected') {
+          updatedItem.selectedBy = undefined;
+          updatedItem.selectionDate = undefined;
+      }
+
 
       giftItems = [
          ...giftItems.slice(0, itemIndex),
@@ -295,7 +290,8 @@ export async function deleteGift(itemId: string): Promise<boolean> {
  * @returns A promise resolving to the CSV string.
  */
 export async function exportGiftsToCSV(): Promise<string> {
-    const headers = ['ID', 'Nome', 'Descrição', 'Categoria', 'Status', 'Selecionado Por', 'Data Seleção', 'Sugerido Por', 'Data Sugestão'];
+    // Updated headers to remove suggestion columns
+    const headers = ['ID', 'Nome', 'Descrição', 'Categoria', 'Status', 'Selecionado Por', 'Data Seleção'];
     const rows = giftItems.map(item => [
         item.id,
         item.name,
@@ -304,12 +300,8 @@ export async function exportGiftsToCSV(): Promise<string> {
         item.status,
         item.selectedBy || '',
         item.selectionDate?.toISOString() || '',
-        item.suggestedBy || '',
-        item.suggestionDate?.toISOString() || ''
     ].map(value => `"${String(value).replace(/"/g, '""')}"`) // Escape quotes
      .join(','));
 
     return [headers.join(','), ...rows].join('\n');
 }
-
-    

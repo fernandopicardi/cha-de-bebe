@@ -7,9 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ShieldCheck, ListPlus, CheckSquare, Users, FileDown, Settings, LogOut, AlertCircle, RefreshCcw } from 'lucide-react';
-import AdminItemManagementTable from '@/components/admin/item-management-table'; // Import Admin components
-import AdminSuggestionApprovalList from '@/components/admin/suggestion-approval-list';
+import { ShieldCheck, ListPlus, Users, FileDown, Settings, LogOut, AlertCircle, RefreshCcw } from 'lucide-react'; // Removed CheckSquare icon
+import AdminItemManagementTable from '@/components/admin/item-management-table';
+// import AdminSuggestionApprovalList from '@/components/admin/suggestion-approval-list'; // Removed Suggestion Approval component
 import AdminSelectionViewer from '@/components/admin/selection-viewer';
 import AdminEventSettingsForm from '@/components/admin/event-settings-form';
 import { getGifts, exportGiftsToCSV, type GiftItem } from '@/data/gift-store'; // Import store functions
@@ -62,6 +62,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({
             onChange={(e) => setEmail(e.target.value)}
             required
             disabled={loading}
+            autoComplete="email" // Added for convenience
           />
         </div>
         <div className="space-y-2">
@@ -74,6 +75,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({
             onChange={(e) => setPassword(e.target.value)}
             required
             disabled={loading}
+            autoComplete="current-password" // Added for convenience
           />
         </div>
         <Button type="submit" className="w-full" disabled={loading}>
@@ -126,7 +128,7 @@ export default function AdminPage() {
 
     // Simulate network delay
     setTimeout(() => {
-      if (ALLOWED_EMAILS.includes(email) && password === ADMIN_PASSWORD) {
+      if (ALLOWED_EMAILS.includes(email.toLowerCase().trim()) && password === ADMIN_PASSWORD) { // Trim and lowercase email for comparison
         setIsAuthenticated(true);
         // No need to call fetchAdminData here, useEffect will handle it
       } else {
@@ -149,7 +151,7 @@ export default function AdminPage() {
     console.log("Export clicked");
     try {
       const csvData = await exportGiftsToCSV();
-      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel compatibility
       const link = document.createElement('a');
       if (link.download !== undefined) { // Feature detection
         const url = URL.createObjectURL(blob);
@@ -245,6 +247,8 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
+        {/* Suggestion Approval Card Removed */}
+        {/*
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><CheckSquare /> Aprovar Sugestões</CardTitle>
@@ -261,6 +265,7 @@ export default function AdminPage() {
               )}
           </CardContent>
         </Card>
+        */}
 
         <Card>
           <CardHeader>

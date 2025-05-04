@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -15,12 +16,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
-import { Trash2, Edit, PlusCircle, Save, XCircle, Ban, RotateCcw } from 'lucide-react';
+import { Trash2, Edit, PlusCircle, Save, Ban, RotateCcw } from 'lucide-react'; // Removed XCircle, CheckCircle2 etc.
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { addGift, updateGift, deleteGift, revertSelection, type GiftItem } from '@/data/gift-store';
+import { addGift, updateGift, deleteGift, revertSelection, type GiftItem } from '@/data/gift-store'; // revertSelection remains useful
 
 interface AdminItemManagementTableProps {
   gifts: GiftItem[];
@@ -32,14 +33,14 @@ const giftFormSchema = z.object({
   name: z.string().min(3, "Nome precisa ter pelo menos 3 caracteres."),
   description: z.string().optional(),
   category: z.string().min(1, "Categoria é obrigatória."),
-  status: z.enum(['available', 'selected', 'not_needed', 'pending_suggestion']).optional(), // Optional for add, required for edit logic
+  status: z.enum(['available', 'selected', 'not_needed']).optional(), // Removed 'pending_suggestion'
 });
 
 type GiftFormData = z.infer<typeof giftFormSchema>;
 
-// Available categories (could be fetched or configured elsewhere)
-const categories = ['Roupas', 'Higiene', 'Brinquedos', 'Alimentação', 'Outros', 'Sugestão'];
-const statuses: GiftItem['status'][] = ['available', 'selected', 'not_needed', 'pending_suggestion'];
+// Available categories (could be fetched or configured elsewhere) - Removed 'Sugestão'
+const categories = ['Roupas', 'Higiene', 'Brinquedos', 'Alimentação', 'Outros'];
+const statuses: GiftItem['status'][] = ['available', 'selected', 'not_needed']; // Removed 'pending_suggestion'
 
 
 export default function AdminItemManagementTable({ gifts, onDataChange }: AdminItemManagementTableProps) {
@@ -87,8 +88,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
              name: data.name,
              description: data.description,
              category: data.category,
-             // Only allow status changes relevant to admin actions here if needed
-             // For general status updates, separate actions might be better
+             // Status can be updated here if needed, or use dedicated actions
              // status: data.status // Be careful allowing direct status changes here
         });
         toast({ title: "Sucesso!", description: `Item "${data.name}" atualizado.` });
@@ -124,24 +124,27 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
   };
 
    const handleRevert = async (item: GiftItem) => {
-       if (item.status !== 'selected') return; // Only revert selected items
-       if (confirm(`Tem certeza que deseja reverter a seleção do item "${item.name}"? O nome de quem selecionou será removido.`)) {
+       if (item.status !== 'selected' && item.status !== 'not_needed') return; // Only revert selected or not_needed items
+       const actionText = item.status === 'selected' ? 'reverter a seleção' : 'remover a marcação "Não Precisa"';
+       const guestNameInfo = item.selectedBy ? ` por ${item.selectedBy}` : '';
+       if (confirm(`Tem certeza que deseja ${actionText} do item "${item.name}"${guestNameInfo}? O item voltará a ficar disponível.`)) {
            try {
-               await revertSelection(item.id);
-               toast({ title: "Sucesso!", description: `Seleção do item "${item.name}" revertida.` });
+               await revertSelection(item.id); // This function now handles both cases
+               toast({ title: "Sucesso!", description: `Item "${item.name}" revertido para disponível.` });
                onDataChange();
            } catch (error) {
-               console.error("Error reverting selection:", error);
-               toast({ title: "Erro!", description: `Falha ao reverter a seleção do item "${item.name}".`, variant: "destructive" });
+               console.error("Error reverting item:", error);
+               toast({ title: "Erro!", description: `Falha ao reverter o item "${item.name}".`, variant: "destructive" });
            }
        }
    };
 
     const handleMarkNotNeeded = async (item: GiftItem) => {
-        if (item.status === 'not_needed') return;
+        if (item.status === 'not_needed') return; // Already marked
         if (confirm(`Tem certeza que deseja marcar o item "${item.name}" como "Não Precisa"?`)) {
             try {
-                await updateGift(item.id, { status: 'not_needed', selectedBy: undefined, selectionDate: undefined }); // Clear selection info
+                // Use updateGift for consistency, ensuring selection info is cleared
+                await updateGift(item.id, { status: 'not_needed', selectedBy: undefined, selectionDate: undefined });
                 toast({ title: "Sucesso!", description: `Item "${item.name}" marcado como "Não Precisa".` });
                 onDataChange();
             } catch (error) {
@@ -157,7 +160,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
       case 'available': return <Badge variant="default" className="bg-success text-success-foreground">Disponível</Badge>;
       case 'selected': return <Badge variant="secondary" className="bg-secondary text-secondary-foreground">Selecionado</Badge>;
       case 'not_needed': return <Badge variant="destructive" className="bg-destructive/80 text-destructive-foreground">Não Precisa</Badge>;
-      case 'pending_suggestion': return <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">Sugestão</Badge>;
+      // Removed 'pending_suggestion' case
       default: return <Badge variant="outline">Indefinido</Badge>;
     }
   };
@@ -198,12 +201,12 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
                      <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(item)} title="Editar Item">
                          <Edit className="h-4 w-4" />
                      </Button>
-                     {item.status === 'selected' && (
-                         <Button variant="ghost" size="icon" onClick={() => handleRevert(item)} title="Reverter Seleção">
+                     {(item.status === 'selected' || item.status === 'not_needed') && ( // Allow reverting 'selected' and 'not_needed'
+                         <Button variant="ghost" size="icon" onClick={() => handleRevert(item)} title="Reverter para Disponível">
                              <RotateCcw className="h-4 w-4 text-orange-600" />
                          </Button>
                      )}
-                     {item.status !== 'not_needed' && item.status !== 'pending_suggestion' && (
+                     {item.status === 'available' && ( // Only show 'Mark Not Needed' for available items
                          <Button variant="ghost" size="icon" onClick={() => handleMarkNotNeeded(item)} title="Marcar como Não Precisa">
                              <Ban className="h-4 w-4 text-yellow-600" />
                          </Button>
@@ -269,12 +272,35 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
               </div>
             </div>
 
-            {/* Status (Potentially hidden or read-only when adding?)
-               If you need to change status, consider dedicated actions instead of form field */}
-             {/* <div className="grid grid-cols-4 items-center gap-4">
-               <label htmlFor="status" className="text-right text-sm font-medium">Status</label>
-               <Input id="status" {...register('status')} disabled /> // Example: Readonly or controlled elsewhere
-             </div> */}
+            {/* Status - Optionally allow editing status here for admin */}
+            {editingItem && ( // Only show status edit for existing items
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="status" className="text-right text-sm font-medium">Status</label>
+                  <div className="col-span-3">
+                     <Controller
+                         name="status"
+                         control={control}
+                         render={({ field }) => (
+                             <Select onValueChange={field.onChange} value={field.value} >
+                                <SelectTrigger className={errors.status ? 'border-destructive' : ''}>
+                                    <SelectValue placeholder="Selecione um status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {statuses.map(stat => (
+                                        <SelectItem key={stat} value={stat}>
+                                          {stat === 'available' && 'Disponível'}
+                                          {stat === 'selected' && 'Selecionado'}
+                                          {stat === 'not_needed' && 'Não Precisa'}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                             </Select>
+                         )}
+                     />
+                    {errors.status && <p className="text-sm text-destructive mt-1">{errors.status.message}</p>}
+                  </div>
+                </div>
+            )}
 
 
           <DialogFooter>

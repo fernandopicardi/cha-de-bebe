@@ -1,20 +1,18 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Gift, Check, X, Hourglass, User, Tag, Lightbulb } from 'lucide-react'; // Added Lightbulb for suggestions
+import { Gift, Check, X, Hourglass, User, Tag, Ban, Loader2 } from 'lucide-react'; // Removed Lightbulb, Added Ban
 import SelectItemDialog from './select-item-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getGifts, selectGift, type GiftItem } from '@/data/gift-store'; // Import from store
-
-// Define interface locally if needed, otherwise rely on imported one
-// interface GiftItem { ... }
-
+import { getGifts, selectGift, markGiftAsNotNeeded, type GiftItem } from '@/data/gift-store'; // Added markGiftAsNotNeeded
+import { useToast } from '@/hooks/use-toast';
 
 interface GiftListProps {
-  filterStatus?: 'all' | 'available' | 'selected' | 'not_needed' | 'pending_suggestion'; // Added pending_suggestion
+  filterStatus?: 'all' | 'available' | 'selected' | 'not_needed'; // Removed 'pending_suggestion'
   filterCategory?: string;
   showSelectedByName?: boolean; // Prop to control visibility of selector's name on admin page
   onDataChange?: () => void; // Callback to notify parent (Admin page) of data changes
@@ -24,12 +22,14 @@ export default function GiftList({
   filterStatus = 'all',
   filterCategory,
   showSelectedByName = false,
-  onDataChange // Receive the callback
+  onDataChange
 }: GiftListProps) {
   const [items, setItems] = useState<GiftItem[]>([]);
-  const [loading, setLoading] = useState(true); // Keep loading state for initial fetch
+  const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<GiftItem | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [markingItemId, setMarkingItemId] = useState<string | null>(null); // Track item being marked
+  const { toast } = useToast();
 
   // Fetch initial data
   useEffect(() => {
@@ -46,33 +46,21 @@ export default function GiftList({
       }
     }
     fetchGifts();
-  }, []); // Fetch only once on mount
+  }, []);
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      // Status filtering logic:
-      // Show only 'pending_suggestion' if filtered specifically for it.
-      // Otherwise, hide 'pending_suggestion' unless filter is 'all' (if admin page wants to show them).
-      // Hide 'not_needed' unless filtered specifically for it.
-      // Apply other status filters ('all', 'available', 'selected').
-
-      if (filterStatus === 'pending_suggestion') {
-          if (item.status !== 'pending_suggestion') return false;
-      } else if (filterStatus === 'not_needed') {
-        if (item.status !== 'not_needed') return false;
-      } else {
-         // Hide pending suggestions unless the filter is 'all' (intended for admin view possibly)
-         if (item.status === 'pending_suggestion' && filterStatus !== 'all') return false;
-         // Hide 'not_needed' for all other filters
-         if (item.status === 'not_needed') return false;
-        // Apply specific status filter if not 'all'
-        if (filterStatus !== 'all' && item.status !== filterStatus) return false;
+      // Apply status filter
+      if (filterStatus !== 'all' && item.status !== filterStatus) {
+        return false;
       }
 
       // Apply category filter (if provided)
-      const categoryMatch = !filterCategory || item.category.toLowerCase() === filterCategory.toLowerCase();
+      if (filterCategory && item.category.toLowerCase() !== filterCategory.toLowerCase()) {
+          return false;
+      }
 
-      return categoryMatch;
+      return true; // Include item if no filters exclude it
     });
   }, [items, filterStatus, filterCategory]);
 
@@ -92,7 +80,7 @@ export default function GiftList({
      try {
        const updatedItem = await selectGift(itemId, guestName);
        if (updatedItem) {
-         // Update local state optimistically or re-fetch
+         // Update local state
          setItems(prevItems =>
            prevItems.map(item =>
              item.id === itemId ? updatedItem : item
@@ -102,18 +90,48 @@ export default function GiftList({
        } else {
          // Handle case where item couldn't be selected (e.g., already selected)
          console.warn(`Failed to select item ${itemId}, it might have been selected by someone else.`);
-         // Optionally show a toast to the user
+         toast({ title: "Ops!", description: "Este item já foi selecionado. Tente atualizar a página.", variant: "destructive" });
          // Re-fetch to get the latest state
          const currentGifts = await getGifts();
          setItems(currentGifts);
        }
      } catch (error) {
        console.error("Error selecting gift:", error);
-       // Handle error state
+       toast({ title: "Erro!", description: "Não foi possível selecionar o presente.", variant: "destructive" });
      }
   };
 
-  const getStatusBadge = (status: GiftItem['status'], selectedBy?: string, suggestedBy?: string) => {
+  // Function to mark an item as 'not needed'
+  const handleMarkNotNeededClick = async (itemId: string) => {
+    setMarkingItemId(itemId); // Show loading state for this specific button
+    try {
+      const updatedItem = await markGiftAsNotNeeded(itemId);
+      if (updatedItem) {
+        // Update local state
+        setItems(prevItems =>
+          prevItems.map(item =>
+            item.id === itemId ? updatedItem : item
+          )
+        );
+        toast({ title: "Atualizado!", description: `"${updatedItem.name}" marcado como 'Não Precisa'.` });
+        onDataChange?.(); // Notify admin if needed
+      } else {
+        console.warn(`Failed to mark item ${itemId} as not needed.`);
+        toast({ title: "Ops!", description: "Não foi possível marcar o item. Tente atualizar a página.", variant: "destructive" });
+         // Re-fetch to get the latest state
+         const currentGifts = await getGifts();
+         setItems(currentGifts);
+      }
+    } catch (error) {
+      console.error("Error marking item as not needed:", error);
+      toast({ title: "Erro!", description: "Falha ao marcar o item como 'Não Precisa'.", variant: "destructive" });
+    } finally {
+       setMarkingItemId(null); // Hide loading state
+    }
+  };
+
+
+  const getStatusBadge = (status: GiftItem['status'], selectedBy?: string) => {
     switch (status) {
       case 'available':
         return <Badge variant="default" className="bg-success text-success-foreground"><Check className="mr-1 h-3 w-3" /> Disponível</Badge>;
@@ -125,14 +143,8 @@ export default function GiftList({
           </Badge>
         );
       case 'not_needed':
-        return <Badge variant="destructive" className="bg-destructive text-destructive-foreground"><X className="mr-1 h-3 w-3" /> Não Precisa</Badge>;
-      case 'pending_suggestion': // Badge for pending suggestions
-        const suggesterName = showSelectedByName && suggestedBy ? ` por ${suggestedBy}` : ''; // Show suggester name on admin?
-         return (
-             <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                 <Lightbulb className="mr-1 h-3 w-3" /> Sugestão Pendente{suggesterName}
-             </Badge>
-         );
+        return <Badge variant="destructive" className="bg-destructive/80 text-destructive-foreground"><X className="mr-1 h-3 w-3" /> Não Precisa</Badge>;
+      // Removed 'pending_suggestion' case
       default:
         return <Badge variant="outline"><Hourglass className="mr-1 h-3 w-3" /> Indefinido</Badge>;
     }
@@ -162,21 +174,21 @@ export default function GiftList({
 
   if (filteredItems.length === 0 && !loading) {
      let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
-     if (filterStatus === 'available') emptyMessage = "Todos os presentes disponíveis já foram escolhidos!";
+     if (filterStatus === 'available') emptyMessage = "Todos os presentes disponíveis já foram escolhidos ou marcados como 'Não Precisa'!";
      if (filterStatus === 'selected') emptyMessage = "Nenhum presente foi selecionado ainda.";
      if (filterStatus === 'not_needed') emptyMessage = "Nenhum item marcado como 'Não precisa'.";
-     if (filterStatus === 'pending_suggestion') emptyMessage = "Nenhuma sugestão pendente.";
-
+     // Removed pending_suggestion message
 
     return (
       <div className="text-center pt-16 pb-10 text-muted-foreground">
         <Gift className="mx-auto h-12 w-12 mb-4" />
         <p>{emptyMessage}</p>
-        {filterStatus !== 'all' && (
-             <Button variant="link" onClick={() => {/* TODO: Implement filter reset logic */ }}>
+        {/* TODO: Implement filter reset logic or remove button if not needed */}
+        {/* {filterStatus !== 'all' && (
+             <Button variant="link" onClick={() => {}}>
                 Limpar filtros
             </Button>
-        )}
+        )} */}
       </div>
     );
   }
@@ -201,19 +213,39 @@ export default function GiftList({
               {/* <Image src={`https://picsum.photos/seed/${item.id}/300/200`} alt={item.name} width={300} height={200} className="rounded-md mb-4" data-ai-hint="baby gift item"/> */}
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
-               {/* Pass selectedBy and suggestedBy conditionally based on showSelectedByName */}
-               {getStatusBadge(item.status, item.selectedBy, item.suggestedBy)}
-              {item.status === 'available' && (
-                <Button
-                   size="sm"
-                   className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
-                   onClick={() => handleSelectItemClick(item)}
-                   aria-label={`Selecionar ${item.name}`}
-                >
-                  <Gift className="mr-2 h-4 w-4" /> Escolher este presente
-                </Button>
-              )}
-                 {/* No button for 'selected', 'not_needed', or 'pending_suggestion' on public page */}
+               {/* Pass selectedBy conditionally based on showSelectedByName */}
+               {getStatusBadge(item.status, item.selectedBy)}
+               <div className="flex gap-2 flex-wrap justify-end"> {/* Wrap buttons */}
+                  {item.status === 'available' && (
+                    <>
+                      <Button
+                         size="sm"
+                         variant="outline" // Changed variant
+                         className="border-destructive text-destructive hover:bg-destructive/10" // Destructive-like style
+                         onClick={() => handleMarkNotNeededClick(item.id)}
+                         disabled={markingItemId === item.id} // Disable while marking
+                         aria-label={`Marcar ${item.name} como não precisa`}
+                      >
+                         {markingItemId === item.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                         ) : (
+                            <Ban className="h-4 w-4" />
+                         )}
+                         <span className="ml-1">Não Precisa</span>
+                      </Button>
+                      <Button
+                         size="sm"
+                         className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
+                         onClick={() => handleSelectItemClick(item)}
+                         aria-label={`Selecionar ${item.name}`}
+                         disabled={markingItemId === item.id} // Also disable if marking
+                      >
+                         <Gift className="mr-2 h-4 w-4" /> Escolher
+                      </Button>
+                    </>
+                  )}
+                  {/* No buttons for 'selected' or 'not_needed' on public page */}
+              </div>
             </CardFooter>
           </Card>
         ))}
