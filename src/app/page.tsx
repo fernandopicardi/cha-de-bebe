@@ -9,6 +9,7 @@ import GiftList from '@/components/gift-list';
 import AddToCalendarButton from '@/components/add-to-calendar-button';
 import SuggestItemButton from '@/components/suggest-item-button';
 import { getEventSettings } from '@/data/gift-store'; // Import function to get event settings
+import { ThemeToggle } from '@/components/theme-toggle'; // Import ThemeToggle
 
 // Placeholder categories - Replace or fetch if dynamic
 const categories = ['Roupas', 'Higiene', 'Brinquedos', 'Alimentação', 'Outros'];
@@ -42,7 +43,9 @@ export default async function Home() {
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
 
-      <div className="absolute top-4 right-4 md:top-8 md:right-8 z-10">
+      {/* Top Right Controls */}
+      <div className="absolute top-4 right-4 md:top-8 md:right-8 z-10 flex items-center gap-2">
+         <ThemeToggle />
         <Link href="/admin">
           <Button variant="outline" size="sm">
             <LogIn className="mr-2 h-4 w-4" />
@@ -51,17 +54,17 @@ export default async function Home() {
         </Link>
       </div>
 
-      <header className="text-center space-y-4 pt-12">
+      <header className="text-center space-y-4 pt-16"> {/* Added pt-16 for more space below buttons */}
         <Baby className="mx-auto h-16 w-16 text-secondary" />
         {/* Display title fetched from settings */}
         <h1 className="text-3xl md:text-4xl font-semibold text-primary">{eventDetails.title}</h1>
         <p className="text-lg text-muted-foreground">{eventDetails.welcomeMessage}</p>
       </header>
 
-      <Card className="bg-secondary/20 shadow-md rounded-lg overflow-hidden">
+      <Card className="bg-card shadow-md rounded-lg overflow-hidden">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-secondary-foreground">
-            <CalendarDays className="h-6 w-6" /> Detalhes do Evento
+          <CardTitle className="flex items-center gap-2 text-card-foreground">
+            <CalendarDays className="h-6 w-6 text-primary" /> Detalhes do Evento
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -87,8 +90,7 @@ export default async function Home() {
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-          {/* Update TabsList for better responsiveness */}
-          {/* Add mb-4 for margin-bottom */}
+           {/* Add mb-4 for margin-bottom */}
           <TabsList className="w-full justify-start overflow-x-auto whitespace-nowrap pb-2 mb-4">
              {/* Ensure triggers don't shrink */}
             <TabsTrigger value="all" className="flex-shrink-0">Todos</TabsTrigger>
@@ -101,27 +103,22 @@ export default async function Home() {
             ))} */}
           </TabsList>
 
-          <TabsContent value="all">
-             {/* Pass showSelectedByName=false for public view */}
-             {/* No onDataChange needed for public view */}
-             {/* Add mt-6 for margin-top */}
+          {/* Add mt-6 for margin-top to TabsContent */}
+          <TabsContent value="all" className="mt-6">
             <GiftList filterStatus="all" showSelectedByName={false} />
           </TabsContent>
-          <TabsContent value="available">
-            {/* Add mt-6 */}
+          <TabsContent value="available" className="mt-6">
             <GiftList filterStatus="available" showSelectedByName={false} />
           </TabsContent>
-          <TabsContent value="selected">
-             {/* Add mt-6 */}
+          <TabsContent value="selected" className="mt-6">
             <GiftList filterStatus="selected" showSelectedByName={false} />
           </TabsContent>
-           <TabsContent value="not_needed">
-             {/* Add mt-6 */}
+           <TabsContent value="not_needed" className="mt-6">
             <GiftList filterStatus="not_needed" showSelectedByName={false} />
           </TabsContent>
             {/* Add dynamic category content later */}
             {/* {categories.map(cat => (
-               <TabsContent key={cat} value={cat.toLowerCase()}>
+               <TabsContent key={cat} value={cat.toLowerCase()} className="mt-6">
                  <GiftList filterCategory={cat} showSelectedByName={false} />
                </TabsContent>
             ))} */}

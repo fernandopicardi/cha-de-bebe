@@ -9,10 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ShieldCheck, ListPlus, Users, FileDown, Settings, LogOut, AlertCircle, RefreshCcw } from 'lucide-react'; // Removed CheckSquare icon
 import AdminItemManagementTable from '@/components/admin/item-management-table';
-// import AdminSuggestionApprovalList from '@/components/admin/suggestion-approval-list'; // Removed Suggestion Approval component
 import AdminSelectionViewer from '@/components/admin/selection-viewer';
 import AdminEventSettingsForm from '@/components/admin/event-settings-form';
 import { getGifts, exportGiftsToCSV, type GiftItem } from '@/data/gift-store'; // Import store functions
+import { ThemeToggle } from '@/components/theme-toggle'; // Import ThemeToggle
 
 // Hardcoded allowed admin emails and password (INSECURE!)
 const ALLOWED_EMAILS = ['fernandopicardi@gmail.com', 'naiaralofgren@gmail.com'];
@@ -206,6 +206,7 @@ export default function AdminPage() {
           <ShieldCheck className="h-8 w-8 text-primary" /> Painel de Administração
         </h1>
          <div className="flex items-center gap-2">
+             <ThemeToggle /> {/* Add ThemeToggle button */}
              <Button onClick={refreshData} variant="outline" size="icon" disabled={isDataLoading} title="Atualizar Dados">
                  <RefreshCcw className={`h-4 w-4 ${isDataLoading ? 'animate-spin' : ''}`} />
              </Button>
@@ -233,7 +234,7 @@ export default function AdminPage() {
 
       {/* Components now receive data and refresh callback */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card className="md:col-span-2 lg:col-span-3"> {/* Make Item Management take full width */}
+        <Card className="md:col-span-2 lg:col-span-3 bg-card"> {/* Make Item Management take full width */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ListPlus /> Gerenciar Itens</CardTitle>
             <CardDescription>Adicionar, editar, remover e atualizar status dos presentes.</CardDescription>
@@ -247,27 +248,7 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Suggestion Approval Card Removed */}
-        {/*
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><CheckSquare /> Aprovar Sugestões</CardTitle>
-            <CardDescription>Aprovar ou rejeitar itens sugeridos pelos convidados.</CardDescription>
-          </CardHeader>
-          <CardContent>
-             {isDataLoading ? (
-                 <p>Carregando sugestões...</p>
-             ) : (
-                 <AdminSuggestionApprovalList
-                     suggestions={gifts.filter(g => g.status === 'pending_suggestion')}
-                     onDataChange={refreshData}
-                 />
-              )}
-          </CardContent>
-        </Card>
-        */}
-
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Users /> Visualizar Seleções</CardTitle>
             <CardDescription>Ver quem selecionou quais itens e reverter seleções se necessário.</CardDescription>
@@ -284,7 +265,7 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-         <Card>
+         <Card className="bg-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Settings /> Configurações do Evento</CardTitle>
             <CardDescription>Atualizar detalhes do evento e mensagens personalizadas.</CardDescription>
@@ -295,7 +276,7 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-         <Card>
+         <Card className="bg-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><FileDown /> Exportar Seleções</CardTitle>
             <CardDescription>Baixar a lista completa de itens e status em formato CSV.</CardDescription>

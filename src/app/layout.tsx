@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Poppins } from 'next/font/google'; // Import Poppins
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; // Import Toaster
+import { ThemeProvider } from '@/components/theme-provider'; // Import ThemeProvider
 
 // Configure Poppins font
 const poppins = Poppins({
@@ -22,12 +23,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // Set language to Portuguese Brazil
-    <html lang="pt-BR">
-      {/* Apply Poppins font class and variable */}
+    <html lang="pt-BR" suppressHydrationWarning> {/* Add suppressHydrationWarning for next-themes */}
       <body className={`${poppins.variable} font-sans antialiased`}>
-        {children}
-        <Toaster /> {/* Add Toaster component */}
+         <ThemeProvider
+             attribute="class"
+             defaultTheme="system"
+             enableSystem
+             disableTransitionOnChange
+           >
+           {children}
+           <Toaster /> {/* Add Toaster component */}
+         </ThemeProvider>
       </body>
     </html>
   );
