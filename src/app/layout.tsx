@@ -24,8 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning> {/* Add suppressHydrationWarning for next-themes */}
-      {/* Ensure no leading/trailing spaces around body */}
+    <html lang="pt-BR" suppressHydrationWarning>
       <body className={`${poppins.variable} font-sans antialiased`}>
          <ThemeProvider
              attribute="class"
@@ -40,3 +39,4 @@ export default function RootLayout({
     </html>
   );
 }
+
