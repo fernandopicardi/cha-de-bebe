@@ -35,9 +35,14 @@ const mockGiftItems: GiftItem[] = [
 interface GiftListProps {
   filterStatus?: 'all' | 'available' | 'selected' | 'not_needed';
   filterCategory?: string;
+  showSelectedByName?: boolean; // New prop to control visibility of selector's name
 }
 
-export default function GiftList({ filterStatus = 'all', filterCategory }: GiftListProps) {
+export default function GiftList({
+  filterStatus = 'all',
+  filterCategory,
+  showSelectedByName = false // Default to hiding the name
+}: GiftListProps) {
   const [items, setItems] = useState<GiftItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<GiftItem | null>(null);
@@ -59,6 +64,10 @@ export default function GiftList({ filterStatus = 'all', filterCategory }: GiftL
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
+      // Filter out 'not_needed' items unless explicitly requested
+      if (filterStatus !== 'all' && filterStatus !== 'not_needed' && item.status === 'not_needed') {
+        return false;
+      }
       const statusMatch = filterStatus === 'all' || item.status === filterStatus;
       const categoryMatch = !filterCategory || item.category.toLowerCase() === filterCategory.toLowerCase();
       return statusMatch && categoryMatch;
@@ -91,12 +100,16 @@ export default function GiftList({ filterStatus = 'all', filterCategory }: GiftL
       case 'available':
         return <Badge variant="default" className="bg-success text-success-foreground"><Check className="mr-1 h-3 w-3" /> Disponível</Badge>;
       case 'selected':
+        // Conditionally display the name based on showSelectedByName prop
+        const displayName = showSelectedByName && selectedBy ? ` por ${selectedBy}` : '';
         return (
           <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
-            <User className="mr-1 h-3 w-3" /> Selecionado{selectedBy ? ` por ${selectedBy}` : ''}
+            <User className="mr-1 h-3 w-3" /> Selecionado{displayName}
           </Badge>
         );
       case 'not_needed':
+         // Optionally hide 'not_needed' badge or display differently if needed
+         // For now, keep it as is unless filter handles hiding it.
         return <Badge variant="destructive" className="bg-destructive text-destructive-foreground"><X className="mr-1 h-3 w-3" /> Não Precisa</Badge>;
       default:
         return <Badge variant="outline"><Hourglass className="mr-1 h-3 w-3" /> Indefinido</Badge>;
@@ -131,7 +144,7 @@ export default function GiftList({ filterStatus = 'all', filterCategory }: GiftL
         <Gift className="mx-auto h-12 w-12 mb-4" />
         <p>Nenhum item encontrado com os filtros selecionados.</p>
         {filterStatus !== 'all' && (
-             <Button variant="link" onClick={() => {/* Reset filters somehow */ }}>
+             <Button variant="link" onClick={() => {/* Implement filter reset logic, e.g., using query params or state management */ }}>
                 Limpar filtros
             </Button>
         )}
@@ -159,7 +172,8 @@ export default function GiftList({ filterStatus = 'all', filterCategory }: GiftL
               {/* <Image src={`https://picsum.photos/seed/${item.id}/300/200`} alt={item.name} width={300} height={200} className="rounded-md mb-4" data-ai-hint="baby gift item"/> */}
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
-              {getStatusBadge(item.status, item.selectedBy)}
+              {/* Pass selectedBy only if showSelectedByName is true */}
+              {getStatusBadge(item.status, showSelectedByName ? item.selectedBy : undefined)}
               {item.status === 'available' && (
                 <Button
                    size="sm"
