@@ -117,14 +117,14 @@ export default async function Home() {
 
            {/* Increased top margin on tabs content */}
           <TabsContent value="all" className="mt-6">
-             {/* Pass showSelectedByName as true for admin */}
+             {/* Pass showSelectedByName based on context (e.g., always false for public view) */}
             <GiftList filterStatus="all" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
             <GiftList filterStatus="available" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
-             {/* Pass showSelectedByName as true for admin */}
+             {/* Pass showSelectedByName based on context */}
             <GiftList filterStatus="selected" showSelectedByName={false} />
           </TabsContent>
            <TabsContent value="not_needed" className="mt-6">
@@ -136,3 +136,4 @@ export default async function Home() {
     </div>
   );
 }
+
