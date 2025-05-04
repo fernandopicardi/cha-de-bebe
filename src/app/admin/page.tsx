@@ -1,13 +1,15 @@
 
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link'; // Import Link
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ShieldCheck, ListPlus, Users, FileDown, Settings, LogOut, AlertCircle, RefreshCcw } from 'lucide-react'; // Removed CheckSquare icon
+import { ShieldCheck, ListPlus, Users, FileDown, Settings, LogOut, AlertCircle, RefreshCcw, Home } from 'lucide-react'; // Added Home icon
 import AdminItemManagementTable from '@/components/admin/item-management-table';
 import AdminSelectionViewer from '@/components/admin/selection-viewer';
 import AdminEventSettingsForm from '@/components/admin/event-settings-form';
@@ -205,12 +207,17 @@ export default function AdminPage() {
         <h1 className="text-3xl font-semibold flex items-center gap-2">
           <ShieldCheck className="h-8 w-8 text-primary" /> Painel de Administração
         </h1>
-         <div className="flex items-center gap-2">
+         <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-end">
              <ThemeToggle /> {/* Add ThemeToggle button */}
+              <Link href="/">
+                 <Button variant="outline" size="sm">
+                   <Home className="mr-2 h-4 w-4" /> Página Inicial
+                 </Button>
+              </Link>
              <Button onClick={refreshData} variant="outline" size="icon" disabled={isDataLoading} title="Atualizar Dados">
                  <RefreshCcw className={`h-4 w-4 ${isDataLoading ? 'animate-spin' : ''}`} />
              </Button>
-             <Button onClick={handleLogout} variant="outline">
+             <Button onClick={handleLogout} variant="outline" size="sm">
                <LogOut className="mr-2 h-4 w-4"/> Sair
              </Button>
          </div>
@@ -289,3 +296,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
