@@ -19,7 +19,9 @@ export default async function Home() {
    let formattedDate = 'Data inválida';
    let formattedTime = 'Hora inválida';
    try {
-     const eventDate = new Date(`${eventDetails.date}T${eventDetails.time}:00`);
+     // Ensure time exists before attempting to parse
+     const timeString = eventDetails.time || '00:00'; // Default time if missing
+     const eventDate = new Date(`${eventDetails.date}T${timeString}:00`);
      if (!isNaN(eventDate.getTime())) {
         formattedDate = eventDate.toLocaleDateString('pt-BR', {
           year: 'numeric', month: 'long', day: 'numeric'
@@ -53,23 +55,25 @@ export default async function Home() {
         </Link>
       </div>
 
-      {/* Optional Header Image */}
-      {eventDetails.headerImageUrl && (
-         <div className="relative w-full h-48 md:h-64 rounded-lg overflow-hidden shadow-md mb-8">
-             <Image
-                src={eventDetails.headerImageUrl}
-                alt="Cabeçalho do Chá de Bebê"
-                layout="fill"
-                objectFit="cover"
-                priority // Prioritize loading the header image
-                data-ai-hint="baby shower banner celebration"
-             />
-         </div>
-      )}
 
-      {/* Header Text - Adjust padding if image exists */}
-      <header className={`text-center space-y-4 ${eventDetails.headerImageUrl ? 'pt-0' : 'pt-16'}`}> {/* Remove top padding if image exists */}
-        <Baby className="mx-auto h-16 w-16 text-secondary" />
+      {/* Header Text - Adjust padding */}
+      <header className="text-center space-y-4 pt-16">
+        {/* Conditionally render Image or Baby Icon */}
+        {eventDetails.headerImageUrl ? (
+          <div className="relative mx-auto w-24 h-24 rounded-full overflow-hidden shadow-md mb-4 border-2 border-secondary">
+            <Image
+              src={eventDetails.headerImageUrl}
+              alt="Foto Cabeçalho Chá de Bebê"
+              layout="fill"
+              objectFit="cover"
+              priority // Prioritize loading the header image
+              data-ai-hint="baby shower theme picture"
+            />
+          </div>
+        ) : (
+           <Baby className="mx-auto h-16 w-16 text-secondary" />
+        )}
+
         {/* Display dynamic title */}
         <h1 className="text-3xl md:text-4xl font-semibold text-primary">{pageTitle}</h1>
         <p className="text-lg text-muted-foreground">{eventDetails.welcomeMessage}</p>
@@ -103,20 +107,24 @@ export default async function Home() {
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="w-full justify-start overflow-x-auto whitespace-nowrap pb-2 mb-4 md:mb-6"> {/* Increased bottom margin on md+ */}
+           {/* Increased bottom margin on tabs list */}
+          <TabsList className="w-full justify-start overflow-x-auto whitespace-nowrap pb-2 mb-4 md:mb-6">
             <TabsTrigger value="all" className="flex-shrink-0">Todos</TabsTrigger>
             <TabsTrigger value="available" className="flex-shrink-0">Disponíveis</TabsTrigger>
             <TabsTrigger value="selected" className="flex-shrink-0">Selecionados</TabsTrigger>
             <TabsTrigger value="not_needed" className="flex-shrink-0">Não Precisa</TabsTrigger>
           </TabsList>
 
+           {/* Increased top margin on tabs content */}
           <TabsContent value="all" className="mt-6">
+             {/* Pass showSelectedByName as true for admin */}
             <GiftList filterStatus="all" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
             <GiftList filterStatus="available" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
+             {/* Pass showSelectedByName as true for admin */}
             <GiftList filterStatus="selected" showSelectedByName={false} />
           </TabsContent>
            <TabsContent value="not_needed" className="mt-6">
