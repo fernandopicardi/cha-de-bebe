@@ -13,13 +13,14 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea'; // Import Textarea
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Lightbulb, Send } from 'lucide-react'; // Added Lightbulb and Send
+import { Loader2, Lightbulb, Send } from 'lucide-react';
+import { addSuggestion } from '@/data/gift-store'; // Import the store function
 
 // Define validation schema for suggestion
 const SuggestionSchema = z.object({
@@ -36,17 +37,22 @@ export default function SuggestItemButton() {
   const { toast } = useToast();
   const { register, handleSubmit, formState: { errors }, reset } = useForm<SuggestionFormData>({
     resolver: zodResolver(SuggestionSchema),
+    defaultValues: { // Set default values for controlled reset
+      itemName: '',
+      itemDescription: '',
+      suggesterName: ''
+    }
   });
 
   const onSubmit: SubmitHandler<SuggestionFormData> = async (data) => {
     setIsSubmitting(true);
     try {
-      // Simulate API call / Firestore update to add suggestion
-      console.log("Suggestion Data:", data); // Log data for debugging
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      // TODO: Implement actual Firestore logic to add suggestion
-      // await addDoc(collection(db, 'suggestions'), { ...data, status: 'pending', submittedAt: serverTimestamp() });
-
+      // Use the imported function to add the suggestion
+      await addSuggestion({
+        itemName: data.itemName,
+        itemDescription: data.itemDescription,
+        suggesterName: data.suggesterName,
+      });
 
       toast({
         title: ( <div className="flex items-center gap-2"> <Lightbulb className="h-5 w-5 text-success-foreground" /> Sugestão Enviada! </div> ),
@@ -67,6 +73,14 @@ export default function SuggestItemButton() {
       setIsSubmitting(false);
     }
   };
+
+  // Reset form when dialog closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      reset(); // Reset to default values
+    }
+  }, [isOpen, reset]);
+
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>

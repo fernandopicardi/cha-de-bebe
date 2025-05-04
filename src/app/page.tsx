@@ -1,36 +1,60 @@
 
-import Link from 'next/link'; // Import Link
-import { Baby, CalendarDays, Gift, MapPin, LogIn } from 'lucide-react'; // Added LogIn icon
+import Link from 'next/link';
+import { Baby, CalendarDays, Gift, MapPin, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import GiftList from '@/components/gift-list'; // Assuming GiftList component exists
-import AddToCalendarButton from '@/components/add-to-calendar-button'; // Assuming AddToCalendarButton component exists
-import SuggestItemButton from '@/components/suggest-item-button'; // Assuming SuggestItemButton component exists
+import GiftList from '@/components/gift-list';
+import AddToCalendarButton from '@/components/add-to-calendar-button';
+import SuggestItemButton from '@/components/suggest-item-button';
 
-// Placeholder data - Replace with Firestore fetching logic
-const eventDetails = {
-  date: '2024-12-15',
-  time: '14:00',
-  location: 'Salão de Festas Felicidade',
-  address: 'Rua Exemplo, 123, Bairro Alegre, Cidade Feliz - SP',
-  welcomeMessage: 'Sua presença é nosso maior presente! Esta lista é apenas um guia para os presentes.',
-  title: 'Chá de Bebê do(a) Futuro Bebê!',
-};
+// Placeholder data store/fetch function - Replace with actual data source logic
+// In a real app, this might fetch from an API, Firestore, or the in-memory store if settings are managed there.
+async function getEventDetails() {
+  // Simulating fetching data
+  await new Promise(resolve => setTimeout(resolve, 0)); // Simulate async
+  return {
+    date: '2024-12-15',
+    time: '14:00',
+    location: 'Salão de Festas Felicidade',
+    address: 'Rua Exemplo, 123, Bairro Alegre, Cidade Feliz - SP',
+    welcomeMessage: 'Sua presença é nosso maior presente! Esta lista é apenas um guia para os presentes.',
+    title: 'Chá de Bebê da Safira!', // Updated title
+    // Optional: Add duration if needed for calendar
+    duration: 180, // Duration in minutes (e.g., 3 hours)
+  };
+}
 
-// Placeholder - Replace with actual categories from Firestore or config
+// Placeholder categories - Replace or fetch if dynamic
 const categories = ['Roupas', 'Higiene', 'Brinquedos', 'Alimentação', 'Outros'];
 
-export default function Home() {
-  const formattedDate = new Date(eventDetails.date + 'T' + eventDetails.time + ':00').toLocaleDateString('pt-BR', {
-    year: 'numeric', month: 'long', day: 'numeric'
-  });
-  const formattedTime = eventDetails.time;
+export default async function Home() {
+  // Fetch event details server-side
+  const eventDetails = await getEventDetails();
+
+   // Formatting Date and Time - Ensure locale consistency
+   let formattedDate = 'Data inválida';
+   let formattedTime = 'Hora inválida';
+   try {
+     const eventDate = new Date(`${eventDetails.date}T${eventDetails.time}:00`);
+     if (!isNaN(eventDate.getTime())) {
+        formattedDate = eventDate.toLocaleDateString('pt-BR', {
+          year: 'numeric', month: 'long', day: 'numeric'
+        });
+        formattedTime = eventDate.toLocaleTimeString('pt-BR', {
+            hour: '2-digit', minute: '2-digit', hour12: false // Use 24h format consistent with input
+        });
+     } else {
+       console.error("Failed to parse event date/time:", eventDetails.date, eventDetails.time);
+     }
+   } catch (e) {
+     console.error("Error formatting date/time:", e);
+   }
+
 
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-8 relative"> {/* Added relative positioning */}
+    <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
 
-      {/* Admin Login Button - Top Right */}
       <div className="absolute top-4 right-4 md:top-8 md:right-8 z-10">
         <Link href="/admin">
           <Button variant="outline" size="sm">
@@ -40,15 +64,12 @@ export default function Home() {
         </Link>
       </div>
 
-
-      {/* Header Section */}
-      <header className="text-center space-y-4 pt-12"> {/* Added padding-top to avoid overlap */}
+      <header className="text-center space-y-4 pt-12">
         <Baby className="mx-auto h-16 w-16 text-secondary" />
         <h1 className="text-3xl md:text-4xl font-semibold text-primary">{eventDetails.title}</h1>
         <p className="text-lg text-muted-foreground">{eventDetails.welcomeMessage}</p>
       </header>
 
-      {/* Event Details Card */}
       <Card className="bg-secondary/20 shadow-md rounded-lg overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-secondary-foreground">
@@ -64,11 +85,11 @@ export default function Home() {
             <MapPin className="h-5 w-5 text-accent-foreground" />
             <span>{eventDetails.location} - {eventDetails.address}</span>
           </div>
+          {/* Pass all necessary details to the calendar button */}
           <AddToCalendarButton eventDetails={eventDetails} />
         </CardContent>
       </Card>
 
-      {/* Gift List Section */}
       <section className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <h2 className="text-2xl font-semibold flex items-center gap-2">
@@ -77,21 +98,18 @@ export default function Home() {
            <SuggestItemButton />
         </div>
 
-        {/* Filters and List */}
         <Tabs defaultValue="all" className="w-full">
-          {/* Adjusted grid columns and added margin-bottom for mobile */}
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:flex lg:w-auto mb-4 md:mb-0">
             <TabsTrigger value="all">Todos</TabsTrigger>
             <TabsTrigger value="available">Disponíveis</TabsTrigger>
             <TabsTrigger value="selected">Selecionados</TabsTrigger>
-            <TabsTrigger value="not_needed">Não Precisa</TabsTrigger> {/* Updated text */}
-            {/* Dynamically add category filters if needed */}
-            {/* categories.map(category => <TabsTrigger key={category} value={category.toLowerCase()}>{category}</TabsTrigger>) */}
+            <TabsTrigger value="not_needed">Não Precisa</TabsTrigger>
+            {/* Category triggers removed for simplicity, could be added back */}
           </TabsList>
 
-          {/* Tab Content - Pass filter criteria to GiftList */}
           <TabsContent value="all">
-             {/* Pass showSelectedByName=false to hide names on the public page */}
+             {/* Pass showSelectedByName=false for public view */}
+             {/* No onDataChange needed for public view */}
             <GiftList filterStatus="all" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="available">
@@ -100,22 +118,12 @@ export default function Home() {
           <TabsContent value="selected">
             <GiftList filterStatus="selected" showSelectedByName={false} />
           </TabsContent>
-           <TabsContent value="not_needed"> {/* Added content for 'Não precisa' tab */}
+           <TabsContent value="not_needed">
             <GiftList filterStatus="not_needed" showSelectedByName={false} />
           </TabsContent>
-          {/* Dynamically add category content */}
-          {/* categories.map(category => (
-            <TabsContent key={category} value={category.toLowerCase()}>
-              <GiftList filterCategory={category} filterStatus="available" showSelectedByName={false} />
-            </TabsContent>
-          ))*/}
         </Tabs>
       </section>
 
-      {/* Footer (Optional) */}
-      {/* <footer className="text-center text-muted-foreground text-sm mt-12">
-        Feito com ❤️
-      </footer> */}
     </div>
   );
 }

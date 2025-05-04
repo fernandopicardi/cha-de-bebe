@@ -1,15 +1,17 @@
-// **SECURITY WARNING:** This login system is highly insecure and uses hardcoded credentials.
-// It is **NOT SUITABLE** for production environments.
-// Replace with a proper authentication provider (e.g., Firebase Authentication) before deployment.
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; // Import Alert components
-import { ShieldCheck, ListPlus, CheckSquare, Users, FileDown, Settings, LogOut, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ShieldCheck, ListPlus, CheckSquare, Users, FileDown, Settings, LogOut, AlertCircle, RefreshCcw } from 'lucide-react';
+import AdminItemManagementTable from '@/components/admin/item-management-table'; // Import Admin components
+import AdminSuggestionApprovalList from '@/components/admin/suggestion-approval-list';
+import AdminSelectionViewer from '@/components/admin/selection-viewer';
+import AdminEventSettingsForm from '@/components/admin/event-settings-form';
+import { getGifts, exportGiftsToCSV, type GiftItem } from '@/data/gift-store'; // Import store functions
 
 // Hardcoded allowed admin emails and password (INSECURE!)
 const ALLOWED_EMAILS = ['fernandopicardi@gmail.com', 'naiaralofgren@gmail.com'];
@@ -21,21 +23,42 @@ export default function AdminPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [gifts, setGifts] = useState<GiftItem[]>([]);
+  const [isDataLoading, setIsDataLoading] = useState(false); // State for loading gift data
+
+  // Fetch gift data when authenticated
+  const fetchAdminData = useCallback(async () => {
+    if (!isAuthenticated) return; // Don't fetch if not logged in
+    setIsDataLoading(true);
+    try {
+      const fetchedGifts = await getGifts();
+      setGifts(fetchedGifts);
+    } catch (err) {
+      console.error("Error fetching admin data:", err);
+      setError("Falha ao carregar os dados dos presentes.");
+    } finally {
+      setIsDataLoading(false);
+    }
+  }, [isAuthenticated]); // Depend on isAuthenticated
+
+  useEffect(() => {
+    fetchAdminData();
+  }, [fetchAdminData]); // Fetch data when the component mounts or fetchAdminData changes
 
   const handleLogin = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError(null);
 
-    // Simulate network delay/processing
     setTimeout(() => {
       if (ALLOWED_EMAILS.includes(email) && password === ADMIN_PASSWORD) {
         setIsAuthenticated(true);
+        // Fetch data immediately after successful login
+        // fetchAdminData(); // fetchAdminData will be called by the useEffect when isAuthenticated changes
       } else {
         setError('E-mail ou senha inválidos.');
       }
       setLoading(false);
-      // Clear password field after attempt
       setPassword('');
     }, 500);
   };
@@ -45,16 +68,43 @@ export default function AdminPage() {
     setEmail('');
     setPassword('');
     setError(null);
+    setGifts([]); // Clear data on logout
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     console.log("Export clicked");
-    // TODO: Implement CSV export logic using Firestore data
-    alert("Funcionalidade de exportação ainda não implementada.");
+    try {
+      const csvData = await exportGiftsToCSV();
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      if (link.download !== undefined) { // Feature detection
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `chadebebe_presentes_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url); // Clean up
+      } else {
+         alert("Seu navegador não suporta download direto. O CSV será exibido em uma nova aba.");
+         const url = URL.createObjectURL(blob);
+         window.open(url, '_blank');
+         // Note: revokeObjectURL cannot be called immediately here if opened in new tab
+      }
+    } catch (err) {
+      console.error("Error exporting CSV:", err);
+      alert("Erro ao gerar o arquivo CSV.");
+    }
   };
 
-  // Login Form Component
-   const AdminLogin = () => (
+  // Callback to refresh data when child components modify it
+   const refreshData = () => {
+       console.log("Refreshing admin data...");
+       fetchAdminData();
+   };
+
+  const AdminLogin = () => (
       <Card className="w-full max-w-md mx-auto animate-fade-in">
         <CardHeader>
           <CardTitle>Admin Login</CardTitle>
@@ -62,7 +112,7 @@ export default function AdminPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
-             {error && (
+             {error && !loading && ( // Only show login error if not loading
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Erro de Login</AlertTitle>
@@ -103,7 +153,6 @@ export default function AdminPage() {
       </Card>
   );
 
-  // Render Login Form if not authenticated
   if (!isAuthenticated) {
      return (
        <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-screen bg-gradient-to-br from-background to-muted/30">
@@ -112,19 +161,23 @@ export default function AdminPage() {
      );
   }
 
-  // Render Admin Dashboard if authenticated
+  // Render Admin Dashboard
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8">
       <header className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <h1 className="text-3xl font-semibold flex items-center gap-2">
           <ShieldCheck className="h-8 w-8 text-primary" /> Painel de Administração
         </h1>
-        <Button onClick={handleLogout} variant="outline">
-          <LogOut className="mr-2 h-4 w-4"/> Sair
-        </Button>
+         <div className="flex items-center gap-2">
+             <Button onClick={refreshData} variant="outline" size="icon" disabled={isDataLoading} title="Atualizar Dados">
+                 <RefreshCcw className={`h-4 w-4 ${isDataLoading ? 'animate-spin' : ''}`} />
+             </Button>
+             <Button onClick={handleLogout} variant="outline">
+               <LogOut className="mr-2 h-4 w-4"/> Sair
+             </Button>
+         </div>
       </header>
 
-        {/* SECURITY WARNING DISPLAYED TO LOGGED-IN ADMIN */}
         <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Aviso de Segurança</AlertTitle>
@@ -133,68 +186,80 @@ export default function AdminPage() {
             </AlertDescription>
         </Alert>
 
+        {error && isDataLoading && ( // Show data loading error separately
+            <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Erro ao Carregar Dados</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+            </Alert>
+        )}
+
+      {/* Components now receive data and refresh callback */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Item Management Card */}
-        <Card>
+        <Card className="md:col-span-2 lg:col-span-3"> {/* Make Item Management take full width */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ListPlus /> Gerenciar Itens</CardTitle>
             <CardDescription>Adicionar, editar, remover e atualizar status dos presentes.</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* TODO: Placeholder for ItemManagementTable component */}
-            {/* Replace this p tag with the actual ItemManagementTable component when implemented */}
-            <p className="text-muted-foreground">[Tabela de Gerenciamento de Itens aqui]</p>
-             <Button className="mt-4">Gerenciar</Button> {/* This button might trigger a modal or navigate */}
+             {isDataLoading ? (
+                 <p>Carregando itens...</p> // Basic loading indicator
+             ) : (
+                 <AdminItemManagementTable gifts={gifts} onDataChange={refreshData} />
+             )}
           </CardContent>
         </Card>
 
-        {/* Suggestion Approval Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><CheckSquare /> Aprovar Sugestões</CardTitle>
             <CardDescription>Aprovar ou rejeitar itens sugeridos pelos convidados.</CardDescription>
           </CardHeader>
           <CardContent>
-             {/* TODO: Placeholder for SuggestionApprovalList component */}
-             {/* Replace this p tag with the actual SuggestionApprovalList component */}
-            <p className="text-muted-foreground">[Lista de Sugestões Pendentes aqui]</p>
-             <Button className="mt-4">Ver Sugestões</Button>
+             {isDataLoading ? (
+                 <p>Carregando sugestões...</p>
+             ) : (
+                 <AdminSuggestionApprovalList
+                     suggestions={gifts.filter(g => g.status === 'pending_suggestion')}
+                     onDataChange={refreshData}
+                 />
+              )}
           </CardContent>
         </Card>
 
-        {/* View/Revert Selections Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Users /> Visualizar Seleções</CardTitle>
             <CardDescription>Ver quem selecionou quais itens e reverter seleções se necessário.</CardDescription>
           </CardHeader>
           <CardContent>
-             {/* TODO: Placeholder for SelectionViewer component */}
-             {/* Replace this p tag with the actual SelectionViewer component */}
-            <p className="text-muted-foreground">[Visualizador de Seleções aqui]</p>
-             <Button className="mt-4">Ver Seleções</Button>
+             {isDataLoading ? (
+                 <p>Carregando seleções...</p>
+             ) : (
+                 <AdminSelectionViewer
+                    selectedItems={gifts.filter(g => g.status === 'selected')}
+                    onDataChange={refreshData}
+                 />
+             )}
           </CardContent>
         </Card>
 
-         {/* Event Details & Messages Card */}
-        <Card>
+         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Settings /> Configurações do Evento</CardTitle>
             <CardDescription>Atualizar detalhes do evento e mensagens personalizadas.</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* TODO: Placeholder for EventSettingsForm component */}
-            {/* Replace this p tag with the actual EventSettingsForm component */}
-            <p className="text-muted-foreground">[Formulário de Configurações aqui]</p>
-             <Button className="mt-4">Editar Detalhes</Button>
+             {/* TODO: Pass relevant data and save function */}
+            <AdminEventSettingsForm onSave={() => { console.log("Event settings saved (placeholder)"); }} />
+             {/* <Button className="mt-4">Salvar Detalhes</Button> */}
           </CardContent>
         </Card>
 
-         {/* Export Selections Card */}
-        <Card>
+         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><FileDown /> Exportar Seleções</CardTitle>
-            <CardDescription>Baixar a lista de itens selecionados e quem os selecionou em formato CSV.</CardDescription>
+            <CardDescription>Baixar a lista completa de itens e status em formato CSV.</CardDescription>
           </CardHeader>
           <CardContent>
              <Button onClick={handleExport} className="mt-4">Exportar CSV</Button>

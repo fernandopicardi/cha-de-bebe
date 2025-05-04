@@ -17,21 +17,15 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, PartyPopper, Send } from 'lucide-react'; // Added PartyPopper and Send
+import { Loader2, PartyPopper, Send } from 'lucide-react';
+import type { GiftItem } from '@/data/gift-store'; // Import type
 
-interface GiftItem {
-  id: string;
-  name: string;
-  description?: string;
-  category: string;
-  status: 'available' | 'selected' | 'not_needed';
-}
-
+// Interface now uses the imported type
 interface SelectItemDialogProps {
-  item: GiftItem;
+  item: GiftItem; // Use imported type
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (itemId: string, guestName: string) => void; // Callback on successful selection
+  onSuccess: (itemId: string, guestName: string) => Promise<void>; // Callback now expected to be async
 }
 
 // Define validation schema
@@ -51,17 +45,14 @@ export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: S
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     setIsSubmitting(true);
     try {
-      // Simulate API call / Firestore update
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Call the success callback passed from the parent
-      onSuccess(item.id, data.guestName);
+      // Call the success callback passed from the parent (which now handles the async logic)
+      await onSuccess(item.id, data.guestName);
 
       toast({
         title: ( <div className="flex items-center gap-2"> <PartyPopper className="h-5 w-5 text-success-foreground" /> Sucesso! </div> ),
-        description: `Obrigado, ${data.guestName}! "${item.name}" vai alegrar o dia do nosso bebê!`,
-        variant: 'default', // Use default which can be styled for success via CSS potentially or add a success variant
-        className: 'bg-success text-success-foreground border-success', // Direct styling for success
+        description: `Obrigado, ${data.guestName}! "${item.name}" foi reservado com sucesso!`, // Updated message
+        variant: 'default',
+        className: 'bg-success text-success-foreground border-success',
       });
       reset(); // Reset form fields
       onClose(); // Close the dialog
@@ -69,9 +60,10 @@ export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: S
       console.error("Erro ao selecionar item:", error);
       toast({
         title: 'Ops! Algo deu errado.',
-        description: 'Não foi possível registrar sua seleção. Tente novamente.',
+        description: 'Não foi possível registrar sua seleção. Pode ser que alguém já tenha escolhido. Tente atualizar a página ou escolher outro item.', // More informative error
         variant: 'destructive',
       });
+      // Keep dialog open on error? Optional. onClose(); could be removed from finally.
     } finally {
       setIsSubmitting(false);
     }
@@ -80,7 +72,7 @@ export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: S
   // Reset form when dialog closes or item changes
   React.useEffect(() => {
     if (!isOpen) {
-        reset();
+        reset({ guestName: '' }); // Ensure reset clears the field
     }
   }, [isOpen, reset]);
 
