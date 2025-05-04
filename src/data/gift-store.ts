@@ -46,6 +46,7 @@ export interface EventSettings {
   address: string;
   welcomeMessage: string;
   duration?: number; // Optional duration in minutes
+  headerImageUrl?: string | null; // Optional URL/Data URI for the header image
 }
 
 // In-memory store for event settings
@@ -56,8 +57,9 @@ let eventSettings: EventSettings = {
   time: '14:00',
   location: 'Salão de Festas Felicidade',
   address: 'Rua Exemplo, 123, Bairro Alegre, Cidade Feliz - SP',
-  welcomeMessage: 'Sua presença é o nosso maior presente! Para aqueles que desejam nos presentear, criamos esta lista como um guia carinhoso. Sinta-se à vontade!', // Updated default welcome message
+  welcomeMessage: 'Sua presença é o nosso maior presente! Esta lista é um guia carinhoso para quem desejar nos presentear, mas sinta-se totalmente à vontade, o importante é celebrar conosco!', // Updated default welcome message
   duration: 180,
+  headerImageUrl: null, // Initialize header image URL as null
 };
 
 /**
@@ -79,7 +81,7 @@ export async function updateEventSettings(updates: Partial<EventSettings>): Prom
     ...eventSettings,
     ...updates,
   };
-  console.log('Event settings updated by admin.');
+  console.log('Event settings updated by admin.', updates);
   return { ...eventSettings }; // Return a copy of the updated settings
 }
 

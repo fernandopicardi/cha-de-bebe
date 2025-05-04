@@ -1,6 +1,6 @@
 
-
 import Link from 'next/link';
+import Image from 'next/image'; // Import next/image
 import { Baby, CalendarDays, Gift, MapPin, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,29 +8,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GiftList from '@/components/gift-list';
 import AddToCalendarButton from '@/components/add-to-calendar-button';
 import SuggestItemButton from '@/components/suggest-item-button';
-import { getEventSettings } from '@/data/gift-store'; // Import function to get event settings
-import { ThemeToggle } from '@/components/theme-toggle'; // Import ThemeToggle
+import { getEventSettings } from '@/data/gift-store';
+import { ThemeToggle } from '@/components/theme-toggle';
 
-// Placeholder categories - Replace or fetch if dynamic
-const categories = ['Roupas', 'Higiene', 'Brinquedos', 'Alimentação', 'Outros'];
 
 export default async function Home() {
-  // Fetch event details server-side from the store
   const eventDetails = await getEventSettings();
 
-   // Formatting Date and Time - Ensure locale consistency
+   // Formatting Date and Time
    let formattedDate = 'Data inválida';
    let formattedTime = 'Hora inválida';
    try {
-     // Use UTC to avoid timezone issues during parsing if the input is just date/time
-     // Or ensure the server environment's timezone matches the expected event timezone
-     const eventDate = new Date(`${eventDetails.date}T${eventDetails.time}:00`); // Assuming local time input for now
+     const eventDate = new Date(`${eventDetails.date}T${eventDetails.time}:00`);
      if (!isNaN(eventDate.getTime())) {
         formattedDate = eventDate.toLocaleDateString('pt-BR', {
           year: 'numeric', month: 'long', day: 'numeric'
         });
         formattedTime = eventDate.toLocaleTimeString('pt-BR', {
-            hour: '2-digit', minute: '2-digit', hour12: false // Use 24h format consistent with input
+            hour: '2-digit', minute: '2-digit', hour12: false
         });
      } else {
        console.error("Failed to parse event date/time:", eventDetails.date, eventDetails.time);
@@ -39,6 +34,10 @@ export default async function Home() {
      console.error("Error formatting date/time:", e);
    }
 
+   // Construct the dynamic title including baby name if available
+   const pageTitle = eventDetails.babyName
+      ? `${eventDetails.title} ${eventDetails.babyName}!` // Append baby name if exists
+      : eventDetails.title; // Use only the base title otherwise
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
@@ -54,10 +53,25 @@ export default async function Home() {
         </Link>
       </div>
 
-      <header className="text-center space-y-4 pt-16"> {/* Added pt-16 for more space below buttons */}
+      {/* Optional Header Image */}
+      {eventDetails.headerImageUrl && (
+         <div className="relative w-full h-48 md:h-64 rounded-lg overflow-hidden shadow-md mb-8">
+             <Image
+                src={eventDetails.headerImageUrl}
+                alt="Cabeçalho do Chá de Bebê"
+                layout="fill"
+                objectFit="cover"
+                priority // Prioritize loading the header image
+                data-ai-hint="baby shower banner celebration"
+             />
+         </div>
+      )}
+
+      {/* Header Text - Adjust padding if image exists */}
+      <header className={`text-center space-y-4 ${eventDetails.headerImageUrl ? 'pt-0' : 'pt-16'}`}> {/* Remove top padding if image exists */}
         <Baby className="mx-auto h-16 w-16 text-secondary" />
-        {/* Display title fetched from settings */}
-        <h1 className="text-3xl md:text-4xl font-semibold text-primary">{eventDetails.title}</h1>
+        {/* Display dynamic title */}
+        <h1 className="text-3xl md:text-4xl font-semibold text-primary">{pageTitle}</h1>
         <p className="text-lg text-muted-foreground">{eventDetails.welcomeMessage}</p>
       </header>
 
@@ -76,7 +90,6 @@ export default async function Home() {
             <MapPin className="h-5 w-5 text-accent-foreground" />
             <span>{eventDetails.location} - {eventDetails.address}</span>
           </div>
-          {/* Pass all necessary details to the calendar button */}
           <AddToCalendarButton eventDetails={eventDetails} />
         </CardContent>
       </Card>
@@ -90,20 +103,13 @@ export default async function Home() {
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-           {/* Add mb-4 for margin-bottom */}
-          <TabsList className="w-full justify-start overflow-x-auto whitespace-nowrap pb-2 mb-4">
-             {/* Ensure triggers don't shrink */}
+          <TabsList className="w-full justify-start overflow-x-auto whitespace-nowrap pb-2 mb-4 md:mb-6"> {/* Increased bottom margin on md+ */}
             <TabsTrigger value="all" className="flex-shrink-0">Todos</TabsTrigger>
             <TabsTrigger value="available" className="flex-shrink-0">Disponíveis</TabsTrigger>
             <TabsTrigger value="selected" className="flex-shrink-0">Selecionados</TabsTrigger>
             <TabsTrigger value="not_needed" className="flex-shrink-0">Não Precisa</TabsTrigger>
-            {/* Add dynamic categories later if needed */}
-            {/* {categories.map(cat => (
-              <TabsTrigger key={cat} value={cat.toLowerCase()} className="flex-shrink-0">{cat}</TabsTrigger>
-            ))} */}
           </TabsList>
 
-          {/* Add mt-6 for margin-top to TabsContent */}
           <TabsContent value="all" className="mt-6">
             <GiftList filterStatus="all" showSelectedByName={false} />
           </TabsContent>
@@ -116,12 +122,6 @@ export default async function Home() {
            <TabsContent value="not_needed" className="mt-6">
             <GiftList filterStatus="not_needed" showSelectedByName={false} />
           </TabsContent>
-            {/* Add dynamic category content later */}
-            {/* {categories.map(cat => (
-               <TabsContent key={cat} value={cat.toLowerCase()} className="mt-6">
-                 <GiftList filterCategory={cat} showSelectedByName={false} />
-               </TabsContent>
-            ))} */}
         </Tabs>
       </section>
 
