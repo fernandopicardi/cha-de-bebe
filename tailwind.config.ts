@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import { fontFamily } from "tailwindcss/defaultTheme"
 
 export default {
     darkMode: ["class"],
@@ -9,6 +10,9 @@ export default {
   ],
   theme: {
   	extend: {
+      fontFamily: {
+        sans: ["var(--font-poppins)", ...fontFamily.sans], // Add Poppins as default sans-serif
+      },
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
@@ -40,6 +44,10 @@ export default {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
+        success: { // Added success color
+          DEFAULT: 'hsl(var(--success))',
+          foreground: 'hsl(var(--success-foreground))'
+        },
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
@@ -67,6 +75,14 @@ export default {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		keyframes: {
+        pulse: { // Added pulse keyframe
+          '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+          '50%': { transform: 'scale(1.05)', opacity: '0.9' },
+        },
+        fadeIn: { // Added fade-in keyframe
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
   			'accordion-down': {
   				from: {
   					height: '0'
@@ -85,6 +101,8 @@ export default {
   			}
   		},
   		animation: {
+        'pulse-button': 'pulse 1.5s infinite', // Added pulse animation
+        'fade-in': 'fadeIn 0.3s ease-out forwards', // Added fade-in animation
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out'
   		}
