@@ -18,6 +18,76 @@ import { getGifts, exportGiftsToCSV, type GiftItem } from '@/data/gift-store'; /
 const ALLOWED_EMAILS = ['fernandopicardi@gmail.com', 'naiaralofgren@gmail.com'];
 const ADMIN_PASSWORD = 'Safiras7!'; // Extremely insecure
 
+// Define AdminLogin component outside AdminPage
+interface AdminLoginProps {
+  email: string;
+  setEmail: (email: string) => void;
+  password: string;
+  setPassword: (password: string) => void;
+  error: string | null;
+  loading: boolean;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+}
+
+const AdminLogin: React.FC<AdminLoginProps> = ({
+  email,
+  setEmail,
+  password,
+  setPassword,
+  error,
+  loading,
+  onSubmit,
+}) => (
+  <Card className="w-full max-w-md mx-auto animate-fade-in">
+    <CardHeader>
+      <CardTitle>Admin Login</CardTitle>
+      <CardDescription>Acesse o painel de administração.</CardDescription>
+    </CardHeader>
+    <CardContent>
+      <form onSubmit={onSubmit} className="space-y-4">
+        {error && !loading && ( // Only show login error if not loading
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erro de Login</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="email">E-mail</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="seu@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            disabled={loading}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Senha</Label>
+          <Input
+            id="password"
+            type="password"
+            placeholder="******" // Avoid showing the insecure password as placeholder
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={loading}
+          />
+        </div>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? 'Entrando...' : 'Entrar'}
+        </Button>
+      </form>
+      <p className="mt-4 text-xs text-center text-muted-foreground">
+        Use as credenciais fornecidas para acesso.
+      </p>
+    </CardContent>
+  </Card>
+);
+
+
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState('');
@@ -31,6 +101,7 @@ export default function AdminPage() {
   const fetchAdminData = useCallback(async () => {
     if (!isAuthenticated) return; // Don't fetch if not logged in
     setIsDataLoading(true);
+    setError(null); // Clear previous data errors
     try {
       const fetchedGifts = await getGifts();
       setGifts(fetchedGifts);
@@ -43,24 +114,26 @@ export default function AdminPage() {
   }, [isAuthenticated]); // Depend on isAuthenticated
 
   useEffect(() => {
-    fetchAdminData();
-  }, [fetchAdminData]); // Fetch data when the component mounts or fetchAdminData changes
+    if (isAuthenticated) {
+      fetchAdminData();
+    }
+  }, [isAuthenticated, fetchAdminData]); // Fetch data when authenticated or fetchAdminData changes
 
   const handleLogin = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError(null);
 
+    // Simulate network delay
     setTimeout(() => {
       if (ALLOWED_EMAILS.includes(email) && password === ADMIN_PASSWORD) {
         setIsAuthenticated(true);
-        // Fetch data immediately after successful login
-        // fetchAdminData will be called by the useEffect when isAuthenticated changes
+        // No need to call fetchAdminData here, useEffect will handle it
       } else {
         setError('E-mail ou senha inválidos.');
       }
       setLoading(false);
-      setPassword('');
+      setPassword(''); // Clear password field after attempt
     }, 500);
   };
 
@@ -100,64 +173,25 @@ export default function AdminPage() {
   };
 
   // Callback to refresh data when child components modify it
-   const refreshData = () => {
+   const refreshData = useCallback(() => {
        console.log("Refreshing admin data...");
        fetchAdminData();
-   };
+   }, [fetchAdminData]); // Include fetchAdminData in dependencies
 
-  const AdminLogin = () => (
-      <Card className="w-full max-w-md mx-auto animate-fade-in">
-        <CardHeader>
-          <CardTitle>Admin Login</CardTitle>
-          <CardDescription>Acesse o painel de administração.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-             {error && !loading && ( // Only show login error if not loading
-                <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Erro de Login</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Entrando...' : 'Entrar'}
-            </Button>
-          </form>
-           <p className="mt-4 text-xs text-center text-muted-foreground">
-             Use as credenciais fornecidas para acesso.
-           </p>
-        </CardContent>
-      </Card>
-  );
 
   if (!isAuthenticated) {
      return (
        <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-screen bg-gradient-to-br from-background to-muted/30">
-         <AdminLogin />
+         {/* Render the extracted AdminLogin component */}
+         <AdminLogin
+            email={email}
+            setEmail={setEmail}
+            password={password}
+            setPassword={setPassword}
+            error={error}
+            loading={loading}
+            onSubmit={handleLogin}
+         />
        </div>
      );
   }
@@ -187,7 +221,7 @@ export default function AdminPage() {
             </AlertDescription>
         </Alert>
 
-        {error && isDataLoading && ( // Show data loading error separately
+        {error && !isDataLoading && ( // Show data loading error separately only if not loading
             <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Erro ao Carregar Dados</AlertTitle>
@@ -269,5 +303,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-    
