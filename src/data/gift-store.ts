@@ -39,6 +39,7 @@ let giftItems: GiftItem[] = [
 // --- Event Settings ---
 export interface EventSettings {
   title: string;
+  babyName?: string; // Added baby name
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
   location: string;
@@ -50,11 +51,12 @@ export interface EventSettings {
 // In-memory store for event settings
 let eventSettings: EventSettings = {
   title: 'Chá de Bebê!', // Admin can change this
+  babyName: 'Nosso Bebê', // Default baby name, admin can change
   date: '2024-12-15',
   time: '14:00',
   location: 'Salão de Festas Felicidade',
   address: 'Rua Exemplo, 123, Bairro Alegre, Cidade Feliz - SP',
-  welcomeMessage: 'Sua presença é nosso maior presente! Esta lista é apenas um guia para os presentes.',
+  welcomeMessage: 'Sua presença é o nosso maior presente! Para aqueles que desejam nos presentear, criamos esta lista como um guia carinhoso. Sinta-se à vontade!', // Updated default welcome message
   duration: 180,
 };
 
@@ -125,7 +127,8 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
 }
 
 /**
- * Marks an available gift item as 'not_needed'.
+ * (Admin Only) Marks an available gift item as 'not_needed'.
+ * This function is intended for admin use to manage the list, not for guests.
  * @param itemId The ID of the item to mark.
  * @returns A promise resolving to the updated item or null if not found/unavailable.
  */
@@ -149,7 +152,7 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`Item ${itemId} marked as not needed.`);
+    console.log(`Admin marked item ${itemId} as not needed.`);
     return updatedItem;
 }
 
@@ -207,25 +210,32 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`Item ${itemId} reverted to available.`);
+    console.log(`Item ${itemId} reverted to available by admin.`);
     return updatedItem;
 }
 
 /**
  * (Admin) Adds a new gift item directly.
- * @param newItemData Data for the new gift (excluding id, status).
+ * @param newItemData Data for the new gift (excluding id). Status defaults to available unless specified.
  * @returns A promise resolving to the newly added gift item.
  */
-export async function addGift(newItemData: Omit<GiftItem, 'id' | 'status'>): Promise<GiftItem> {
+export async function addGift(newItemData: Omit<GiftItem, 'id'>): Promise<GiftItem> {
     const newItem: GiftItem = {
-        ...newItemData,
         id: `gift-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Generate unique ID
-        status: 'available', // Default status for admin-added items
+        ...newItemData,
+        // Status defaults to 'available' if not provided, otherwise use provided status
+        status: newItemData.status || 'available',
     };
+    // Clear selection details if status is not 'selected'
+    if (newItem.status !== 'selected') {
+        newItem.selectedBy = undefined;
+        newItem.selectionDate = undefined;
+    }
     giftItems = [...giftItems, newItem];
-    console.log(`Admin added new gift: ${newItem.name}`);
+    console.log(`Admin added new gift: ${newItem.name} with status ${newItem.status}`);
     return newItem;
 }
+
 
 /**
  * (Admin) Updates an existing gift item.
@@ -236,23 +246,27 @@ export async function addGift(newItemData: Omit<GiftItem, 'id' | 'status'>): Pro
 export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem, 'id'>>): Promise<GiftItem | null> {
      const itemIndex = giftItems.findIndex(item => item.id === itemId);
      if (itemIndex === -1) {
-         console.warn(`Item ${itemId} not found for update.`);
+         console.warn(`Item ${itemId} not found for update by admin.`);
          return null;
      }
 
      // Ensure read-only fields like 'id' are not overwritten
-     // Ensure status update is valid
-     const { id, status, ...restUpdates } = updates;
+     const { id, ...restUpdates } = updates;
 
      const updatedItem: GiftItem = {
          ...giftItems[itemIndex],
          ...restUpdates,
-         // Only update status if it's a valid status and provided in updates
-         ...(status && ['available', 'selected', 'not_needed'].includes(status) && { status: status as GiftItem['status'] }),
+         // Ensure status update is valid, if provided
+         ...(updates.status && ['available', 'selected', 'not_needed'].includes(updates.status) && { status: updates.status as GiftItem['status'] }),
      };
 
-      // Clear selection details if status changes from 'selected'
+      // Clear selection details if status changes FROM 'selected' TO something else
       if (giftItems[itemIndex].status === 'selected' && updatedItem.status !== 'selected') {
+          updatedItem.selectedBy = undefined;
+          updatedItem.selectionDate = undefined;
+      }
+      // Clear selection details if status is explicitly set to 'available' or 'not_needed'
+      if (updatedItem.status === 'available' || updatedItem.status === 'not_needed') {
           updatedItem.selectedBy = undefined;
           updatedItem.selectionDate = undefined;
       }
@@ -280,7 +294,7 @@ export async function deleteGift(itemId: string): Promise<boolean> {
     if (success) {
         console.log(`Item ${itemId} deleted by admin.`);
     } else {
-        console.warn(`Item ${itemId} not found for deletion.`);
+        console.warn(`Item ${itemId} not found for deletion by admin.`);
     }
     return success;
 }
@@ -299,7 +313,7 @@ export async function exportGiftsToCSV(): Promise<string> {
         item.category,
         item.status,
         item.selectedBy || '',
-        item.selectionDate?.toISOString() || '',
+        item.selectionDate ? item.selectionDate.toLocaleString('pt-BR') : '', // Format date for locale
     ].map(value => `"${String(value).replace(/"/g, '""')}"`) // Escape quotes
      .join(','));
 
