@@ -60,18 +60,19 @@ export default async function Home() {
       <header className="text-center space-y-4 pt-16">
         {/* Conditionally render Image or Baby Icon */}
         {eventDetails.headerImageUrl ? (
-          <div className="relative mx-auto w-24 h-24 rounded-full overflow-hidden shadow-md mb-4 border-2 border-secondary">
+           // Increased size (w-32 h-32) and margin-bottom (mb-6)
+          <div className="relative mx-auto w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden shadow-lg mb-6 border-4 border-secondary">
             <Image
               src={eventDetails.headerImageUrl}
               alt="Foto Cabeçalho Chá de Bebê"
-              layout="fill"
-              objectFit="cover"
+              fill // Use fill to cover the container
+              style={{ objectFit: 'cover' }} // Ensure image covers the area
               priority // Prioritize loading the header image
               data-ai-hint="baby shower theme picture"
             />
           </div>
         ) : (
-           <Baby className="mx-auto h-16 w-16 text-secondary" />
+           <Baby className="mx-auto h-16 w-16 text-secondary mb-4" /> // Keep margin for icon consistency
         )}
 
         {/* Display dynamic title */}
@@ -136,4 +137,3 @@ export default async function Home() {
     </div>
   );
 }
-
