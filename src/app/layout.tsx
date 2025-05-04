@@ -22,7 +22,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR"> {/* Set language to Portuguese Brazil */}
+    // Set language to Portuguese Brazil
+    <html lang="pt-BR">
       {/* Apply Poppins font class and variable */}
       <body className={`${poppins.variable} font-sans antialiased`}>
         {children}
