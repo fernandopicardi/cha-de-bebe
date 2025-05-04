@@ -25,6 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning> {/* Add suppressHydrationWarning for next-themes */}
+      {/* Ensure no leading/trailing spaces around body */}
       <body className={`${poppins.variable} font-sans antialiased`}>
          <ThemeProvider
              attribute="class"
