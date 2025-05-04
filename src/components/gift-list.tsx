@@ -5,17 +5,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Gift, Check, X, Hourglass, User, Tag, Ban, Loader2 } from 'lucide-react'; // Removed Lightbulb, Added Ban
+import { Gift, Check, X, Hourglass, User, Tag, Ban, Loader2 } from 'lucide-react'; // Ban icon remains for status badge, but button is removed
 import SelectItemDialog from './select-item-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getGifts, selectGift, markGiftAsNotNeeded, type GiftItem } from '@/data/gift-store'; // Added markGiftAsNotNeeded
+import { getGifts, selectGift, type GiftItem } from '@/data/gift-store'; // Removed markGiftAsNotNeeded import
 import { useToast } from '@/hooks/use-toast';
 
 interface GiftListProps {
-  filterStatus?: 'all' | 'available' | 'selected' | 'not_needed'; // Removed 'pending_suggestion'
+  filterStatus?: 'all' | 'available' | 'selected' | 'not_needed';
   filterCategory?: string;
-  showSelectedByName?: boolean; // Prop to control visibility of selector's name on admin page
-  onDataChange?: () => void; // Callback to notify parent (Admin page) of data changes
+  showSelectedByName?: boolean;
+  onDataChange?: () => void;
 }
 
 export default function GiftList({
@@ -28,7 +28,8 @@ export default function GiftList({
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<GiftItem | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [markingItemId, setMarkingItemId] = useState<string | null>(null); // Track item being marked
+  // Removed markingItemId state as the button is removed
+  // const [markingItemId, setMarkingItemId] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Fetch initial data
@@ -40,27 +41,23 @@ export default function GiftList({
         setItems(gifts);
       } catch (error) {
         console.error("Error fetching gifts:", error);
-        // Handle error state if needed
+        toast({ title: "Erro ao carregar", description: "Não foi possível buscar a lista de presentes.", variant: "destructive" });
       } finally {
         setLoading(false);
       }
     }
     fetchGifts();
-  }, []);
+  }, [toast]); // Added toast to dependency array if used inside effect
 
   const filteredItems = useMemo(() => {
     return items.filter(item => {
-      // Apply status filter
       if (filterStatus !== 'all' && item.status !== filterStatus) {
         return false;
       }
-
-      // Apply category filter (if provided)
       if (filterCategory && item.category.toLowerCase() !== filterCategory.toLowerCase()) {
           return false;
       }
-
-      return true; // Include item if no filters exclude it
+      return true;
     });
   }, [items, filterStatus, filterCategory]);
 
@@ -75,20 +72,17 @@ export default function GiftList({
     setSelectedItem(null);
   };
 
-  // Function to update item status using the store function
   const handleItemSelectionSuccess = async (itemId: string, guestName: string) => {
      try {
        const updatedItem = await selectGift(itemId, guestName);
        if (updatedItem) {
-         // Update local state
          setItems(prevItems =>
            prevItems.map(item =>
              item.id === itemId ? updatedItem : item
            )
          );
-         onDataChange?.(); // Notify admin page if necessary
+         onDataChange?.();
        } else {
-         // Handle case where item couldn't be selected (e.g., already selected)
          console.warn(`Failed to select item ${itemId}, it might have been selected by someone else.`);
          toast({ title: "Ops!", description: "Este item já foi selecionado. Tente atualizar a página.", variant: "destructive" });
          // Re-fetch to get the latest state
@@ -101,35 +95,7 @@ export default function GiftList({
      }
   };
 
-  // Function to mark an item as 'not needed'
-  const handleMarkNotNeededClick = async (itemId: string) => {
-    setMarkingItemId(itemId); // Show loading state for this specific button
-    try {
-      const updatedItem = await markGiftAsNotNeeded(itemId);
-      if (updatedItem) {
-        // Update local state
-        setItems(prevItems =>
-          prevItems.map(item =>
-            item.id === itemId ? updatedItem : item
-          )
-        );
-        toast({ title: "Atualizado!", description: `"${updatedItem.name}" marcado como 'Não Precisa'.` });
-        onDataChange?.(); // Notify admin if needed
-      } else {
-        console.warn(`Failed to mark item ${itemId} as not needed.`);
-        toast({ title: "Ops!", description: "Não foi possível marcar o item. Tente atualizar a página.", variant: "destructive" });
-         // Re-fetch to get the latest state
-         const currentGifts = await getGifts();
-         setItems(currentGifts);
-      }
-    } catch (error) {
-      console.error("Error marking item as not needed:", error);
-      toast({ title: "Erro!", description: "Falha ao marcar o item como 'Não Precisa'.", variant: "destructive" });
-    } finally {
-       setMarkingItemId(null); // Hide loading state
-    }
-  };
-
+  // Removed handleMarkNotNeededClick function
 
   const getStatusBadge = (status: GiftItem['status'], selectedBy?: string) => {
     switch (status) {
@@ -143,8 +109,8 @@ export default function GiftList({
           </Badge>
         );
       case 'not_needed':
-        return <Badge variant="destructive" className="bg-destructive/80 text-destructive-foreground"><X className="mr-1 h-3 w-3" /> Não Precisa</Badge>;
-      // Removed 'pending_suggestion' case
+        // Use Ban icon for the status badge display
+        return <Badge variant="destructive" className="bg-destructive/80 text-destructive-foreground"><Ban className="mr-1 h-3 w-3" /> Não Precisa</Badge>;
       default:
         return <Badge variant="outline"><Hourglass className="mr-1 h-3 w-3" /> Indefinido</Badge>;
     }
@@ -177,18 +143,11 @@ export default function GiftList({
      if (filterStatus === 'available') emptyMessage = "Todos os presentes disponíveis já foram escolhidos ou marcados como 'Não Precisa'!";
      if (filterStatus === 'selected') emptyMessage = "Nenhum presente foi selecionado ainda.";
      if (filterStatus === 'not_needed') emptyMessage = "Nenhum item marcado como 'Não precisa'.";
-     // Removed pending_suggestion message
 
     return (
       <div className="text-center pt-16 pb-10 text-muted-foreground">
         <Gift className="mx-auto h-12 w-12 mb-4" />
         <p>{emptyMessage}</p>
-        {/* TODO: Implement filter reset logic or remove button if not needed */}
-        {/* {filterStatus !== 'all' && (
-             <Button variant="link" onClick={() => {}}>
-                Limpar filtros
-            </Button>
-        )} */}
       </div>
     );
   }
@@ -209,21 +168,21 @@ export default function GiftList({
               </div>
             </CardHeader>
             <CardContent className="flex-grow">
-               {/* Optional: Image placeholder */}
-              {/* <Image src={`https://picsum.photos/seed/${item.id}/300/200`} alt={item.name} width={300} height={200} className="rounded-md mb-4" data-ai-hint="baby gift item"/> */}
+               {/* Content area */}
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
-               {/* Pass selectedBy conditionally based on showSelectedByName */}
                {getStatusBadge(item.status, item.selectedBy)}
-               <div className="flex gap-2 flex-wrap justify-end"> {/* Wrap buttons */}
+               <div className="flex gap-2 flex-wrap justify-end">
                   {item.status === 'available' && (
                     <>
+                      {/* Removed 'Mark Not Needed' button */}
+                      {/*
                       <Button
                          size="sm"
-                         variant="outline" // Changed variant
-                         className="border-destructive text-destructive hover:bg-destructive/10" // Destructive-like style
+                         variant="outline"
+                         className="border-destructive text-destructive hover:bg-destructive/10"
                          onClick={() => handleMarkNotNeededClick(item.id)}
-                         disabled={markingItemId === item.id} // Disable while marking
+                         disabled={markingItemId === item.id}
                          aria-label={`Marcar ${item.name} como não precisa`}
                       >
                          {markingItemId === item.id ? (
@@ -233,12 +192,13 @@ export default function GiftList({
                          )}
                          <span className="ml-1">Não Precisa</span>
                       </Button>
+                      */}
                       <Button
                          size="sm"
                          className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
                          onClick={() => handleSelectItemClick(item)}
                          aria-label={`Selecionar ${item.name}`}
-                         disabled={markingItemId === item.id} // Also disable if marking
+                         // Removed disable logic related to markingItemId
                       >
                          <Gift className="mr-2 h-4 w-4" /> Escolher
                       </Button>
@@ -251,7 +211,7 @@ export default function GiftList({
         ))}
       </div>
 
-      {selectedItem && selectedItem.status === 'available' && ( // Only show dialog for available items
+      {selectedItem && selectedItem.status === 'available' && (
         <SelectItemDialog
           item={selectedItem}
           isOpen={isDialogOpen}

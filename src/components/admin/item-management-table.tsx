@@ -16,12 +16,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
-import { Trash2, Edit, PlusCircle, Save, Ban, RotateCcw } from 'lucide-react'; // Removed XCircle, CheckCircle2 etc.
+import { Trash2, Edit, PlusCircle, Save, Ban, RotateCcw, Loader2 } from 'lucide-react'; // Added Loader2
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { addGift, updateGift, deleteGift, revertSelection, type GiftItem } from '@/data/gift-store'; // revertSelection remains useful
+import { addGift, updateGift, deleteGift, revertSelection, type GiftItem } from '@/data/gift-store';
 
 interface AdminItemManagementTableProps {
   gifts: GiftItem[];
@@ -33,19 +33,21 @@ const giftFormSchema = z.object({
   name: z.string().min(3, "Nome precisa ter pelo menos 3 caracteres."),
   description: z.string().optional(),
   category: z.string().min(1, "Categoria é obrigatória."),
-  status: z.enum(['available', 'selected', 'not_needed']).optional(), // Removed 'pending_suggestion'
+  status: z.enum(['available', 'selected', 'not_needed']).optional(), // Status is optional in form, required for item
 });
 
 type GiftFormData = z.infer<typeof giftFormSchema>;
 
-// Available categories (could be fetched or configured elsewhere) - Removed 'Sugestão'
+// Available categories
 const categories = ['Roupas', 'Higiene', 'Brinquedos', 'Alimentação', 'Outros'];
-const statuses: GiftItem['status'][] = ['available', 'selected', 'not_needed']; // Removed 'pending_suggestion'
+// Available statuses for selection in the edit dialog
+const statuses: GiftItem['status'][] = ['available', 'selected', 'not_needed'];
 
 
 export default function AdminItemManagementTable({ gifts, onDataChange }: AdminItemManagementTableProps) {
   const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<GiftItem | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null); // Track loading state for row actions (delete, revert, mark)
   const { toast } = useToast();
 
   const { control, register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<GiftFormData>({
@@ -54,6 +56,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
       name: '',
       description: '',
       category: '',
+      status: 'available', // Default for new items
     }
   });
 
@@ -69,7 +72,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
            name: item.name,
            description: item.description || '',
            category: item.category,
-           status: item.status
+           status: item.status // Allow editing status for existing items
        });
        setIsAddEditDialogOpen(true);
    };
@@ -80,16 +83,16 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
     reset(); // Clear form on close
   };
 
+  // Form submission for Add/Edit
   const onSubmit = async (data: GiftFormData) => {
     try {
       if (editingItem) {
-        // Update existing item
+        // Update existing item - including status if changed
         await updateGift(editingItem.id, {
              name: data.name,
              description: data.description,
              category: data.category,
-             // Status can be updated here if needed, or use dedicated actions
-             // status: data.status // Be careful allowing direct status changes here
+             status: data.status ?? editingItem.status, // Use new status or keep old if not provided/editable
         });
         toast({ title: "Sucesso!", description: `Item "${data.name}" atualizado.` });
       } else {
@@ -98,7 +101,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
              name: data.name,
              description: data.description,
              category: data.category,
-             // Default status is 'available' for new items added by admin
+             // Status defaults to 'available' via addGift function
         });
         toast({ title: "Sucesso!", description: `Item "${data.name}" adicionado.` });
       }
@@ -110,8 +113,11 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
     }
   };
 
+  // Row Action: Delete
   const handleDelete = async (item: GiftItem) => {
+      if (actionLoading) return; // Prevent multiple actions
       if (confirm(`Tem certeza que deseja excluir o item "${item.name}"? Esta ação não pode ser desfeita.`)) {
+          setActionLoading(`delete-${item.id}`);
           try {
               await deleteGift(item.id);
               toast({ title: "Sucesso!", description: `Item "${item.name}" excluído.` });
@@ -119,29 +125,39 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
           } catch (error) {
               console.error("Error deleting item:", error);
               toast({ title: "Erro!", description: `Falha ao excluir o item "${item.name}".`, variant: "destructive" });
+          } finally {
+              setActionLoading(null);
           }
       }
   };
 
+  // Row Action: Revert to Available
    const handleRevert = async (item: GiftItem) => {
-       if (item.status !== 'selected' && item.status !== 'not_needed') return; // Only revert selected or not_needed items
+       if (actionLoading) return;
+       if (item.status !== 'selected' && item.status !== 'not_needed') return;
        const actionText = item.status === 'selected' ? 'reverter a seleção' : 'remover a marcação "Não Precisa"';
        const guestNameInfo = item.selectedBy ? ` por ${item.selectedBy}` : '';
        if (confirm(`Tem certeza que deseja ${actionText} do item "${item.name}"${guestNameInfo}? O item voltará a ficar disponível.`)) {
+           setActionLoading(`revert-${item.id}`);
            try {
-               await revertSelection(item.id); // This function now handles both cases
+               await revertSelection(item.id);
                toast({ title: "Sucesso!", description: `Item "${item.name}" revertido para disponível.` });
                onDataChange();
            } catch (error) {
                console.error("Error reverting item:", error);
                toast({ title: "Erro!", description: `Falha ao reverter o item "${item.name}".`, variant: "destructive" });
+           } finally {
+              setActionLoading(null);
            }
        }
    };
 
+   // Row Action: Mark as Not Needed
     const handleMarkNotNeeded = async (item: GiftItem) => {
-        if (item.status === 'not_needed') return; // Already marked
+        if (actionLoading) return;
+        if (item.status !== 'available') return; // Only mark available items
         if (confirm(`Tem certeza que deseja marcar o item "${item.name}" como "Não Precisa"?`)) {
+             setActionLoading(`mark-${item.id}`);
             try {
                 // Use updateGift for consistency, ensuring selection info is cleared
                 await updateGift(item.id, { status: 'not_needed', selectedBy: undefined, selectionDate: undefined });
@@ -150,6 +166,8 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
             } catch (error) {
                 console.error("Error marking as not needed:", error);
                 toast({ title: "Erro!", description: `Falha ao marcar o item "${item.name}" como "Não Precisa".`, variant: "destructive" });
+            } finally {
+                setActionLoading(null);
             }
         }
     };
@@ -160,7 +178,6 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
       case 'available': return <Badge variant="default" className="bg-success text-success-foreground">Disponível</Badge>;
       case 'selected': return <Badge variant="secondary" className="bg-secondary text-secondary-foreground">Selecionado</Badge>;
       case 'not_needed': return <Badge variant="destructive" className="bg-destructive/80 text-destructive-foreground">Não Precisa</Badge>;
-      // Removed 'pending_suggestion' case
       default: return <Badge variant="outline">Indefinido</Badge>;
     }
   };
@@ -168,7 +185,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
   return (
     <div className="space-y-4">
         <div className="flex justify-end">
-            <Button onClick={handleOpenAddDialog} size="sm">
+            <Button onClick={handleOpenAddDialog} size="sm" disabled={isSubmitting || !!actionLoading}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Item
             </Button>
         </div>
@@ -192,28 +209,34 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
               </TableRow>
             ) : (
               gifts.map((item) => (
-                <TableRow key={item.id}>
+                <TableRow key={item.id} className={actionLoading?.endsWith(item.id) ? 'opacity-50 pointer-events-none' : ''}>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">{item.description || '-'}</TableCell>
                   <TableCell className="hidden sm:table-cell">{item.category}</TableCell>
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
                   <TableCell className="text-right space-x-1">
-                     <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(item)} title="Editar Item">
-                         <Edit className="h-4 w-4" />
-                     </Button>
-                     {(item.status === 'selected' || item.status === 'not_needed') && ( // Allow reverting 'selected' and 'not_needed'
-                         <Button variant="ghost" size="icon" onClick={() => handleRevert(item)} title="Reverter para Disponível">
-                             <RotateCcw className="h-4 w-4 text-orange-600" />
-                         </Button>
+                     {actionLoading?.endsWith(item.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin inline-block text-muted-foreground" />
+                     ) : (
+                        <>
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(item)} title="Editar Item" disabled={!!actionLoading}>
+                                <Edit className="h-4 w-4" />
+                            </Button>
+                            {(item.status === 'selected' || item.status === 'not_needed') && (
+                                <Button variant="ghost" size="icon" onClick={() => handleRevert(item)} title="Reverter para Disponível" disabled={!!actionLoading}>
+                                    <RotateCcw className="h-4 w-4 text-orange-600" />
+                                </Button>
+                            )}
+                            {item.status === 'available' && ( // Button to mark available items as 'Not Needed'
+                                <Button variant="ghost" size="icon" onClick={() => handleMarkNotNeeded(item)} title="Marcar como Não Precisa" disabled={!!actionLoading}>
+                                    <Ban className="h-4 w-4 text-yellow-600" />
+                                </Button>
+                            )}
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(item)} title="Excluir Item" disabled={!!actionLoading}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                        </>
                      )}
-                     {item.status === 'available' && ( // Only show 'Mark Not Needed' for available items
-                         <Button variant="ghost" size="icon" onClick={() => handleMarkNotNeeded(item)} title="Marcar como Não Precisa">
-                             <Ban className="h-4 w-4 text-yellow-600" />
-                         </Button>
-                     )}
-                     <Button variant="ghost" size="icon" onClick={() => handleDelete(item)} title="Excluir Item">
-                         <Trash2 className="h-4 w-4 text-destructive" />
-                     </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -228,7 +251,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Editar Item' : 'Adicionar Novo Item'}</DialogTitle>
             <DialogDescription>
-              {editingItem ? 'Modifique os detalhes do item.' : 'Preencha os detalhes do novo item para a lista.'}
+              {editingItem ? 'Modifique os detalhes do item, incluindo seu status.' : 'Preencha os detalhes do novo item para a lista.'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -245,7 +268,6 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
               <label htmlFor="description" className="text-right text-sm font-medium pt-2">Descrição</label>
               <div className="col-span-3">
                  <Textarea id="description" {...register('description')} />
-                 {/* No validation needed for optional field */}
               </div>
             </div>
              {/* Category */}
@@ -256,7 +278,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
                      name="category"
                      control={control}
                      render={({ field }) => (
-                         <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                         <Select onValueChange={field.onChange} value={field.value}>
                             <SelectTrigger className={errors.category ? 'border-destructive' : ''}>
                                 <SelectValue placeholder="Selecione uma categoria" />
                             </SelectTrigger>
@@ -272,8 +294,8 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
               </div>
             </div>
 
-            {/* Status - Optionally allow editing status here for admin */}
-            {editingItem && ( // Only show status edit for existing items
+            {/* Status - Allow editing status for existing items */}
+            {editingItem && (
                 <div className="grid grid-cols-4 items-center gap-4">
                   <label htmlFor="status" className="text-right text-sm font-medium">Status</label>
                   <div className="col-span-3">
@@ -310,7 +332,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
               </Button>
             </DialogClose>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Salvando...' : <><Save className="mr-2 h-4 w-4" /> Salvar Item</>}
+              {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...</> : <><Save className="mr-2 h-4 w-4" /> Salvar Item</>}
             </Button>
           </DialogFooter>
           </form>
