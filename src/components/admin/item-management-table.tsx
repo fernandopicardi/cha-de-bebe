@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react"; // Added useEffect
+import React, { useState, useEffect, useMemo } from "react"; // Added useEffect and useMemo
 import { Button } from "@/components/ui/button";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +55,7 @@ import * as z from "zod";
 import { useForm, Controller } from "react-hook-form";
 
 interface AdminItemManagementTableProps {
-  gifts: GiftItem[];
+  gifts: GiftItem[]; // Expecting gifts array
   onDataChange?: () => void; // Callback for parent component refresh
 }
 
@@ -87,7 +87,7 @@ const categories = ["Roupas", "Higiene", "Brinquedos", "Alimentação", "Outros"
 const statuses: GiftItem["status"][] = ["available", "selected", "not_needed"];
 
 export default function AdminItemManagementTable({
-  gifts,
+  gifts, // Receive gifts directly
   onDataChange,
 }: AdminItemManagementTableProps) {
   const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
@@ -97,9 +97,12 @@ export default function AdminItemManagementTable({
 
   // Log received gifts when the prop changes
   useEffect(() => {
-    console.log(`AdminItemManagementTable: Received ${gifts.length} gifts.`);
-    // console.log("AdminItemManagementTable: Sample gifts:", gifts.slice(0, 3));
+    console.log(`AdminItemManagementTable: Received ${gifts?.length ?? 0} gifts.`); // Use optional chaining
+    // console.log("AdminItemManagementTable: Sample gifts:", gifts?.slice(0, 3)); // Use optional chaining
   }, [gifts]);
+
+  // Ensure gifts is always an array before using it
+  const safeGifts = useMemo(() => (Array.isArray(gifts) ? gifts : []), [gifts]);
 
 
   const {
@@ -405,14 +408,14 @@ export default function AdminItemManagementTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {gifts.length === 0 ? (
+            {safeGifts.length === 0 ? ( // Use safeGifts
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
                   Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
               </TableRow>
             ) : (
-              gifts.map((item) => (
+              safeGifts.map((item) => ( // Use safeGifts
                 <TableRow
                   key={item.id}
                   className={
@@ -722,5 +725,3 @@ export default function AdminItemManagementTable({
     </div>
   );
 }
-
-    

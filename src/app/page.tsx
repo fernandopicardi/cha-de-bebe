@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftList from "@/components/gift-list";
 import AddToCalendarButton from "@/components/add-to-calendar-button";
 import SuggestItemButton from "@/components/suggest-item-button";
-import { getEventSettings, getGifts, type EventSettings, type GiftItem } from "@/data/gift-store"; // Import getGifts and GiftItem type
+import { getEventSettings, getGifts, type EventSettings, type GiftItem } from "@/data/gift-store"; // Use correct import path
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Loader2 } from "lucide-react";
 
@@ -39,14 +39,14 @@ export default function Home() {
       // Removed Firestore initialization from here, should be done elsewhere or on setup
 
       const eventDataPromise = getEventSettings();
-      const giftsDataPromise = getGifts();
+      const giftsDataPromise = getGifts(); // Fetch gifts
 
       // Fetch in parallel
       const [eventData, giftsData] = await Promise.all([eventDataPromise, giftsDataPromise]);
 
       console.log("Home Page: Fetched Event Settings:", !!eventData);
-      console.log("Home Page: Fetched Gifts Count:", giftsData.length);
-      // console.log("Home Page: Fetched Gifts Sample:", giftsData.slice(0, 3)); // Log first few gifts for inspection
+      console.log("Home Page: Fetched Gifts Count:", giftsData?.length ?? 0);
+      // console.log("Home Page: Fetched Gifts Sample:", giftsData?.slice(0, 3) ?? []); // Log first few gifts for inspection
 
       // Add null check before setting state
       if (eventData) {
@@ -58,8 +58,14 @@ export default function Home() {
          setEventDetails(null); // Explicitly set to null if fetch returns null
       }
 
-      console.log("Home Page: Setting gifts state with fetched data.");
-      setGifts(giftsData);
+      // Add null/undefined check for giftsData
+      if (giftsData) {
+        console.log("Home Page: Setting gifts state with fetched data.");
+        setGifts(giftsData);
+      } else {
+         console.warn("Home Page: Gifts data was null or undefined after fetch.");
+         setGifts([]); // Set to empty array if fetch fails or returns null/undefined
+      }
 
     } catch (err: any) {
       console.error("Home Page: Error fetching data:", err);
@@ -167,7 +173,7 @@ export default function Home() {
         <Button onClick={handleRefresh} variant="outline" size="icon" title="Recarregar Dados">
            <RefreshCcw className="h-4 w-4" />
          </Button>
-        <Link href="/admin">
+        <Link href="/admin/login"> {/* Link to the admin login page */}
           <Button variant="outline" size="sm">
             <LogIn className="mr-2 h-4 w-4" />
             Admin
@@ -248,13 +254,15 @@ export default function Home() {
             <TabsTrigger value="selected" className="flex-shrink-0">
               Selecionados
             </TabsTrigger>
-            <TabsTrigger value="not_needed" className="flex-shrink-0">
+             {/* Removed 'not_needed' tab from public view */}
+            {/* <TabsTrigger value="not_needed" className="flex-shrink-0">
               Não Precisa
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
 
           {/* Increased top margin on tabs content */}
            {/* Pass fetched gifts and stable refresh callback to GiftList */}
+           {/* Ensure gifts is passed correctly here */}
           <TabsContent value="all" className="mt-6">
             <GiftList items={gifts} filterStatus="all" onItemAction={fetchData} />
           </TabsContent>
@@ -264,9 +272,10 @@ export default function Home() {
           <TabsContent value="selected" className="mt-6">
             <GiftList items={gifts} filterStatus="selected" onItemAction={fetchData} />
           </TabsContent>
-          <TabsContent value="not_needed" className="mt-6">
+           {/* Removed 'not_needed' tab content from public view */}
+          {/* <TabsContent value="not_needed" className="mt-6">
             <GiftList items={gifts} filterStatus="not_needed" onItemAction={fetchData} />
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
       </section>
     </div>

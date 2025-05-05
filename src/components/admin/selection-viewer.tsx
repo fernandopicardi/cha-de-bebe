@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from "react"; // Import useState for loading state
+import React, { useState, useMemo, useEffect } from "react"; // Import useState, useMemo, useEffect
 import {
   Table,
   TableBody,
@@ -27,6 +27,17 @@ export default function AdminSelectionViewer({
 }: AdminSelectionViewerProps) {
   const { toast } = useToast();
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null); // State to track loading item
+
+  // Log received items when the prop changes
+  useEffect(() => {
+      console.log(`AdminSelectionViewer: Received ${selectedItems?.length ?? 0} selected items.`); // Use optional chaining
+      // console.log("AdminSelectionViewer: Sample selected items:", selectedItems?.slice(0, 3)); // Use optional chaining
+  }, [selectedItems]);
+
+
+  // Ensure selectedItems is always an array before using it
+  const safeSelectedItems = useMemo(() => (Array.isArray(selectedItems) ? selectedItems : []), [selectedItems]);
+
 
   const handleRevert = async (item: GiftItem) => {
     if (loadingItemId) return; // Prevent multiple actions
@@ -84,14 +95,14 @@ export default function AdminSelectionViewer({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {selectedItems.length === 0 ? (
+            {safeSelectedItems.length === 0 ? ( // Use safeSelectedItems
               <TableRow>
                 <TableCell colSpan={4} className="h-24 text-center">
                   Nenhum item selecionado ainda.
                 </TableCell>
               </TableRow>
             ) : (
-              selectedItems.map((item) => (
+              safeSelectedItems.map((item) => ( // Use safeSelectedItems
                 <TableRow
                   key={item.id}
                   className={loadingItemId === item.id ? "opacity-50" : ""}
@@ -136,5 +147,3 @@ export default function AdminSelectionViewer({
     </div>
   );
 }
-
-    

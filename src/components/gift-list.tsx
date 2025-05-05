@@ -47,17 +47,20 @@ export default function GiftList({
 
    // Log received items whenever the prop changes
    useEffect(() => {
-    console.log(`GiftList (${filterStatus}): Received ${items.length} items.`);
-    // console.log(`GiftList (${filterStatus}): Sample items:`, items.slice(0, 3));
+    console.log(`GiftList (${filterStatus}): Received ${items?.length ?? 0} items.`); // Use optional chaining
+    // console.log(`GiftList (${filterStatus}): Sample items:`, items?.slice(0, 3) ?? []); // Use optional chaining
   }, [items, filterStatus]);
 
 
   // Filter items based on props, now derived from the passed 'items' array
   const filteredItems = useMemo(() => {
-    console.log(`GiftList (${filterStatus}): Filtering ${items.length} items...`);
-    const result = items.filter((item) => {
-      // Basic validation: Ensure item and item.status exist
-      if (!item || typeof item.status === 'undefined') {
+     // Ensure items is an array before filtering
+    const safeItems = Array.isArray(items) ? items : [];
+    console.log(`GiftList (${filterStatus}): Filtering ${safeItems.length} items...`);
+
+    const result = safeItems.filter((item) => {
+      // Basic validation: Ensure item and item.status exist and item has an ID
+      if (!item || typeof item.status === 'undefined' || !item.id) {
           console.warn(`GiftList (${filterStatus}): Skipping invalid item:`, item);
           return false;
       }
@@ -66,7 +69,7 @@ export default function GiftList({
       const categoryMatch = !filterCategory || item.category?.toLowerCase() === filterCategory.toLowerCase();
 
       // Add log for each item being checked
-      // console.log(`GiftList (${filterStatus}): Checking item "${item.name}" (Status: ${item.status}, Category: ${item.category}) -> Status Match: ${statusMatch}, Category Match: ${categoryMatch}`);
+      // console.log(`GiftList (${filterStatus}): Checking item "${item.name}" (ID: ${item.id}, Status: ${item.status}, Category: ${item.category}) -> Status Match: ${statusMatch}, Category Match: ${categoryMatch}`);
 
       return statusMatch && categoryMatch;
     });
@@ -192,7 +195,7 @@ export default function GiftList({
   }
 
   // If filter is 'all' and items is empty, show initial empty state
-  if (items.length === 0 && filterStatus === 'all') {
+  if (!items?.length && filterStatus === 'all') { // Check if original items array is empty/null/undefined
     return (
         <div className="text-center pt-16 pb-10 text-muted-foreground">
             <Gift className="mx-auto h-12 w-12 mb-4" />
@@ -207,7 +210,7 @@ export default function GiftList({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
         {filteredItems.map((item) => (
           <Card
-            key={item.id}
+            key={item.id} // Use item.id as key
             className="flex flex-col justify-between shadow-md rounded-lg overflow-hidden animate-fade-in bg-card"
           >
             <CardHeader>
@@ -261,5 +264,3 @@ export default function GiftList({
     </>
   );
 }
-
-    

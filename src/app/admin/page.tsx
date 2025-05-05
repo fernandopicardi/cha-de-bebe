@@ -23,7 +23,7 @@ import {
   Frown, // Import Frown icon for 404
 } from "lucide-react";
 import {
-  getGifts,
+  getGifts, // Import getGifts
   getEventSettings,
   exportGiftsToCSV,
   type GiftItem,
@@ -38,7 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
 import { useRouter } from 'next/navigation'; // Import useRouter
 
 export default function AdminPage() {
-  const [gifts, setGifts] = useState<GiftItem[]>([]);
+  const [gifts, setGifts] = useState<GiftItem[]>([]); // State for gifts
   const [eventSettings, setEventSettings] = useState<EventSettings | null>(
     null,
   );
@@ -61,6 +61,7 @@ export default function AdminPage() {
     try {
       // Only fetch data if the user is authenticated
       if (user) {
+          // Fetch gifts AND settings in parallel
           const giftsPromise = getGifts();
           const settingsPromise = getEventSettings();
 
@@ -69,11 +70,13 @@ export default function AdminPage() {
             settingsPromise,
           ]);
 
-          console.log(`AdminPage: Fetched ${giftsData.length} gifts.`);
+          console.log(`AdminPage: Fetched ${giftsData?.length ?? 0} gifts.`); // Use optional chaining
           console.log("AdminPage: Fetched Event Settings:", !!settingsData);
 
-          setGifts(giftsData);
-          setEventSettings(settingsData);
+          // Update state with fetched data, handling potential null/undefined
+          setGifts(giftsData || []); // Set empty array if null/undefined
+          setEventSettings(settingsData); // Set directly (can be null)
+
       } else {
           console.log("AdminPage: Skipping data fetch, user not authenticated.");
           // Clear data if user becomes unauthenticated during refresh
@@ -217,6 +220,9 @@ export default function AdminPage() {
   }
 
   // Render the admin dashboard if authenticated and data loaded
+  // Add log just before render to check final state
+  console.log(`AdminPage: Rendering with ${gifts.length} gifts.`);
+
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 bg-background text-foreground">
       <div className="flex flex-wrap justify-between items-center gap-4">
@@ -249,10 +255,10 @@ export default function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Pass gifts and refresh callback, ensure revalidation happens on change */}
+             {/* Pass gifts and refresh callback */}
             <AdminItemManagementTable
               gifts={gifts} // Pass the fetched gifts
-              onDataChange={() => refreshData("itemManagementTable")} // Pass stable refresh callback
+              onDataChange={refreshData} // Pass stable refresh callback
             />
           </CardContent>
         </Card>
@@ -270,11 +276,11 @@ export default function AdminPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-               {/* Filter items safely, ensuring item and item.status exist */}
+               {/* Filter gifts before passing */}
                {/* Ensure selectedItems are passed correctly here */}
               <AdminSelectionViewer
                 selectedItems={gifts.filter(g => g && g.status === 'selected')}
-                onDataChange={() => refreshData("selectionViewer")} // Pass stable refresh callback
+                onDataChange={refreshData} // Pass stable refresh callback
               />
             </CardContent>
           </Card>
@@ -289,13 +295,12 @@ export default function AdminPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Pass key prop to force re-render if isAuthenticated changes, ensuring settings load correctly */}
               {/* Pass settings if available and stable refresh callback */}
-              {/* Also pass isDataLoading to show a loader within the form itself */}
+              {/* Pass isLoading to show a loader within the form itself */}
               <AdminEventSettingsForm
-                key={user ? "admin-settings" : "no-settings"} // Use user existence for key
+                key={user ? `admin-settings-${eventSettings?.title || 'loading'}` : "no-settings"} // Use user existence and maybe settings key for re-render
                 initialSettings={eventSettings} // Pass fetched settings
-                onSave={() => refreshData("eventSettingsForm")}
+                onSave={refreshData} // Pass refresh callback
                 isLoading={isDataLoading} // Pass loading state for internal loader
               />
             </CardContent>
@@ -325,6 +330,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-
-    
