@@ -116,9 +116,8 @@ export default async function Home() {
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-           {/* Increased bottom margin on tabs list */}
-           {/* Ensure all TabsTriggers are present */}
-           <TabsList className="w-full grid grid-cols-2 sm:grid-cols-4 sm:w-auto overflow-x-auto whitespace-nowrap pb-2 mb-4 md:mb-6">
+           {/* Use flex-wrap for responsive tabs */}
+           <TabsList className="w-full flex flex-wrap justify-center sm:justify-start h-auto mb-4 md:mb-6 gap-1">
             <TabsTrigger value="all" className="flex-shrink-0">Todos</TabsTrigger>
             <TabsTrigger value="available" className="flex-shrink-0">Disponíveis</TabsTrigger>
             <TabsTrigger value="selected" className="flex-shrink-0">Selecionados</TabsTrigger>
