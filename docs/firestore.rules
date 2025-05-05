@@ -1,0 +1,3 @@
+function isAdmin(){
+        return request.auth.uid in ["JoO9fy5roDY6FTtqajp1UG8aYzS2", "VnCKbFH5nrYijsUda0fhK3HdwSF2"];
+    }

@@ -1,6 +1,6 @@
 // src/firebase/config.ts
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
-import { getFirestore, Firestore } from "firebase/firestore";
+import { getFirestore, Firestore, } from "firebase/firestore";
 // import { getStorage, FirebaseStorage } from "firebase/storage"; // Add if storage is needed later
 
 const firebaseConfig = {
