@@ -1,7 +1,8 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback, useEffect } from "react";
+import Image from 'next/image'; // Import Image
 import {
   Dialog,
   DialogContent,
@@ -20,8 +21,19 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, PlusCircle, Send } from "lucide-react";
+import { Loader2, PlusCircle, Send, Image as ImageIcon, XCircle } from "lucide-react"; // Added icons
 import { addSuggestion } from "@/data/gift-store";
+
+// Constants for file validation
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ACCEPTED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
+
 
 // Define validation schema for adding an item
 const AddItemSchema = z.object({
@@ -37,6 +49,8 @@ const AddItemSchema = z.object({
     .string()
     .min(2, { message: "Por favor, insira seu nome (mínimo 2 caracteres)." })
     .max(50, { message: "Nome muito longo (máximo 50 caracteres)." }),
+  imageUrl: z.string().optional().nullable(), // For storing the data URI
+  imageFile: z.any().optional().nullable(), // For file input, handled separately
 });
 
 type AddItemFormData = z.infer<typeof AddItemSchema>;
@@ -49,30 +63,113 @@ interface SuggestItemButtonProps {
 export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    watch,
+    setValue,
+    getValues,
   } = useForm<AddItemFormData>({
     resolver: zodResolver(AddItemSchema),
     defaultValues: {
       itemName: "",
       itemDescription: "",
       suggesterName: "",
+      imageUrl: null,
+      imageFile: null,
     },
   });
 
+  const watchedImageFile = watch("imageFile");
+
+  // Handle image preview updates
+  useEffect(() => {
+    if (!isClient) return;
+
+    const fileList = watchedImageFile as FileList | null | undefined;
+    const file = fileList?.[0];
+
+    if (file) {
+      // Client-side validation
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: "Erro de Arquivo",
+          description: `Tamanho máximo: ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
+          variant: "destructive",
+        });
+        setValue("imageFile", null);
+        setValue("imageUrl", getValues("imageUrl")); // Keep existing URL if any
+        setImagePreview(getValues("imageUrl"));
+        return;
+      }
+      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        toast({
+          title: "Erro de Arquivo",
+          description: "Tipo inválido. Use JPG, PNG, GIF, WebP.",
+          variant: "destructive",
+        });
+        setValue("imageFile", null);
+         setValue("imageUrl", getValues("imageUrl"));
+        setImagePreview(getValues("imageUrl"));
+        return;
+      }
+
+      // Generate preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setValue("imageUrl", result, { shouldValidate: true }); // Store data URI
+        setImagePreview(result);
+      };
+      reader.readAsDataURL(file);
+    } else if (fileList === null || (typeof fileList === "object" && fileList?.length === 0)) {
+      // File explicitly cleared, reset preview if it was showing a file preview
+      const currentUrl = getValues("imageUrl");
+      if (currentUrl && currentUrl.startsWith("data:image/")) {
+         setValue("imageUrl", null);
+         setImagePreview(null);
+      } else {
+          // Keep potential non-data URL (though unlikely in this context)
+          setImagePreview(currentUrl || null);
+      }
+
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedImageFile, isClient, setValue, toast, getValues]);
+
+
+  const removeImage = useCallback(() => {
+    setValue("imageFile", null);
+    setValue("imageUrl", null);
+    setImagePreview(null);
+    const fileInput = document.getElementById("imageFile-suggest") as HTMLInputElement | null;
+    if (fileInput) fileInput.value = "";
+  }, [setValue]);
+
   const onSubmit: SubmitHandler<AddItemFormData> = async (data) => {
     setIsSubmitting(true);
-    console.log("SuggestItemButton: Submitting suggestion:", data);
+    console.log("SuggestItemButton: Submitting suggestion:", {
+      ...data,
+      imageUrl: data.imageUrl ? data.imageUrl.substring(0, 50) + '...' : null,
+      imageFile: data.imageFile ? '[File object]' : null
+    });
     try {
       // addSuggestion now handles revalidation internally
       const newItem = await addSuggestion({
         itemName: data.itemName,
         itemDescription: data.itemDescription,
         suggesterName: data.suggesterName,
+        imageUrl: data.imageUrl, // Pass the data URI
       });
       console.log("SuggestItemButton: Suggestion added successfully:", newItem);
 
@@ -94,6 +191,7 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
       onSuggestionAdded?.();
 
       reset(); // Reset form only after success
+      setImagePreview(null); // Clear preview on success
       setIsOpen(false); // Close dialog only after success
 
     } catch (error) {
@@ -111,7 +209,8 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
 
   React.useEffect(() => {
     if (!isOpen) {
-      reset(); // Reset form when dialog is closed (manually or after success)
+      reset(); // Reset form when dialog is closed
+      setImagePreview(null); // Clear preview when dialog closes
     }
   }, [isOpen, reset]);
 
@@ -178,6 +277,62 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
             </div>
           </div>
 
+          {/* Image Upload */}
+          <div className="grid grid-cols-4 items-start gap-4">
+            <Label htmlFor="imageFile-suggest" className="text-right pt-2">
+              Imagem (Opc.)
+            </Label>
+            <div className="col-span-3">
+               <div className="flex items-center gap-4">
+                 {imagePreview && (
+                    <div className="relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0">
+                       <Image
+                         key={imagePreview} // Force re-render on change
+                         src={imagePreview}
+                         alt="Prévia da imagem"
+                         fill
+                         style={{ objectFit: 'cover' }}
+                         sizes="64px"
+                         unoptimized={imagePreview.startsWith('data:image/')}
+                         onError={() => setImagePreview(null)}
+                       />
+                       <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100"
+                          onClick={removeImage}
+                          title="Remover Imagem"
+                          disabled={isSubmitting}
+                       >
+                          <XCircle className="h-3 w-3" />
+                       </Button>
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <Input
+                      id="imageFile-suggest"
+                      type="file"
+                      accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                      {...register("imageFile")}
+                      className={` ${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
+                      disabled={isSubmitting}
+                    />
+                     <p className="text-xs text-muted-foreground mt-1">
+                      JPG, PNG, GIF, WebP (Máx 5MB).
+                    </p>
+                     {errors.imageFile && typeof errors.imageFile.message === 'string' &&(
+                       <p className="text-sm text-destructive mt-1">{errors.imageFile.message}</p>
+                     )}
+                      {errors.imageUrl && (
+                        <p className="text-sm text-destructive mt-1">{errors.imageUrl.message}</p>
+                     )}
+                  </div>
+               </div>
+            </div>
+          </div>
+
+
           {/* Suggester/Selector Name */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="suggesterName" className="text-right">
@@ -228,5 +383,3 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
     </Dialog>
   );
 }
-
-    

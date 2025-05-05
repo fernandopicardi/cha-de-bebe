@@ -34,12 +34,14 @@ export interface GiftItem {
   selectedBy?: string | null;
   selectionDate?: string | null; // ISO string date format
   createdAt?: string | null; // ISO string date format
+  imageUrl?: string | null; // Optional image URL (data URI or storage URL)
 }
 
 export interface SuggestionData {
   itemName: string;
   itemDescription?: string;
   suggesterName: string;
+  imageUrl?: string | null; // Image for suggestions too
 }
 
 export interface EventSettings {
@@ -57,16 +59,16 @@ export interface EventSettings {
 
 // Default data (ensure it matches your initial setup needs)
 const defaultGiftItems: Omit<GiftItem, "id" | 'createdAt' | 'selectionDate'>[] = [
-  { name: "Body Manga Curta (RN)", category: "Roupas", status: "available", description: "Pacote com 3 unidades, cores neutras." },
-  { name: "Fraldas Pampers (P)", category: "Higiene", status: "available", description: "Pacote grande." },
-  { name: "Mamadeira Anti-cólica", category: "Alimentação", status: "available" },
-  { name: "Móbile Musical", category: "Brinquedos", status: "available" },
-  { name: "Lenços Umedecidos", category: "Higiene", status: "available" },
-  { name: "Termômetro Digital", category: "Higiene", status: "available" },
-  { name: "Macacão Pijama (M)", category: "Roupas", status: "available", description: "Algodão macio." },
-  { name: "Chupeta Calmante", category: "Outros", status: "available" },
-  { name: "Cadeirinha de Descanso", category: "Outros", status: "available" },
-  { name: "Pomada para Assaduras", category: "Higiene", status: "available", description: "Marca Bepantol Baby ou similar." },
+  { name: "Body Manga Curta (RN)", category: "Roupas", status: "available", description: "Pacote com 3 unidades, cores neutras.", imageUrl: null },
+  { name: "Fraldas Pampers (P)", category: "Higiene", status: "available", description: "Pacote grande.", imageUrl: null },
+  { name: "Mamadeira Anti-cólica", category: "Alimentação", status: "available", imageUrl: null },
+  { name: "Móbile Musical", category: "Brinquedos", status: "available", imageUrl: null },
+  { name: "Lenços Umedecidos", category: "Higiene", status: "available", imageUrl: null },
+  { name: "Termômetro Digital", category: "Higiene", status: "available", imageUrl: null },
+  { name: "Macacão Pijama (M)", category: "Roupas", status: "available", description: "Algodão macio.", imageUrl: null },
+  { name: "Chupeta Calmante", category: "Outros", status: "available", imageUrl: null },
+  { name: "Cadeirinha de Descanso", category: "Outros", status: "available", imageUrl: null },
+  { name: "Pomada para Assaduras", category: "Higiene", status: "available", description: "Marca Bepantol Baby ou similar.", imageUrl: null },
 ];
 
 
@@ -119,6 +121,7 @@ const giftFromDoc = (docSnapshot: any): GiftItem | null => {
       createdAt: data.createdAt instanceof Timestamp
         ? data.createdAt.toDate().toISOString()
         : null,
+      imageUrl: data.imageUrl ?? null, // Handle imageUrl, default to null
     };
   };
 
@@ -198,7 +201,8 @@ export const getEventSettings = async (): Promise<EventSettings> => {
       if (docSnap.exists()) {
         console.log(`Firestore GET_SETTINGS: Event settings found at ${settingsPath}.`);
         // Combine ID with fetched data
-        return { id: docSnap.id, ...docSnap.data() } as EventSettings;
+        const data = docSnap.data() || {};
+        return { id: docSnap.id, ...data } as EventSettings;
       } else {
         console.warn(`Firestore GET_SETTINGS: Settings document '${settingsPath}' does not exist. Returning default settings.`);
         // Return a copy of default settings to avoid mutation issues
@@ -259,14 +263,18 @@ export async function updateEventSettings(
     const settingsPath = settingsDocRef.path;
     // Remove 'id' from updates if present, as it's the document key, not a field
     const { id, ...dataToUpdate } = updates;
-    console.log(`Firestore UPDATE_SETTINGS: Updating event settings at ${settingsPath}...`, dataToUpdate);
+    console.log(`Firestore UPDATE_SETTINGS: Updating event settings at ${settingsPath}...`, {
+      ...dataToUpdate,
+      headerImageUrl: dataToUpdate.headerImageUrl ? dataToUpdate.headerImageUrl.substring(0, 50) + '...' : null // Log truncated URI
+    });
     try {
       // Use setDoc with merge: true to update or create if it doesn't exist
       await setDoc(settingsDocRef, dataToUpdate, { merge: true });
       console.log("Firestore UPDATE_SETTINGS: Event settings updated successfully.");
       forceRevalidation(); // Revalidate paths after update
       // Fetch and return the updated settings
-      return await getEventSettings();
+      const updatedSettings = await getEventSettings();
+      return updatedSettings;
     } catch (error) {
       console.error(`Firestore UPDATE_SETTINGS: Error updating event settings at ${settingsPath}:`, error);
       // Check if error is permissions related
@@ -324,7 +332,7 @@ export async function addSuggestion(
   ): Promise<GiftItem | null> {
     console.log(
       `Firestore ADD_SUGGESTION: Adding suggestion from ${suggestionData.suggesterName}...`,
-      suggestionData
+      { ...suggestionData, imageUrl: suggestionData.imageUrl ? suggestionData.imageUrl.substring(0, 50) + '...' : null } // Log truncated URI
     );
 
     // Prepare data for the new gift item
@@ -336,6 +344,7 @@ export async function addSuggestion(
       selectedBy: suggestionData.suggesterName.trim(),
       selectionDate: serverTimestamp(), // Use server timestamp
       createdAt: serverTimestamp(), // Use server timestamp for creation
+      imageUrl: suggestionData.imageUrl || null, // Add image URL
     };
 
     // Validate essential fields before adding
@@ -369,7 +378,10 @@ export async function addSuggestion(
 export async function addGift(
     giftData: Omit<GiftItem, "id" | "createdAt" | "selectionDate">
 ): Promise<GiftItem | null> {
-    console.log("Firestore ADD_GIFT: Adding new gift item...", giftData);
+    console.log("Firestore ADD_GIFT: Adding new gift item...", {
+      ...giftData,
+      imageUrl: giftData.imageUrl ? giftData.imageUrl.substring(0, 50) + '...' : null // Log truncated URI
+    });
 
     // Prepare data, ensure `selectedBy` and `selectionDate` are null if status is not 'selected'
     const dataToAdd = {
@@ -378,6 +390,7 @@ export async function addGift(
         selectedBy: giftData.status === 'selected' ? (giftData.selectedBy?.trim() || "Admin") : null,
         selectionDate: giftData.status === 'selected' ? serverTimestamp() : null,
         createdAt: serverTimestamp(),
+        imageUrl: giftData.imageUrl || null, // Include image URL
     };
 
     // Validate required fields
@@ -418,7 +431,10 @@ export async function updateGift(
     itemId: string,
     updates: Partial<Omit<GiftItem, "id" | "createdAt">>,
   ): Promise<GiftItem | null> {
-    console.log(`Firestore UPDATE_GIFT: Updating gift ${itemId}...`, updates);
+    console.log(`Firestore UPDATE_GIFT: Updating gift ${itemId}...`, {
+      ...updates,
+      imageUrl: updates.imageUrl ? updates.imageUrl.substring(0, 50) + '...' : null // Log truncated URI
+    });
     const itemDocRef = doc(db, "gifts", itemId);
 
     // Prepare update data, handling potential status changes
@@ -440,6 +456,10 @@ export async function updateGift(
     if (typeof dataToUpdate.name === 'string') dataToUpdate.name = dataToUpdate.name.trim();
     if (typeof dataToUpdate.description === 'string') dataToUpdate.description = dataToUpdate.description.trim() || null;
     if (typeof dataToUpdate.selectedBy === 'string') dataToUpdate.selectedBy = dataToUpdate.selectedBy.trim();
+    // Handle image URL (allow setting to null)
+    if ('imageUrl' in dataToUpdate) {
+        dataToUpdate.imageUrl = dataToUpdate.imageUrl || null;
+    }
 
 
     // Remove undefined fields to avoid Firestore errors
@@ -579,6 +599,7 @@ export async function exportGiftsToCSV(): Promise<string> {
         "Selecionado Por",
         "Data Seleção",
         "Data Criação",
+        "URL da Imagem", // Added Image URL header
       ];
 
       // Helper function to escape CSV fields correctly
@@ -630,6 +651,7 @@ export async function exportGiftsToCSV(): Promise<string> {
         // Get optional fields or default to empty string
         const description = item.description ?? "";
         const selectedBy = item.selectedBy ?? "";
+        const imageUrl = item.imageUrl ?? ""; // Get image URL
 
         // Create CSV row array and join with commas
         return [
@@ -641,6 +663,7 @@ export async function exportGiftsToCSV(): Promise<string> {
           escapeCsv(selectedBy),
           escapeCsv(selectionDateStr),
           escapeCsv(createdAtStr),
+          escapeCsv(imageUrl), // Add image URL to row
         ].join(",");
       }).filter(row => row !== ""); // Filter out any empty rows from skipped items
 
@@ -656,6 +679,4 @@ export async function exportGiftsToCSV(): Promise<string> {
   }
 
 // Optional: Call initialization if needed, but be cautious about running this on every server start
-// initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));
-
-
+initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));

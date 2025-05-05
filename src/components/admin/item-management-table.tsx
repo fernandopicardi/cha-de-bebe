@@ -1,7 +1,8 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react"; // Added useEffect and useMemo
+import React, { useState, useEffect, useMemo, useCallback } from "react"; // Added useEffect and useMemo
+import Image from 'next/image'; // Import next/image
 import { Button } from "@/components/ui/button";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,8 @@ import {
   Ban,
   RotateCcw,
   Loader2,
+  Image as ImageIcon, // Import Image icon
+  XCircle, // Import XCircle for remove button
 } from "lucide-react";
 import {
   Table,
@@ -59,6 +62,17 @@ interface AdminItemManagementTableProps {
   onDataChange?: () => void; // Callback for parent component refresh
 }
 
+// Constants for file validation (used client-side)
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ACCEPTED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
+
+
 // Validation Schema for the Add/Edit Form
 const giftFormSchema = z.object({
   name: z
@@ -77,6 +91,9 @@ const giftFormSchema = z.object({
     .max(50, "Nome do selecionador muito longo")
     .optional()
     .or(z.literal("")), // Allow selectedBy editing, map to null later
+  imageUrl: z.string().optional().nullable(), // Store image URL (data URI or path)
+  // Field for file input (not directly validated by Zod schema, handled in component)
+  imageFile: z.any().optional().nullable(),
 });
 
 type GiftFormData = z.infer<typeof giftFormSchema>;
@@ -94,6 +111,12 @@ export default function AdminItemManagementTable({
   const [editingItem, setEditingItem] = useState<GiftItem | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null); // Track loading state for row actions
   const { toast } = useToast();
+  const [imagePreview, setImagePreview] = useState<string | null>(null); // State for image preview in dialog
+  const [isClient, setIsClient] = useState(false); // Track client mount
+
+  useEffect(() => {
+    setIsClient(true); // Component has mounted
+  }, []);
 
   // Log received gifts when the prop changes
   useEffect(() => {
@@ -116,6 +139,8 @@ export default function AdminItemManagementTable({
     handleSubmit,
     reset,
     watch,
+    setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<GiftFormData>({
     resolver: zodResolver(giftFormSchema),
@@ -125,11 +150,73 @@ export default function AdminItemManagementTable({
       category: "",
       status: "available", // Default for new items
       selectedBy: "", // Default empty
+      imageUrl: null,
+      imageFile: null,
     },
   });
 
   // Watch status to conditionally show/require selectedBy
   const watchedStatus = watch("status");
+  const watchedImageFile = watch("imageFile");
+
+  // Handle image preview updates
+  useEffect(() => {
+    if (!isClient) return; // Only run client-side
+
+    const fileList = watchedImageFile as FileList | null | undefined;
+    const file = fileList?.[0];
+
+    if (file) {
+      // Client-side validation
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: "Erro de Arquivo",
+          description: `Tamanho máximo do arquivo é ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
+          variant: "destructive",
+        });
+        setValue("imageFile", null); // Clear invalid file
+        const prevUrl = editingItem?.imageUrl || null;
+        setValue("imageUrl", prevUrl);
+        setImagePreview(prevUrl);
+        return;
+      }
+      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        toast({
+          title: "Erro de Arquivo",
+          description: "Tipo de arquivo inválido. Use JPG, PNG, GIF, WebP.",
+          variant: "destructive",
+        });
+        setValue("imageFile", null);
+        const prevUrl = editingItem?.imageUrl || null;
+        setValue("imageUrl", prevUrl);
+        setImagePreview(prevUrl);
+        return;
+      }
+
+      // Generate data URI for preview and store in RHF
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        console.log("AdminItemManagementTable Dialog: Generated data URI preview.");
+        setValue("imageUrl", result, { shouldValidate: true });
+        setImagePreview(result);
+      };
+      reader.onerror = (err) => console.error("FileReader error:", err);
+      reader.readAsDataURL(file);
+    } else if (
+      fileList === null ||
+      (typeof fileList === "object" && fileList?.length === 0)
+    ) {
+        // File explicitly cleared
+        const currentUrl = editingItem?.imageUrl;
+        console.log("AdminItemManagementTable Dialog: File cleared. Setting preview to current item URL (if any):", currentUrl);
+        setImagePreview(currentUrl || null);
+        setValue("imageUrl", currentUrl || null); // Reset RHF state
+    }
+    // Initial load: preview is set in handleOpenEditDialog or cleared in handleOpenAddDialog
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedImageFile, isClient, setValue, toast, editingItem]);
+
 
   const handleOpenAddDialog = () => {
     console.log("AdminItemManagementTable: Opening ADD dialog.");
@@ -139,8 +226,11 @@ export default function AdminItemManagementTable({
       category: "",
       status: "available", // Ensure default status is 'available'
       selectedBy: "",
+      imageUrl: null,
+      imageFile: null,
     });
     setEditingItem(null);
+    setImagePreview(null); // Clear preview for new item
     setIsAddEditDialogOpen(true);
   };
 
@@ -153,7 +243,10 @@ export default function AdminItemManagementTable({
       category: item.category,
       status: item.status, // Use the item's current status
       selectedBy: item.selectedBy || "",
+      imageUrl: item.imageUrl || null, // Set initial image URL
+      imageFile: null, // Reset file input
     });
+    setImagePreview(item.imageUrl || null); // Set initial preview
     setIsAddEditDialogOpen(true);
   };
 
@@ -161,14 +254,28 @@ export default function AdminItemManagementTable({
     console.log("AdminItemManagementTable: Closing dialog.");
     setIsAddEditDialogOpen(false);
     setEditingItem(null);
+    setImagePreview(null); // Clear preview on close
     reset({ // Reset form to defaults when closing
         name: "",
         description: "",
         category: "",
         status: "available",
         selectedBy: "",
+        imageUrl: null,
+        imageFile: null,
       });
   };
+
+  // Function to remove the image (clears preview and RHF state)
+  const removeImage = useCallback(() => {
+    console.log("AdminItemManagementTable Dialog: Removing image.");
+    setValue("imageFile", null); // Clear file input
+    setValue("imageUrl", null); // Clear URL state
+    setImagePreview(null); // Clear preview state
+    // Manually clear the file input element
+    const fileInput = document.getElementById("imageFile-dialog") as HTMLInputElement | null;
+    if (fileInput) fileInput.value = "";
+  }, [setValue]);
 
   // Show toast and trigger parent refresh after data store mutation completes
   const handleSuccess = (message: string) => {
@@ -199,7 +306,11 @@ export default function AdminItemManagementTable({
   const onSubmit = async (data: GiftFormData) => {
     const operation = editingItem ? "atualizar" : "adicionar";
     const itemName = data.name || (editingItem ? editingItem.name : 'Novo Item'); // Use item name for logging
-    console.log(`AdminItemManagementTable: Submitting form to ${operation} item: ${itemName}`, data);
+    console.log(`AdminItemManagementTable: Submitting form to ${operation} item: ${itemName}`, {
+        ...data,
+        imageUrl: data.imageUrl ? data.imageUrl.substring(0, 50) + '...' : null, // Log truncated URI
+        imageFile: data.imageFile ? '[File object]' : null // Avoid logging large file object
+    });
 
 
     // Validate that 'selectedBy' is provided if status is 'selected'
@@ -225,6 +336,7 @@ export default function AdminItemManagementTable({
         status: data.status, // Status is now required by schema
         selectedBy: data.status === "selected" ? (data.selectedBy?.trim() || "Admin") : null, // Set null if not selected, default if selected but empty
         // selectionDate is handled by the store functions (serverTimestamp) or passed if status is selected
+        imageUrl: data.imageUrl || null, // Pass the final image URL (data URI or null)
     };
      // Pass selectionDate only if status is 'selected' and potentially null (handled by store)
      if (storeData.status === 'selected') {
@@ -237,12 +349,12 @@ export default function AdminItemManagementTable({
 
     try {
       if (editingItem) {
-        console.log(`AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id} with data:`, storeData);
+        console.log(`AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id} with data:`, { ...storeData, imageUrl: storeData.imageUrl ? storeData.imageUrl.substring(0, 50) + '...' : null });
         // Pass only the necessary fields for update
         await updateGift(editingItem.id, storeData);
         handleSuccess(`Item "${storeData.name}" atualizado.`);
       } else {
-        console.log("AdminItemManagementTable: Calling addGift with data:", storeData);
+        console.log("AdminItemManagementTable: Calling addGift with data:", { ...storeData, imageUrl: storeData.imageUrl ? storeData.imageUrl.substring(0, 50) + '...' : null });
         // Cast to the expected type for addGift, removing potentially undefined fields
         const giftToAdd = {
            name: storeData.name!, // name is required
@@ -250,10 +362,11 @@ export default function AdminItemManagementTable({
            status: storeData.status!, // status is required
            description: storeData.description, // Optional
            selectedBy: storeData.selectedBy, // Optional, handled based on status
+           imageUrl: storeData.imageUrl, // Add image URL
            // selectionDate is handled by addGift based on status
          } as Omit<GiftItem, "id" | "createdAt" | "selectionDate">; // Ensure type matches addGift expectation
 
-         console.log("AdminItemManagementTable: Final data for addGift:", giftToAdd);
+         console.log("AdminItemManagementTable: Final data for addGift:", { ...giftToAdd, imageUrl: giftToAdd.imageUrl ? giftToAdd.imageUrl.substring(0, 50) + '...' : null });
         await addGift(giftToAdd); // Pass the correctly typed object
         handleSuccess(`Item "${storeData.name}" adicionado.`);
       }
@@ -404,6 +517,8 @@ export default function AdminItemManagementTable({
         <Table>
           <TableHeader>
             <TableRow>
+                {/* Added Image column */}
+              <TableHead className="w-[60px]"></TableHead>
               <TableHead>Nome</TableHead>
               <TableHead className="hidden md:table-cell">Descrição</TableHead>
               <TableHead className="hidden sm:table-cell">Categoria</TableHead>
@@ -417,7 +532,7 @@ export default function AdminItemManagementTable({
           <TableBody>
             {safeGifts.length === 0 ? ( // Use safeGifts
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center"> {/* Updated colSpan */}
                   Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
               </TableRow>
@@ -434,6 +549,25 @@ export default function AdminItemManagementTable({
                       : ""
                   }
                 >
+                    {/* Image Cell */}
+                 <TableCell>
+                   <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50">
+                     {item.imageUrl ? (
+                       <Image
+                         src={item.imageUrl}
+                         alt={`Imagem de ${item.name}`}
+                         fill
+                         style={{ objectFit: "cover" }}
+                         sizes="40px"
+                         unoptimized={item.imageUrl.startsWith('data:image/')}
+                       />
+                     ) : (
+                       <div className="flex items-center justify-center h-full w-full">
+                         <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                       </div>
+                     )}
+                   </div>
+                 </TableCell>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">
                     {item.description || "-"}
@@ -622,6 +756,64 @@ export default function AdminItemManagementTable({
                     {errors.category.message}
                   </p>
                 )}
+              </div>
+            </div>
+
+            {/* Image Upload */}
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label
+                htmlFor="imageFile-dialog"
+                className="text-right text-sm font-medium pt-2"
+              >
+                Imagem
+              </Label>
+              <div className="col-span-3">
+                <div className="flex items-center gap-4">
+                  {imagePreview && (
+                    <div className="relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0">
+                       <Image
+                         key={imagePreview}
+                         src={imagePreview}
+                         alt="Prévia da imagem do item"
+                         fill
+                         style={{ objectFit: 'cover' }}
+                         sizes="64px"
+                         unoptimized={imagePreview.startsWith('data:image/')}
+                         onError={() => setImagePreview(null)} // Clear preview on error
+                       />
+                       <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100"
+                          onClick={removeImage}
+                          title="Remover Imagem"
+                          disabled={isSubmitting}
+                       >
+                          <XCircle className="h-3 w-3" />
+                       </Button>
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <Input
+                      id="imageFile-dialog" // Unique ID
+                      type="file"
+                      accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                      {...register("imageFile")} // Register directly
+                      className={` ${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
+                      disabled={isSubmitting}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      JPG, PNG, GIF, WebP (Máx 5MB).
+                    </p>
+                     {errors.imageFile && typeof errors.imageFile.message === 'string' && (
+                      <p className="text-sm text-destructive mt-1">{errors.imageFile.message}</p>
+                    )}
+                     {errors.imageUrl && (
+                        <p className="text-sm text-destructive mt-1">{errors.imageUrl.message}</p>
+                     )}
+                  </div>
+                </div>
               </div>
             </div>
 

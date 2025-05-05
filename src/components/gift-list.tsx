@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import Image from 'next/image'; // Import next/image
 import {
   Card,
   CardContent,
@@ -21,6 +22,7 @@ import {
   Tag,
   Ban,
   Loader2,
+  Image as ImageIcon, // Placeholder icon
 } from "lucide-react";
 import SelectItemDialog from "./select-item-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -171,11 +173,26 @@ export default function GiftList({
 
   if (isInitialLoad) {
     console.log(`GiftList (${filterStatus}): Parent is likely loading (items prop is null). Rendering loader.`);
+    // Render skeleton loaders
     return (
-      <div className="text-center pt-16 pb-10 text-muted-foreground">
-        <Loader2 className="mx-auto h-12 w-12 animate-spin mb-4" />
-        <p>Carregando lista de presentes...</p>
-      </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, index) => ( // Show 6 skeletons
+                <Card key={index} className="flex flex-col justify-between shadow-md rounded-lg overflow-hidden bg-card">
+                    <CardHeader>
+                        <Skeleton className="h-6 w-3/4 mb-2" /> {/* Title skeleton */}
+                        <Skeleton className="h-4 w-full" /> {/* Description skeleton */}
+                        <Skeleton className="h-4 w-1/4 mt-2" /> {/* Category skeleton */}
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                         <Skeleton className="aspect-square w-full rounded-md" /> {/* Image skeleton */}
+                    </CardContent>
+                    <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
+                        <Skeleton className="h-5 w-24" /> {/* Status badge skeleton */}
+                        <Skeleton className="h-9 w-28" /> {/* Button skeleton */}
+                    </CardFooter>
+                </Card>
+            ))}
+        </div>
     );
   }
 
@@ -219,18 +236,36 @@ export default function GiftList({
               key={item.id}
               className="flex flex-col justify-between shadow-md rounded-lg overflow-hidden animate-fade-in bg-card"
             >
-              <CardHeader>
+                {/* Image Section */}
+                <div className="relative aspect-square w-full bg-muted/50 overflow-hidden">
+                    {item.imageUrl ? (
+                        <Image
+                            src={item.imageUrl}
+                            alt={`Imagem de ${item.name}`}
+                            fill
+                            style={{ objectFit: 'cover' }}
+                            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                            unoptimized={item.imageUrl.startsWith('data:image/')}
+                            priority={filterStatus === 'all'} // Prioritize images in 'all' tab
+                            data-ai-hint="baby gift item"
+                        />
+                    ) : (
+                        <div className="flex items-center justify-center h-full w-full">
+                            <ImageIcon className="h-16 w-16 text-muted-foreground/50" />
+                        </div>
+                    )}
+                </div>
+
+              <CardHeader className="pt-4"> {/* Adjusted padding */}
                 <CardTitle className="text-lg">{item.name}</CardTitle>
                 {item.description && (
-                  <CardDescription>{item.description}</CardDescription>
+                  <CardDescription className="text-sm">{item.description}</CardDescription>
                 )}
                 <div className="flex items-center text-sm text-muted-foreground pt-1">
                   <Tag className="mr-1 h-4 w-4" /> {item.category}
                 </div>
               </CardHeader>
-              <CardContent className="flex-grow">
-                {/* Content can be added here if needed */}
-              </CardContent>
+              {/* Removed empty CardContent */}
               <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
                 {getStatusBadge(item.status, item.selectedBy)}
                 <div className="flex gap-2 flex-wrap justify-end">
