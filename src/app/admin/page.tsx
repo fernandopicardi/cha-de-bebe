@@ -28,14 +28,14 @@ import {
   exportGiftsToCSV,
   type GiftItem,
   type EventSettings,
-} from "@/lib/firebase-adapter"; // Updated import path
+} from "@/data/gift-store"; // Corrected import path
 import AdminItemManagementTable from "@/components/admin/item-management-table";
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
 import AdminEventSettingsForm from "@/components/admin/event-settings-form";
 import useAuth from "@/hooks/useAuth"; // Import useAuth hook
 import { ThemeToggle } from "@/components/theme-toggle"; // Import ThemeToggle
 import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
-
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 export default function AdminPage() {
   const [gifts, setGifts] = useState<GiftItem[]>([]);
@@ -44,6 +44,7 @@ export default function AdminPage() {
   );
   const [isDataLoading, setIsDataLoading] = useState(true); // Separate loading state for page data
   const [error, setError] = useState<string | null>(null); // State for page data errors
+  const router = useRouter(); // Initialize router
 
   // Use the custom hook for authentication
   const { user, loading: authLoading, error: authError, logout } = useAuth();
@@ -168,8 +169,11 @@ export default function AdminPage() {
             {authError && ( // Optionally log the auth error internally but don't show it to the user
                 <p className="text-xs text-destructive/70 mb-4">(Erro de autenticação: {authError})</p>
             )}
+            <Link href="/admin/login">
+                 <Button variant="default">Ir para Login</Button>
+            </Link>
             <Link href="/">
-                <Button variant="outline">Voltar para a Página Inicial</Button>
+                <Button variant="outline" className="mt-2">Voltar para a Página Inicial</Button>
             </Link>
         </div>
     );
@@ -321,3 +325,6 @@ export default function AdminPage() {
     </div>
   );
 }
+
+
+    
