@@ -30,9 +30,13 @@ const settingsFormSchema = z.object({
   location: z.string().min(3, "Local muito curto.").max(100, "Local muito longo."), // Added max length
   address: z.string().min(10, "Endereço muito curto.").max(200, "Endereço muito longo."), // Added max length
   welcomeMessage: z.string().min(10, "Mensagem de boas-vindas muito curta.").max(500, "Mensagem muito longa."), // Increased max length
-  headerImageUrl: z.string().url("URL da imagem inválido.").optional().nullable(), // Allow string URL or null (will store data URI here too temporarily)
+  headerImageUrl: z.string().optional().nullable(), // Allow string URL or data URI or null
   headerImageFile: z.instanceof(File, { message: "Entrada inválida. Esperado um arquivo." }).optional().nullable(), // For file input handling
+}).refine(data => !data.headerImageUrl || data.headerImageUrl.startsWith('data:image/') || data.headerImageUrl.startsWith('http'), {
+    message: "URL da imagem inválido. Deve ser um URL http(s) ou uma imagem carregada.", // Custom validation message
+    path: ["headerImageUrl"],
 });
+
 
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 
@@ -40,8 +44,7 @@ type SettingsFormData = z.infer<typeof settingsFormSchema>;
 export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFormProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
-  const [imagePreview, setImagePreview] = useState<string | null>(null); // State for image preview (data URI or URL)
-  const [initialImageUrl, setInitialImageUrl] = useState<string | null>(null); // Store initially loaded image URL
+  // Removed imagePreview and initialImageUrl states - rely on RHF state
 
   const { control, register, handleSubmit, formState: { errors, isSubmitting }, reset, watch, setValue, getValues } = useForm<SettingsFormData>({
     resolver: zodResolver(settingsFormSchema),
@@ -50,11 +53,10 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
        try {
          const settings = await getEventSettings();
          console.log("Initial settings fetched:", settings); // Debug log
-         setImagePreview(settings.headerImageUrl || null); // Set initial preview
-         setInitialImageUrl(settings.headerImageUrl || null); // Store initial URL
+         // No need to set separate preview/initial state here
          return {
              ...settings,
-             headerImageUrl: settings.headerImageUrl || null, // Ensure null if undefined/empty
+             headerImageUrl: settings.headerImageUrl || null, // RHF state holds the initial URL
              headerImageFile: null, // Initialize file input as null
              babyName: settings.babyName || '', // Ensure empty string if null/undefined
          };
@@ -81,70 +83,67 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
 
    // Use watch to react to file input changes
    const watchedFile = watch('headerImageFile');
+   // Watch the URL field to determine the preview source
+   const watchedImageUrl = watch('headerImageUrl');
 
-   // Handle file selection, preview generation, and validation
+   // Handle file selection, preview generation, and updating headerImageUrl
    useEffect(() => {
-      // No need to watch 'headerImageFile' directly in dependency array if using watch() inside
-      // const currentFile = watch('headerImageFile'); // Get the current file state directly
-      const currentFile = watchedFile; // Use the watched value
+     const currentFile = watchedFile;
+     const currentImageUrl = getValues('headerImageUrl'); // Get the current URL stored in RHF
 
-      console.log("useEffect triggered. Current File:", currentFile);
+     console.log("useEffect triggered. Current File:", currentFile, "Current URL:", currentImageUrl?.substring(0, 30));
 
-      if (currentFile instanceof File) {
-          console.log("useEffect: Detected File instance", currentFile.name, currentFile.size);
-          // Basic size validation (e.g., 5MB limit)
-          if (currentFile.size > 5 * 1024 * 1024) {
-              toast({
-                  title: "Erro!",
-                  description: "Arquivo de imagem muito grande. O limite é 5MB.",
-                  variant: "destructive"
-              });
-              setValue('headerImageFile', null, { shouldValidate: true }); // Clear invalid file in RHF
-              setImagePreview(initialImageUrl); // Revert preview to initial state
-              setValue('headerImageUrl', initialImageUrl); // Revert URL in RHF state
-              console.log("useEffect: File too large, cleared RHF state and reverted preview/URL.");
-              // Manually clear the file input element itself
-              const fileInput = document.getElementById('headerImageFile') as HTMLInputElement | null;
-              if (fileInput) {
-                  fileInput.value = '';
-              }
-              return;
-          }
+     if (currentFile instanceof File) {
+       console.log("useEffect: Detected File instance", currentFile.name, currentFile.size);
+       // Basic size validation (e.g., 5MB limit)
+       if (currentFile.size > 5 * 1024 * 1024) {
+         toast({
+           title: "Erro!",
+           description: "Arquivo de imagem muito grande. O limite é 5MB.",
+           variant: "destructive"
+         });
+         setValue('headerImageFile', null, { shouldValidate: true }); // Clear invalid file in RHF
+         // When file is invalid, revert headerImageUrl to the *initial* URL
+         // We need to fetch initial settings again or store it separately if needed,
+         // for now, let's just clear it or revert to what it was *before* this effect ran
+         // This part is tricky without storing the initial URL separately.
+         // Simplest approach: Clear the URL field as well.
+         setValue('headerImageUrl', null, { shouldValidate: true });
+         console.log("useEffect: File too large, cleared RHF state for file and URL.");
+         const fileInput = document.getElementById('headerImageFile') as HTMLInputElement | null;
+         if (fileInput) fileInput.value = '';
+         return;
+       }
 
-          // Generate preview
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              const result = reader.result as string;
-              console.log("useEffect: FileReader finished, setting preview and RHF URL to data URI.");
-              setImagePreview(result);
-              setValue('headerImageUrl', result, { shouldValidate: true }); // Store data URI in headerImageUrl field for submission
-          };
-          reader.onerror = (err) => {
-              console.error("useEffect: FileReader error:", err);
-              toast({ title: "Erro", description: "Falha ao ler o arquivo de imagem.", variant: "destructive" });
-              setValue('headerImageFile', null, { shouldValidate: true }); // Clear file in RHF
-              setImagePreview(initialImageUrl); // Revert preview
-              setValue('headerImageUrl', initialImageUrl); // Revert URL
-          };
-          reader.readAsDataURL(currentFile);
-      } else if (currentFile === null) {
-          // This case happens when the file is explicitly cleared (e.g., by removeImage or validation failure)
-          console.log("useEffect: File is null. Clearing preview and RHF URL.");
-          setImagePreview(null);
-          setValue('headerImageUrl', null, { shouldValidate: true });
-      } else if (currentFile === undefined) {
-         // This is the initial state or when the input is cleared without explicit null setting
-         console.log("useEffect: File is undefined (initial state or cleared). Reverting preview/URL to initial.");
-         setImagePreview(initialImageUrl);
-         setValue('headerImageUrl', initialImageUrl, { shouldValidate: true });
-      } else {
-          console.warn("useEffect: Unexpected value for headerImageFile:", currentFile);
-          // Handle unexpected type if necessary, maybe revert?
-          setImagePreview(initialImageUrl);
-          setValue('headerImageUrl', initialImageUrl, { shouldValidate: true });
-      }
+       // Generate data URI and store it in headerImageUrl
+       const reader = new FileReader();
+       reader.onloadend = () => {
+         const result = reader.result as string;
+         console.log("useEffect: FileReader finished, setting RHF URL to data URI.");
+         setValue('headerImageUrl', result, { shouldValidate: true }); // Store data URI in headerImageUrl
+       };
+       reader.onerror = (err) => {
+         console.error("useEffect: FileReader error:", err);
+         toast({ title: "Erro", description: "Falha ao ler o arquivo de imagem.", variant: "destructive" });
+         setValue('headerImageFile', null, { shouldValidate: true }); // Clear file in RHF
+         setValue('headerImageUrl', null, { shouldValidate: true }); // Clear URL as well
+       };
+       reader.readAsDataURL(currentFile);
+     } else if (currentFile === null) {
+       // This case happens when the file is explicitly cleared (e.g., by removeImage)
+       // If the file is cleared, we *might* want to revert to the initial URL,
+       // but for simplicity now, we just ensure headerImageUrl is also cleared if the intention was to remove.
+       // The `removeImage` function already handles setting headerImageUrl to null.
+       console.log("useEffect: File is null (cleared).");
+     } else if (currentFile === undefined && !currentImageUrl) {
+        // Initial load with no image, or both file and URL are cleared. Do nothing.
+        console.log("useEffect: File undefined, URL is empty. Initial or cleared state.");
+     }
+     // If currentFile is undefined BUT currentImageUrl exists, it means we are likely in the initial state
+     // with a pre-existing image URL, or the file input was cleared but the URL wasn't (e.g., by browser back button).
+     // In this scenario, the watchedImageUrl will correctly reflect the existing URL for the preview.
 
-   }, [watchedFile, setValue, toast, initialImageUrl]); // Depend on watchedFile
+   }, [watchedFile, setValue, toast, getValues]);
 
    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
        const file = event.target.files ? event.target.files[0] : null;
@@ -156,7 +155,6 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
    const removeImage = useCallback(() => {
       console.log("removeImage called.");
       setValue('headerImageFile', null, { shouldValidate: true }); // Clear the file in RHF state
-      setImagePreview(null); // Clear preview immediately
       setValue('headerImageUrl', null, { shouldValidate: true }); // Clear the URL in RHF state
        // Manually clear the file input element itself
        const fileInput = document.getElementById('headerImageFile') as HTMLInputElement | null;
@@ -168,16 +166,12 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
 
    const onSubmit = async (data: SettingsFormData) => {
      console.log("onSubmit started. Raw form data:", data);
-     // Check the type right before submission attempt
-     if (data.headerImageFile !== null && !(data.headerImageFile instanceof File)) {
-        console.error("onSubmit Error: headerImageFile is not null and not a File instance!", data.headerImageFile);
-        toast({ title: "Erro Interno", description: "Houve um problema com o upload da imagem. Tente selecionar novamente.", variant: "destructive" });
-        return; // Prevent submission
-     }
+
+     // The headerImageUrl already contains either the data URI (if new file selected)
+     // or the original URL (if no file selected) or null (if removed).
+     // The validation ensures it's in a valid format before submission.
 
     try {
-      // If a file was selected, its data URI is already in headerImageUrl thanks to useEffect
-      // If no new file was selected, headerImageUrl holds the initialImageUrl or null if it was removed.
       const settingsToSave: Partial<EventSettings> = {
         title: data.title,
         babyName: data.babyName || null, // Store null if empty string
@@ -186,7 +180,7 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
         location: data.location,
         address: data.address,
         welcomeMessage: data.welcomeMessage,
-        headerImageUrl: data.headerImageUrl, // This now holds the data URI or the original URL or null
+        headerImageUrl: data.headerImageUrl, // This holds the data URI, original URL, or null
       };
 
       console.log("Submitting data to updateEventSettings:", settingsToSave); // Debug log before saving
@@ -210,8 +204,6 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
           headerImageFile: null, // Always clear the file input field itself after submit
           babyName: latestSettings.babyName || '',
         });
-        setImagePreview(latestSettings.headerImageUrl || null); // Update preview based on the *actual* saved data
-        setInitialImageUrl(latestSettings.headerImageUrl || null); // Update initial URL state
          // Manually clear the file input element itself
          const fileInput = document.getElementById('headerImageFile') as HTMLInputElement | null;
          if (fileInput) {
@@ -258,29 +250,29 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
        <div className="grid gap-2">
          <Label htmlFor="headerImageFile">Foto do Cabeçalho (Opcional)</Label>
          <div className="flex items-center gap-4">
-            {imagePreview && (
+            {/* Use watchedImageUrl for the preview */}
+            {watchedImageUrl && (
                <div className="relative w-24 h-24 border rounded-md overflow-hidden shadow-inner bg-muted/50">
                    <Image
-                       key={imagePreview} // Add key to force re-render on src change
-                       src={imagePreview}
+                       key={watchedImageUrl} // Use URL as key
+                       src={watchedImageUrl}
                        alt="Prévia da imagem do cabeçalho"
-                       fill // Use fill instead of layout
-                       style={{ objectFit: 'cover' }} // Ensure image covers the area
-                       sizes="(max-width: 768px) 96px, 96px" // Size based on w-24
+                       fill
+                       style={{ objectFit: 'cover' }}
+                       sizes="(max-width: 768px) 96px, 96px"
                        data-ai-hint="baby celebration banner"
                        onError={(e) => {
-                         // Handle potential image loading errors (e.g., invalid data URI)
-                         console.error("Error loading image preview:", imagePreview.substring(0, 50) + "...", e);
+                         console.error("Error loading image preview:", watchedImageUrl.substring(0, 50) + "...", e);
                          toast({ title: "Erro", description: "Não foi possível carregar a prévia da imagem.", variant: "destructive" });
-                         setImagePreview(null); // Clear broken preview
-                         setValue('headerImageUrl', null); // Clear URL in form state too
+                         // Consider clearing the URL if preview fails?
+                         // setValue('headerImageUrl', null);
                        }}
                    />
                     <Button
                        type="button"
                        variant="destructive"
                        size="icon"
-                       className="absolute top-1 right-1 h-6 w-6 z-10 rounded-full opacity-70 hover:opacity-100" // Make round and slightly transparent
+                       className="absolute top-1 right-1 h-6 w-6 z-10 rounded-full opacity-70 hover:opacity-100"
                        onClick={removeImage}
                        title="Remover Imagem"
                        disabled={isSubmitting}
@@ -290,21 +282,22 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
                </div>
             )}
             <div className="flex-1">
-                {/* Use register but pass the onChange to the custom handler */}
                  <Input
                      id="headerImageFile"
                      type="file"
                      accept="image/png, image/jpeg, image/gif, image/webp"
-                     {...register('headerImageFile')} // Keep register for RHF link
-                     onChange={handleFileChange} // Use custom handler to trigger setValue
+                     // Use register but override onChange to use custom handler
+                     {...register('headerImageFile', { onChange: handleFileChange })}
                      className={` ${errors.headerImageFile ? 'border-destructive' : ''} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
                      disabled={isSubmitting}
                  />
                 <p className="text-xs text-muted-foreground mt-1">Envie uma imagem (PNG, JPG, GIF, WebP). Máx 5MB.</p>
                 {errors.headerImageFile && <p className="text-sm text-destructive mt-1">{errors.headerImageFile.message}</p>}
-                 {/* Display existing URL hint */}
-                 {!imagePreview && initialImageUrl && (
-                    <p className="text-xs text-muted-foreground mt-1 truncate">Imagem atual salva. Envie nova para substituir.</p>
+                {/* Display error for the URL field */}
+                {errors.headerImageUrl && <p className="text-sm text-destructive mt-1">{errors.headerImageUrl.message}</p>}
+                 {/* Display existing URL hint only if file input is empty */}
+                 {!watchedFile && watchedImageUrl && !watchedImageUrl.startsWith('data:') && (
+                    <p className="text-xs text-muted-foreground mt-1 truncate">Usando imagem salva anteriormente. Envie nova para substituir.</p>
                 )}
             </div>
          </div>
