@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react"; // Added useEffect
 import {
   Card,
   CardContent,
@@ -31,34 +32,48 @@ interface GiftListProps {
   filterStatus?: "all" | "available" | "selected" | "not_needed";
   filterCategory?: string;
   showSelectedByName?: boolean; // Keep this prop for admin/public differentiation if needed elsewhere
-  // onClientAction prop removed
 }
 
 export default function GiftList({
   items, // Use passed items
   filterStatus = "all",
   filterCategory,
-  showSelectedByName = false, // By default, don't show name on public list
+  showSelectedByName = false,
 }: GiftListProps) {
   const [loading, setLoading] = useState(false); // Only for client-side actions like selection
   const [selectedItem, setSelectedItem] = useState<GiftItem | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
 
+   // Log received items whenever the prop changes
+   useEffect(() => {
+    console.log(`GiftList (${filterStatus}): Received ${items.length} items.`);
+    // console.log(`GiftList (${filterStatus}): Sample items:`, items.slice(0, 3));
+  }, [items, filterStatus]);
+
+
   // Filter items based on props, now derived from the passed 'items' array
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      if (filterStatus !== "all" && item.status !== filterStatus) {
-        return false;
+    console.log(`GiftList (${filterStatus}): Filtering ${items.length} items...`);
+    const result = items.filter((item) => {
+      // Basic validation: Ensure item and item.status exist
+      if (!item || typeof item.status === 'undefined') {
+          console.warn(`GiftList (${filterStatus}): Skipping invalid item:`, item);
+          return false;
       }
-      if (
-        filterCategory &&
-        item.category.toLowerCase() !== filterCategory.toLowerCase()
-      ) {
-        return false;
-      }
-      return true;
+
+      const statusMatch = filterStatus === "all" || item.status === filterStatus;
+      const categoryMatch = !filterCategory || item.category?.toLowerCase() === filterCategory.toLowerCase();
+
+      // Log individual item checks for debugging
+    //   if (!statusMatch) console.log(`GiftList (${filterStatus}): Item ${item.id} (${item.name}) failed status filter (item status: ${item.status})`);
+    //   if (!categoryMatch) console.log(`GiftList (${filterStatus}): Item ${item.id} (${item.name}) failed category filter (item category: ${item.category})`);
+
+      return statusMatch && categoryMatch;
     });
+    console.log(`GiftList (${filterStatus}): Filtered down to ${result.length} items.`);
+    // console.log(`GiftList (${filterStatus}): Filtered items sample:`, result.slice(0, 3));
+    return result;
   }, [items, filterStatus, filterCategory]);
 
   const handleSelectItemClick = (item: GiftItem) => {
@@ -77,29 +92,32 @@ export default function GiftList({
     itemId: string,
     guestName: string,
   ) => {
+    console.log(`GiftList (${filterStatus}): Attempting to select item ${itemId} for ${guestName}...`);
     setLoading(true); // Indicate loading during the selection process
     try {
       // selectGift now handles revalidation internally
       const updatedItem = await selectGift(itemId, guestName);
       if (updatedItem) {
+         console.log(`GiftList (${filterStatus}): Item ${itemId} selected successfully.`);
         toast({
           title: "Sucesso!",
           description: `Obrigado, ${guestName}! "${updatedItem.name}" foi reservado com sucesso!`,
           variant: "default",
         });
       } else {
+        // This case might happen if selectGift returns null due to rule constraints or item not found
         console.warn(
-          `Failed to select item ${itemId}, it might have been selected by someone else.`,
+          `GiftList (${filterStatus}): Failed to select item ${itemId}. It might have been selected by someone else or status changed.`,
         );
         toast({
           title: "Ops!",
-          description: "Este item já foi selecionado. A lista será atualizada.",
+          description: "Este item pode não estar mais disponível. A lista será atualizada.",
           variant: "destructive",
         });
-        // Revalidation is already triggered by selectGift, even on failure to find item
+        // Revalidation should still happen inside selectGift, even on failure
       }
     } catch (error) {
-      console.error("Error selecting gift:", error);
+      console.error(`GiftList (${filterStatus}): Error during selectGift call for item ${itemId}:`, error);
       toast({
         title: "Erro!",
         description: "Não foi possível selecionar o presente.",
@@ -108,10 +126,11 @@ export default function GiftList({
     } finally {
       setLoading(false); // Stop loading indicator
       handleDialogClose(); // Close dialog regardless of success/failure after action attempt
+       console.log(`GiftList (${filterStatus}): Selection process finished for item ${itemId}.`);
     }
   };
 
-  const getStatusBadge = (status: GiftItem["status"], selectedBy?: string) => {
+  const getStatusBadge = (status: GiftItem["status"], selectedBy?: string | null) => { // Allow null for selectedBy
     switch (status) {
       case "available":
         return (
@@ -123,7 +142,7 @@ export default function GiftList({
           </Badge>
         );
       case "selected":
-        // Always hide the name on the public list as per the requirement
+        // Public list: Hide the name
         return (
           <Badge
             variant="secondary"
@@ -142,6 +161,7 @@ export default function GiftList({
           </Badge>
         );
       default:
+        console.warn(`GiftList: Unknown status encountered: ${status}`);
         return (
           <Badge variant="outline">
             <Hourglass className="mr-1 h-3 w-3" /> Indefinido
@@ -150,10 +170,8 @@ export default function GiftList({
     }
   };
 
-  // Skeleton rendering is still useful if the parent component is loading initial data
-  // but GiftList itself doesn't manage the initial loading state anymore.
-  // The parent (Home page) should handle the overall loading state.
-  // We keep a simpler loading state for the 'Choose' button interaction.
+  // Parent component (Home page) handles overall loading state.
+  // This component only shows loading for the 'Choose' button interaction.
 
   if (filteredItems.length === 0) {
     let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
@@ -191,7 +209,7 @@ export default function GiftList({
               </div>
             </CardHeader>
             <CardContent className="flex-grow">
-              {/* Content area */}
+              {/* Content area can be used for images or more details later */}
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
               {getStatusBadge(item.status, item.selectedBy)}
@@ -202,8 +220,9 @@ export default function GiftList({
                     className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
                     onClick={() => handleSelectItemClick(item)}
                     aria-label={`Selecionar ${item.name}`}
-                    disabled={loading} // Disable button while an item is being selected
+                    disabled={loading} // Disable button while any item is being selected
                   >
+                    {/* Show loader only if *this specific* item is being processed */}
                     {loading && selectedItem?.id === item.id ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -231,3 +250,5 @@ export default function GiftList({
     </>
   );
 }
+
+    

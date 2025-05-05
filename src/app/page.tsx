@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -16,33 +17,46 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftList from "@/components/gift-list";
 import AddToCalendarButton from "@/components/add-to-calendar-button";
 import SuggestItemButton from "@/components/suggest-item-button";
-import { getEventSettings, getGifts, type EventSettings } from "@/data/gift-store"; // Import getGifts
+import { getEventSettings, getGifts, type EventSettings, type GiftItem, initializeFirestoreData } from "@/data/gift-store"; // Import getGifts and GiftItem type
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Loader2 } from "lucide-react";
 
 
 export default function Home() {
   const [eventDetails, setEventDetails] = useState<EventSettings | null>(null);
-  const [gifts, setGifts] = useState([]);
+  const [gifts, setGifts] = useState<GiftItem[]>([]); // Use GiftItem[] type
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
+      console.log("Home Page: useEffect triggered, fetching data...");
       setIsLoading(true);
       try {
-        const eventData = await getEventSettings();
-        const giftsData = await getGifts();
+        // Initialize Firestore data (optional, consider if needed on every load)
+        // await initializeFirestoreData(); // Might not be needed here if done elsewhere reliably
+
+        const eventDataPromise = getEventSettings();
+        const giftsDataPromise = getGifts();
+
+        const [eventData, giftsData] = await Promise.all([eventDataPromise, giftsDataPromise]);
+
+        console.log("Home Page: Fetched Event Settings:", eventData);
+        console.log("Home Page: Fetched Gifts Count:", giftsData.length);
+        // console.log("Home Page: Fetched Gifts Sample:", giftsData.slice(0, 3)); // Log first few gifts for inspection
+
         setEventDetails(eventData);
         setGifts(giftsData);
       } catch (error) {
-        console.error("Error fetching data:", error);
-        // Handle error appropriately
+        console.error("Home Page: Error fetching data:", error);
+        // Handle error appropriately, maybe show a message to the user
       } finally {
         setIsLoading(false);
+        console.log("Home Page: Fetching complete, loading set to false.");
       }
     };
 
     fetchData();
+     // Empty dependency array ensures this runs once on mount
   }, []);
 
 
@@ -53,6 +67,7 @@ export default function Home() {
   if (eventDetails) {
     try {
       const timeString = eventDetails.time || "00:00";
+      // Attempt to parse date and time. Handle potential invalid formats.
       const eventDate = new Date(`${eventDetails.date}T${timeString}:00`);
 
       if (!isNaN(eventDate.getTime())) {
@@ -64,17 +79,19 @@ export default function Home() {
         formattedTime = eventDate.toLocaleTimeString("pt-BR", {
           hour: "2-digit",
           minute: "2-digit",
-          hour12: false,
+          hour12: false, // Use 24-hour format
         });
       } else {
         console.error(
-          "Failed to parse event date/time:",
+          "Home Page: Failed to parse event date/time:",
           eventDetails.date,
-          eventDetails.time,
+          eventDetails.time
         );
+        // Keep default "Data inválida" etc.
       }
     } catch (e) {
-      console.error("Error formatting date/time:", e);
+      console.error("Home Page: Error formatting date/time:", e);
+      // Keep default "Data inválida" etc.
     }
   }
 
@@ -83,11 +100,15 @@ export default function Home() {
     ? `${eventDetails.title} ${eventDetails.babyName}!`
     : eventDetails?.title || "Chá de Bebê";
 
+  const welcomeMsg = eventDetails?.welcomeMessage ||
+  "Sua presença é o nosso maior presente! Esta lista é um guia carinhoso para quem desejar nos presentear, mas sinta-se totalmente à vontade, o importante é celebrar conosco!";
+
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-        Carregando...
+        Carregando informações do chá...
       </div>
     );
   }
@@ -109,7 +130,6 @@ export default function Home() {
       <header className="text-center space-y-4 pt-16">
         {/* Conditionally render Image or Baby Icon */}
         {eventDetails?.headerImageUrl ? (
-          // Increased size (w-32 h-32) and margin-bottom (mb-6)
           <div className="relative mx-auto w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden shadow-lg mb-6 border-4 border-secondary">
             <Image
               src={eventDetails.headerImageUrl}
@@ -119,6 +139,7 @@ export default function Home() {
               priority // Prioritize loading the header image
               sizes="(max-width: 768px) 128px, 160px" // Provide sizes hint based on w-32/w-40
               data-ai-hint="baby celebration banner"
+              unoptimized={eventDetails.headerImageUrl.startsWith('data:image/')} // Disable optimization for data URIs if needed
             />
           </div>
         ) : (
@@ -130,8 +151,7 @@ export default function Home() {
           {pageTitle}
         </h1>
         <p className="text-lg text-muted-foreground px-4 md:px-8">
-          {eventDetails?.welcomeMessage ||
-            "Sua presença é o nosso maior presente! Esta lista é um guia carinhoso para quem desejar nos presentear, mas sinta-se totalmente à vontade, o importante é celebrar conosco!"}
+           {welcomeMsg}
         </p>
       </header>
 
@@ -151,10 +171,10 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-accent-foreground" />
             <span>
-              {eventDetails?.location} - {eventDetails?.address}
+              {eventDetails?.location || "Local a definir"} - {eventDetails?.address || "Endereço a definir"}
             </span>
           </div>
-          <AddToCalendarButton eventDetails={eventDetails} />
+           {eventDetails && <AddToCalendarButton eventDetails={eventDetails} />}
         </CardContent>
       </Card>
 
@@ -203,3 +223,5 @@ export default function Home() {
     </div>
   );
 }
+
+    

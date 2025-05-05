@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react"; // Added useEffect
 import { Button } from "@/components/ui/button";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +56,7 @@ import { useForm, Controller } from "react-hook-form";
 
 interface AdminItemManagementTableProps {
   gifts: GiftItem[];
-  onDataChange?: () => void; // Optional: Keep if parent needs immediate UI feedback before revalidation finishes
+  onDataChange?: () => void; // Callback for parent component refresh
 }
 
 // Validation Schema for the Add/Edit Form
@@ -63,19 +64,19 @@ const giftFormSchema = z.object({
   name: z
     .string()
     .min(3, "Nome precisa ter pelo menos 3 caracteres.")
-    .max(100, "Nome muito longo"), // Added max length
+    .max(100, "Nome muito longo"),
   description: z
     .string()
     .max(200, "Descrição muito longa")
     .optional()
-    .or(z.literal("")), // Allow empty string
+    .or(z.literal("")), // Allow empty string, map to null later
   category: z.string().min(1, "Categoria é obrigatória."),
-  status: z.enum(["available", "selected", "not_needed"]).optional(), // Status is optional in form, required for item
+  status: z.enum(["available", "selected", "not_needed"]).optional(), // Status is optional in form
   selectedBy: z
     .string()
     .max(50, "Nome do selecionador muito longo")
     .optional()
-    .or(z.literal("")), // Allow selectedBy editing
+    .or(z.literal("")), // Allow selectedBy editing, map to null later
 });
 
 type GiftFormData = z.infer<typeof giftFormSchema>;
@@ -91,15 +92,21 @@ export default function AdminItemManagementTable({
 }: AdminItemManagementTableProps) {
   const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<GiftItem | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null); // Track loading state for row actions (delete, revert, mark)
+  const [actionLoading, setActionLoading] = useState<string | null>(null); // Track loading state for row actions
   const { toast } = useToast();
+
+  // Log received gifts when the prop changes
+  useEffect(() => {
+    console.log(`AdminItemManagementTable: Received ${gifts.length} gifts.`);
+    // console.log("AdminItemManagementTable: Sample gifts:", gifts.slice(0, 3));
+  }, [gifts]);
+
 
   const {
     control,
     register,
     handleSubmit,
     reset,
-    setValue,
     watch,
     formState: { errors, isSubmitting },
   } = useForm<GiftFormData>({
@@ -117,6 +124,7 @@ export default function AdminItemManagementTable({
   const watchedStatus = watch("status");
 
   const handleOpenAddDialog = () => {
+    console.log("AdminItemManagementTable: Opening ADD dialog.");
     reset({
       // Reset for add with correct defaults
       name: "",
@@ -130,6 +138,7 @@ export default function AdminItemManagementTable({
   };
 
   const handleOpenEditDialog = (item: GiftItem) => {
+    console.log(`AdminItemManagementTable: Opening EDIT dialog for item ID: ${item.id}`);
     setEditingItem(item);
     reset({
       // Populate form with item data
@@ -143,6 +152,7 @@ export default function AdminItemManagementTable({
   };
 
   const handleDialogClose = () => {
+    console.log("AdminItemManagementTable: Closing dialog.");
     setIsAddEditDialogOpen(false);
     setEditingItem(null);
     reset(); // Clear form on close
@@ -150,7 +160,10 @@ export default function AdminItemManagementTable({
 
   // Show toast after data store mutation completes (which includes revalidation)
   const handleSuccess = (message: string) => {
-    onDataChange?.(); // Call optional callback if provided
+     console.log(`AdminItemManagementTable: Operation successful - ${message}`);
+    // onDataChange is now primarily handled by revalidatePath in the store
+    // but call it if parent needs immediate optimistic update (though less reliable)
+    // onDataChange?.();
     toast({ title: "Sucesso!", description: message });
     handleDialogClose(); // Close dialog on success
   };
@@ -161,22 +174,30 @@ export default function AdminItemManagementTable({
     errorDetails?: any,
   ) => {
     // Log the specific error for debugging
-    console.error(`Error during ${operation} for "${itemName}":`, errorDetails);
+    console.error(`AdminItemManagementTable: Error during ${operation} for "${itemName}":`, errorDetails);
     toast({
       title: "Erro!",
       description: `Falha ao ${operation.toLowerCase()} o item "${itemName}". Verifique o console para mais detalhes.`,
       variant: "destructive",
     });
+     // Optionally keep dialog open on error?
+     // handleDialogClose();
   };
 
   // Form submission for Add/Edit
   const onSubmit = async (data: GiftFormData) => {
+    const operation = editingItem ? "atualizar" : "adicionar";
+    const itemName = data.name || (editingItem ? editingItem.name : 'Novo Item'); // Use item name for logging
+    console.log(`AdminItemManagementTable: Submitting form to ${operation} item: ${itemName}`, data);
+
+
     // Validate that 'selectedBy' is provided if status is 'selected'
     if (
       data.status === "selected" &&
       (!data.selectedBy || data.selectedBy.trim() === "")
     ) {
-      toast({
+        console.warn("AdminItemManagementTable: Validation failed - 'selectedBy' is required for 'selected' status.");
+        toast({
         title: "Erro de Validação",
         description: "Por favor, informe quem selecionou o item.",
         variant: "destructive",
@@ -184,41 +205,43 @@ export default function AdminItemManagementTable({
       return; // Prevent submission
     }
 
-    const operation = editingItem ? "atualizar" : "adicionar";
+    // Prepare data for the store functions, ensuring nulls for empty strings
+    const storeData: Partial<Omit<GiftItem, "id" | "createdAt">> = {
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        category: data.category, // Already required by schema
+        status: data.status ?? (editingItem ? editingItem.status : "available"), // Use existing or default if form status is undefined
+        selectedBy: data.status === "selected" ? (data.selectedBy?.trim() || "Admin") : null, // Set null if not selected, default if selected but empty
+        // selectionDate is handled by the store functions (serverTimestamp)
+    };
+
     try {
       if (editingItem) {
-        // Update existing item - updateGift now handles revalidation
-        await updateGift(editingItem.id, {
-          name: data.name,
-          description: data.description,
-          category: data.category,
-          status: data.status ?? editingItem.status,
-          selectedBy: data.status === "selected" ? data.selectedBy : undefined,
-        });
-        handleSuccess(`Item "${data.name}" atualizado.`); // Show toast
+        console.log(`AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id}`);
+        await updateGift(editingItem.id, storeData); // updateGift handles revalidation
+        handleSuccess(`Item "${storeData.name}" atualizado.`); // Show toast
       } else {
-        // Add new item - addGift now handles revalidation
-        await addGift({
-          name: data.name,
-          description: data.description,
-          category: data.category,
-          status: data.status ?? "available",
-          selectedBy: data.status === "selected" ? data.selectedBy : undefined,
-        });
-        handleSuccess(`Item "${data.name}" adicionado.`); // Show toast
+        console.log("AdminItemManagementTable: Calling addGift.");
+         // Ensure required fields for addGift are present (adjust if addGift expects slightly different structure)
+        if (!storeData.name || !storeData.category || !storeData.status) {
+            throw new Error("Dados insuficientes para adicionar o item.");
+        }
+        // Casting to the expected type for addGift (may need adjustment based on addGift's exact signature)
+        await addGift(storeData as Omit<GiftItem, "id" | "createdAt" | "selectionDate">); // addGift handles revalidation
+        handleSuccess(`Item "${storeData.name}" adicionado.`); // Show toast
       }
     } catch (error) {
-      // Pass the error object to handleError for logging
-      handleError(operation, data.name, error);
+      handleError(operation, itemName, error); // Pass the error object
     }
   };
 
   // Row Action: Delete
   const handleDelete = async (item: GiftItem) => {
     if (actionLoading) return;
+    console.log(`AdminItemManagementTable: Attempting to delete item ID: ${item.id}`);
     if (
       confirm(
-        `Tem certeza que deseja excluir o item "${item.name}"? Esta ação não pode ser desfeita.`,
+        `Tem certeza que deseja excluir o item "${item.name}"? Esta ação não pode ser desfeita.`
       )
     ) {
       setActionLoading(`delete-${item.id}`);
@@ -231,21 +254,27 @@ export default function AdminItemManagementTable({
       } finally {
         setActionLoading(null);
       }
+    } else {
+        console.log(`AdminItemManagementTable: Delete cancelled for item ID: ${item.id}`);
     }
   };
 
   // Row Action: Revert to Available
   const handleRevert = async (item: GiftItem) => {
     if (actionLoading) return;
-    if (item.status !== "selected" && item.status !== "not_needed") return;
+    if (item.status !== "selected" && item.status !== "not_needed") {
+        console.warn(`AdminItemManagementTable: Cannot revert item ID: ${item.id}, status is already '${item.status}'.`);
+        return;
+    }
     const actionText =
       item.status === "selected"
         ? "reverter a seleção"
         : 'remover a marcação "Não Precisa"';
     const guestNameInfo = item.selectedBy ? ` por ${item.selectedBy}` : "";
+     console.log(`AdminItemManagementTable: Attempting to revert item ID: ${item.id}`);
     if (
       confirm(
-        `Tem certeza que deseja ${actionText} do item "${item.name}"${guestNameInfo}? O item voltará a ficar disponível.`,
+        `Tem certeza que deseja ${actionText} do item "${item.name}"${guestNameInfo}? O item voltará a ficar disponível.`
       )
     ) {
       setActionLoading(`revert-${item.id}`);
@@ -258,16 +287,22 @@ export default function AdminItemManagementTable({
       } finally {
         setActionLoading(null);
       }
+    } else {
+         console.log(`AdminItemManagementTable: Revert cancelled for item ID: ${item.id}`);
     }
   };
 
   // Row Action: Mark as Not Needed
   const handleMarkNotNeeded = async (item: GiftItem) => {
     if (actionLoading) return;
-    if (item.status !== "available") return;
+    if (item.status !== "available") {
+        console.warn(`AdminItemManagementTable: Cannot mark item ID: ${item.id} as not needed, status is '${item.status}'.`);
+        return;
+    }
+     console.log(`AdminItemManagementTable: Attempting to mark item ID: ${item.id} as not needed.`);
     if (
       confirm(
-        `Tem certeza que deseja marcar o item "${item.name}" como "Não Precisa"?`,
+        `Tem certeza que deseja marcar o item "${item.name}" como "Não Precisa"?`
       )
     ) {
       setActionLoading(`mark-${item.id}`);
@@ -280,6 +315,8 @@ export default function AdminItemManagementTable({
       } finally {
         setActionLoading(null);
       }
+    } else {
+        console.log(`AdminItemManagementTable: Mark as not needed cancelled for item ID: ${item.id}`);
     }
   };
 
@@ -313,6 +350,7 @@ export default function AdminItemManagementTable({
           </Badge>
         );
       default:
+        console.warn(`AdminItemManagementTable: Unknown status in getStatusBadge: ${status}`);
         return <Badge variant="outline">Indefinido</Badge>;
     }
   };
@@ -346,9 +384,7 @@ export default function AdminItemManagementTable({
             {gifts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
-                  {" "}
-                  {/* Updated colSpan */}
-                  Nenhum item na lista ainda.
+                  Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
               </TableRow>
             ) : (
@@ -370,14 +406,12 @@ export default function AdminItemManagementTable({
                   </TableCell>
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
                   <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
-                    {" "}
-                    {/* Added Selected By Cell */}
                     {item.selectedBy || "-"}
-                    {item.selectionDate && (
+                    {item.selectionDate && typeof item.selectionDate === 'string' && (
                       <div className="text-[10px]">
                         (
                         {new Date(item.selectionDate).toLocaleDateString(
-                          "pt-BR",
+                          "pt-BR", { day: '2-digit', month: '2-digit', year: 'numeric' }
                         )}
                         )
                       </div>
@@ -394,6 +428,7 @@ export default function AdminItemManagementTable({
                           onClick={() => handleOpenEditDialog(item)}
                           title="Editar Item"
                           disabled={!!actionLoading}
+                          aria-label={`Editar item ${item.name}`}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -405,17 +440,19 @@ export default function AdminItemManagementTable({
                             onClick={() => handleRevert(item)}
                             title="Reverter para Disponível"
                             disabled={!!actionLoading}
+                            aria-label={`Reverter item ${item.name} para disponível`}
                           >
                             <RotateCcw className="h-4 w-4 text-orange-600" />
                           </Button>
                         )}
-                        {item.status === "available" && ( // Button to mark available items as 'Not Needed'
+                        {item.status === "available" && (
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleMarkNotNeeded(item)}
                             title="Marcar como Não Precisa"
                             disabled={!!actionLoading}
+                            aria-label={`Marcar item ${item.name} como não precisa`}
                           >
                             <Ban className="h-4 w-4 text-yellow-600" />
                           </Button>
@@ -426,6 +463,7 @@ export default function AdminItemManagementTable({
                           onClick={() => handleDelete(item)}
                           title="Excluir Item"
                           disabled={!!actionLoading}
+                          aria-label={`Excluir item ${item.name}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -455,18 +493,21 @@ export default function AdminItemManagementTable({
           <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
             {/* Name */}
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right text-sm font-medium">
+              <Label htmlFor="name-dialog" className="text-right text-sm font-medium">
                 Nome*
               </Label>
               <div className="col-span-3">
                 <Input
-                  id="name"
+                  id="name-dialog" // Unique ID for dialog input
                   {...register("name")}
                   className={errors.name ? "border-destructive" : ""}
                   maxLength={100}
+                  aria-required="true"
+                  aria-invalid={!!errors.name}
+                  aria-describedby="name-error"
                 />
                 {errors.name && (
-                  <p className="text-sm text-destructive mt-1">
+                  <p id="name-error" className="text-sm text-destructive mt-1">
                     {errors.name.message}
                   </p>
                 )}
@@ -475,20 +516,22 @@ export default function AdminItemManagementTable({
             {/* Description */}
             <div className="grid grid-cols-4 items-start gap-4">
               <Label
-                htmlFor="description"
+                htmlFor="description-dialog"
                 className="text-right text-sm font-medium pt-2"
               >
                 Descrição
               </Label>
               <div className="col-span-3">
                 <Textarea
-                  id="description"
+                  id="description-dialog" // Unique ID
                   {...register("description")}
                   rows={3}
                   maxLength={200}
+                  aria-invalid={!!errors.description}
+                  aria-describedby="description-error"
                 />
                 {errors.description && (
-                  <p className="text-sm text-destructive mt-1">
+                  <p id="description-error" className="text-sm text-destructive mt-1">
                     {errors.description.message}
                   </p>
                 )}
@@ -497,7 +540,7 @@ export default function AdminItemManagementTable({
             {/* Category */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label
-                htmlFor="category"
+                htmlFor="category-dialog" // Unique ID
                 className="text-right text-sm font-medium"
               >
                 Categoria*
@@ -506,14 +549,19 @@ export default function AdminItemManagementTable({
                 <Controller
                   name="category"
                   control={control}
+                  rules={{ required: "Categoria é obrigatória." }} // Add rule here too
                   render={({ field }) => (
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
                       defaultValue=""
+                      aria-required="true"
                     >
                       <SelectTrigger
+                       id="category-dialog" // Unique ID
                         className={errors.category ? "border-destructive" : ""}
+                        aria-invalid={!!errors.category}
+                        aria-describedby="category-error"
                       >
                         <SelectValue placeholder="Selecione uma categoria" />
                       </SelectTrigger>
@@ -528,7 +576,7 @@ export default function AdminItemManagementTable({
                   )}
                 />
                 {errors.category && (
-                  <p className="text-sm text-destructive mt-1">
+                  <p id="category-error" className="text-sm text-destructive mt-1">
                     {errors.category.message}
                   </p>
                 )}
@@ -538,7 +586,7 @@ export default function AdminItemManagementTable({
             {/* Status */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label
-                htmlFor="status"
+                htmlFor="status-dialog" // Unique ID
                 className="text-right text-sm font-medium"
               >
                 Status
@@ -547,11 +595,13 @@ export default function AdminItemManagementTable({
                 <Controller
                   name="status"
                   control={control}
-                  defaultValue={editingItem?.status || "available"} // Set default based on editing or 'available'
+                  defaultValue={editingItem?.status || "available"} // Set default
                   render={({ field }) => (
                     <Select onValueChange={field.onChange} value={field.value}>
                       <SelectTrigger
-                        className={errors.status ? "border-destructive" : ""}
+                         id="status-dialog" // Unique ID
+                         aria-invalid={!!errors.status}
+                         aria-describedby="status-error"
                       >
                         <SelectValue placeholder="Selecione um status" />
                       </SelectTrigger>
@@ -567,8 +617,8 @@ export default function AdminItemManagementTable({
                     </Select>
                   )}
                 />
-                {errors.status && (
-                  <p className="text-sm text-destructive mt-1">
+                 {errors.status && (
+                  <p id="status-error" className="text-sm text-destructive mt-1">
                     {errors.status.message}
                   </p>
                 )}
@@ -579,33 +629,34 @@ export default function AdminItemManagementTable({
             {watchedStatus === "selected" && (
               <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
                 <Label
-                  htmlFor="selectedBy"
+                  htmlFor="selectedBy-dialog" // Unique ID
                   className="text-right text-sm font-medium"
                 >
                   Selecionado Por*
                 </Label>
                 <div className="col-span-3">
-                  {/* Added col-span-3 */}
                   <Input
-                    id="selectedBy"
+                    id="selectedBy-dialog" // Unique ID
                     {...register("selectedBy")}
                     className={errors.selectedBy ? "border-destructive" : ""}
                     placeholder="Nome de quem selecionou"
                     maxLength={50}
+                    aria-required={watchedStatus === "selected"}
+                    aria-invalid={!!errors.selectedBy}
+                    aria-describedby="selectedBy-error"
                   />
-                  {errors.selectedBy && (
-                    <p className="text-sm text-destructive mt-1">
-                      {errors.selectedBy.message}
-                    </p>
-                  )}
-                  {/* Add a specific error message if status is selected but name is missing */}
-                  {!errors.selectedBy &&
-                    watchedStatus === "selected" &&
-                    !watch("selectedBy") && (
-                      <p className="text-sm text-destructive mt-1">
-                        Nome é obrigatório quando o status é "Selecionado".
+                  {/* Specific error message if status is selected but name is missing */}
+                  {errors.selectedBy ? (
+                     <p id="selectedBy-error" className="text-sm text-destructive mt-1">
+                       {errors.selectedBy.message}
+                     </p>
+                  ) : (
+                    watchedStatus === 'selected' && !watch('selectedBy') && (
+                      <p id="selectedBy-error" className="text-sm text-destructive mt-1">
+                         Nome é obrigatório quando o status é "Selecionado".
                       </p>
-                    )}
+                    )
+                  )}
                 </div>
               </div>
             )}
@@ -635,3 +686,6 @@ export default function AdminItemManagementTable({
     </div>
   );
 }
+
+
+    

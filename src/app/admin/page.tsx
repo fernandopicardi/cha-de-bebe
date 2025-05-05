@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react"; // Removed useCallback
 import Link from "next/link"; // Import Link
 import { Button } from "@/components/ui/button";
 import {
@@ -23,12 +24,12 @@ import {
   AlertCircle,
   RefreshCcw,
   Home,
-  Loader2, // Added Loader2
-} from "lucide-react"; // Added Home icon
+  Loader2,
+} from "lucide-react"; // Added Home icon and Loader2
 import AdminItemManagementTable from "@/components/admin/item-management-table";
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
 import AdminEventSettingsForm from "@/components/admin/event-settings-form";
-import { getGifts, exportGiftsToCSV, type GiftItem } from "@/data/gift-store"; // Import store functions
+import { getGifts, exportGiftsToCSV, type GiftItem, initializeFirestoreData } from "@/data/gift-store"; // Import store functions and GiftItem type
 import { ThemeToggle } from "@/components/theme-toggle"; // Import ThemeToggle
 
 // Hardcoded allowed admin emails and password (INSECURE!)
@@ -115,38 +116,50 @@ export default function AdminPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Login loading
   const [gifts, setGifts] = useState<GiftItem[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false); // State for loading gift data
 
-  // Fetch gift data when authenticated - Removed useCallback, as it's not needed here
+  // Fetch gift data when authenticated
   const fetchAdminData = async () => {
     if (!isAuthenticated) return; // Don't fetch if not logged in
     setIsDataLoading(true);
     setError(null); // Clear previous data errors
-    console.log("AdminPage: Fetching admin data..."); // Log data fetch
+    console.log("Admin Page: Fetching admin data...");
     try {
+        // Optional: Initialize Firestore data if needed (e.g., first run)
+        // await initializeFirestoreData(); // Consider if this is the right place
+
       const fetchedGifts = await getGifts(); // Using the updated getGifts
+      console.log("Admin Page: Fetched gifts count:", fetchedGifts.length);
+    //   console.log("Admin Page: Fetched gifts sample:", fetchedGifts.slice(0, 3)); // Log sample data
       setGifts(fetchedGifts);
-       console.log("AdminPage: Fetched gifts count:", fetchedGifts.length); // Log count
-    } catch (err) {
-      console.error("Error fetching admin data:", err);
-       if ((err as any)?.code === 'permission-denied') {
-         setError("Permissão negada ao buscar dados. Verifique as regras do Firestore ou o login.");
+    } catch (err: any) { // Catch specific error types if possible
+      console.error("Admin Page: Error fetching admin data:", err);
+       if (err?.code === 'permission-denied') {
+         setError("Permissão negada ao buscar dados. Verifique as regras do Firestore ou se o login/regras de admin estão corretos.");
        } else {
-         setError("Falha ao carregar os dados dos presentes.");
+         setError(`Falha ao carregar os dados dos presentes: ${err.message || 'Erro desconhecido'}`);
        }
+       setGifts([]); // Clear gifts on error
     } finally {
       setIsDataLoading(false);
+      console.log("Admin Page: Fetching complete, data loading set to false.");
     }
   };
 
+  // useEffect to fetch data when authentication status changes
   useEffect(() => {
     if (isAuthenticated) {
+      console.log("Admin Page: Authenticated, triggering data fetch...");
       fetchAdminData();
+    } else {
+        console.log("Admin Page: Not authenticated, clearing data.");
+        setGifts([]); // Clear data if logged out
     }
+    // Dependency array ensures this runs when isAuthenticated changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]); // Fetch data only when isAuthenticated changes
+  }, [isAuthenticated]);
 
 
   const handleLogin = (event: React.FormEvent<HTMLFormElement>) => {
@@ -154,7 +167,7 @@ export default function AdminPage() {
     setLoading(true);
     setError(null);
 
-    // Simulate network delay
+    // Simulate network delay (optional)
     setTimeout(() => {
       // Basic client-side check (INSECURE!)
       // TODO: Replace with Firebase Authentication
@@ -163,12 +176,12 @@ export default function AdminPage() {
         password === ADMIN_PASSWORD
       ) {
         // Trim and lowercase email for comparison
-        setIsAuthenticated(true);
         console.log("Admin Login Successful for:", email); // Log success
-        // Fetch data will be triggered by useEffect
+        setIsAuthenticated(true); // Set state, useEffect will trigger data fetch
       } else {
         console.warn("Admin Login Failed for:", email); // Log failure
         setError("E-mail ou senha inválidos.");
+        setIsAuthenticated(false); // Ensure not authenticated
       }
       setLoading(false);
       setPassword(""); // Clear password field after attempt
@@ -180,7 +193,7 @@ export default function AdminPage() {
     setEmail("");
     setPassword("");
     setError(null);
-    setGifts([]); // Clear data on logout
+    // gifts will be cleared by the useEffect hook
     console.log("Admin Logged Out"); // Log logout
   };
 
@@ -218,9 +231,10 @@ export default function AdminPage() {
     }
   };
 
-  // Callback to refresh data when child components modify it - Removed useCallback
+  // Callback to refresh data when child components modify it
+  // This function simply calls fetchAdminData again.
   const refreshData = () => {
-     console.log("AdminPage: Refreshing data..."); // Log refresh trigger
+     console.log("Admin Page: Manual refresh triggered...");
     fetchAdminData();
   };
 
@@ -337,6 +351,7 @@ export default function AdminPage() {
                </div>
             ) : (
               <AdminSelectionViewer
+                // Filter gifts based on status directly here
                 selectedItems={gifts.filter((g) => g.status === "selected")}
                 onDataChange={refreshData} // Pass refresh callback
               />
@@ -355,7 +370,8 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {/* Component fetches its own data, but might need refreshData if saving settings impacts other parts */}
-            <AdminEventSettingsForm onSave={refreshData} />
+             {/* Pass key prop to force re-render if isAuthenticated changes, ensuring settings load correctly */}
+            <AdminEventSettingsForm key={isAuthenticated ? 'admin-settings' : 'no-settings'} onSave={refreshData} />
           </CardContent>
         </Card>
 
@@ -369,7 +385,7 @@ export default function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={handleExport} className="mt-4">
+            <Button onClick={handleExport} className="mt-4" disabled={isDataLoading || gifts.length === 0}>
               Exportar CSV
             </Button>
           </CardContent>
@@ -378,3 +394,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    
