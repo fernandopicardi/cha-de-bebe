@@ -62,8 +62,8 @@ const TableRow = React.forwardRef<
       className
     )}
     {...props}
-  >{children}</tr> // Ensure no whitespace around children
-))
+  >{children}</tr>
+));
 TableRow.displayName = "TableRow"
 
 const TableHead = React.forwardRef<
@@ -77,8 +77,8 @@ const TableHead = React.forwardRef<
       className
     )}
     {...props}
-  >{children}</th> // Ensure no whitespace around children
-))
+  >{children}</th>
+));
 TableHead.displayName = "TableHead"
 
 const TableCell = React.forwardRef<
@@ -89,8 +89,8 @@ const TableCell = React.forwardRef<
     ref={ref}
     className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
     {...props}
-  >{children}</td> // Ensure no whitespace around children
-))
+  >{children}</td>
+));
 TableCell.displayName = "TableCell"
 
 const TableCaption = React.forwardRef<
@@ -101,8 +101,8 @@ const TableCaption = React.forwardRef<
     ref={ref}
     className={cn("mt-4 text-sm text-muted-foreground", className)}
     {...props}
-  >{children}</caption> // Ensure no whitespace around children
-))
+  >{children}</caption>
+));
 TableCaption.displayName = "TableCaption"
 
 export {
