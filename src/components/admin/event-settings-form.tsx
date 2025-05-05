@@ -14,11 +14,10 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2, Image as ImageIcon, XCircle } from 'lucide-react'; // Added icons
 import { getEventSettings, updateEventSettings, type EventSettings } from '@/data/gift-store';
-import { revalidateAdminPage, revalidateHomePage } from '@/actions/revalidate'; // Import revalidation actions
 
 
 interface AdminEventSettingsFormProps {
-  onSave?: () => void;
+  onSave?: () => void; // Callback might still be useful for parent-specific logic, but not revalidation
 }
 
 // Refined schema for file handling
@@ -191,10 +190,7 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
     try {
       console.log("Submitting data to updateEventSettings:", settingsToSave);
 
-      await updateEventSettings(settingsToSave);
-
-      await revalidateAdminPage();
-      await revalidateHomePage();
+      await updateEventSettings(settingsToSave); // This now handles revalidation internally
 
       toast({ title: "Sucesso!", description: "Detalhes do evento atualizados." });
 

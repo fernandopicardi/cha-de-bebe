@@ -22,7 +22,7 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, PlusCircle, Send } from 'lucide-react';
 import { addSuggestion } from '@/data/gift-store';
-import { revalidateAdminPage } from '@/actions/revalidate'; // Import admin page revalidation
+
 
 // Define validation schema for adding an item
 const AddItemSchema = z.object({
@@ -33,12 +33,10 @@ const AddItemSchema = z.object({
 
 type AddItemFormData = z.infer<typeof AddItemSchema>;
 
-// Add prop for callback after suggestion is added
-interface SuggestItemButtonProps {
-    onSuggestionAdded?: () => Promise<void>; // Expects async function (e.g., revalidateHomePage)
-}
+// No longer needs onSuggestionAdded prop
+interface SuggestItemButtonProps {}
 
-export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButtonProps) {
+export default function SuggestItemButton({}: SuggestItemButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -54,17 +52,12 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
   const onSubmit: SubmitHandler<AddItemFormData> = async (data) => {
     setIsSubmitting(true);
     try {
+      // addSuggestion now handles revalidation internally
       const newItem = await addSuggestion({
         itemName: data.itemName,
         itemDescription: data.itemDescription,
         suggesterName: data.suggesterName,
       });
-
-      // Call the home page revalidation callback if provided
-      await onSuggestionAdded?.();
-      // Also revalidate the admin page so the new item appears there
-      await revalidateAdminPage();
-
 
       toast({
         title: ( <div className="flex items-center gap-2"> <PlusCircle className="h-5 w-5 text-success-foreground" /> Item Adicionado! </div> ),

@@ -16,7 +16,7 @@ interface GiftListProps {
   filterStatus?: 'all' | 'available' | 'selected' | 'not_needed';
   filterCategory?: string;
   showSelectedByName?: boolean; // Keep this prop for admin/public differentiation if needed elsewhere
-  onClientAction?: () => Promise<void>; // Callback to trigger revalidation after client actions
+  // onClientAction prop removed
 }
 
 export default function GiftList({
@@ -24,7 +24,6 @@ export default function GiftList({
   filterStatus = 'all',
   filterCategory,
   showSelectedByName = false, // By default, don't show name on public list
-  onClientAction,
 }: GiftListProps) {
   const [loading, setLoading] = useState(false); // Only for client-side actions like selection
   const [selectedItem, setSelectedItem] = useState<GiftItem | null>(null);
@@ -55,14 +54,14 @@ export default function GiftList({
     setSelectedItem(null);
   };
 
-  // This function now performs the client-side action and triggers revalidation
+  // This function now performs the client-side action.
+  // Revalidation is triggered inside the `selectGift` function in the data store.
   const handleItemSelectionSuccess = async (itemId: string, guestName: string) => {
      setLoading(true); // Indicate loading during the selection process
      try {
+       // selectGift now handles revalidation internally
        const updatedItem = await selectGift(itemId, guestName);
        if (updatedItem) {
-         // Trigger revalidation via the callback prop
-         await onClientAction?.();
          toast({
             title: "Sucesso!",
             description: `Obrigado, ${guestName}! "${updatedItem.name}" foi reservado com sucesso!`,
@@ -71,8 +70,7 @@ export default function GiftList({
        } else {
          console.warn(`Failed to select item ${itemId}, it might have been selected by someone else.`);
          toast({ title: "Ops!", description: "Este item já foi selecionado. A lista será atualizada.", variant: "destructive" });
-         // Trigger revalidation to show the latest state
-         await onClientAction?.();
+         // Revalidation is already triggered by selectGift, even on failure to find item
        }
      } catch (error) {
        console.error("Error selecting gift:", error);

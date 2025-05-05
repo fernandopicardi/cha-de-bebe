@@ -10,7 +10,6 @@ import AddToCalendarButton from '@/components/add-to-calendar-button';
 import SuggestItemButton from '@/components/suggest-item-button';
 import { getEventSettings, getGifts } from '@/data/gift-store'; // Import getGifts
 import { ThemeToggle } from '@/components/theme-toggle';
-import { revalidateHomePage } from '@/actions/revalidate'; // Import revalidation action
 
 
 export default async function Home() {
@@ -111,8 +110,8 @@ export default async function Home() {
           <h2 className="text-2xl font-semibold flex items-center gap-2">
             <Gift className="h-6 w-6 text-primary" /> Lista de Presentes
           </h2>
-           {/* Pass revalidation action to SuggestItemButton */}
-           <SuggestItemButton onSuggestionAdded={revalidateHomePage} />
+           {/* SuggestItemButton now handles its own revalidation internally via data store */}
+           <SuggestItemButton />
         </div>
 
         <Tabs defaultValue="all" className="w-full">
@@ -125,18 +124,18 @@ export default async function Home() {
           </TabsList>
 
            {/* Increased top margin on tabs content */}
-           {/* Pass fetched gifts and revalidation action to GiftList */}
+           {/* Pass fetched gifts to GiftList. Revalidation happens in data store actions */}
           <TabsContent value="all" className="mt-6">
-            <GiftList items={gifts} filterStatus="all" onClientAction={revalidateHomePage} />
+            <GiftList items={gifts} filterStatus="all" />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
-            <GiftList items={gifts} filterStatus="available" onClientAction={revalidateHomePage} />
+            <GiftList items={gifts} filterStatus="available" />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
-            <GiftList items={gifts} filterStatus="selected" onClientAction={revalidateHomePage} />
+            <GiftList items={gifts} filterStatus="selected" />
           </TabsContent>
            <TabsContent value="not_needed" className="mt-6">
-            <GiftList items={gifts} filterStatus="not_needed" onClientAction={revalidateHomePage} />
+            <GiftList items={gifts} filterStatus="not_needed" />
           </TabsContent>
         </Tabs>
       </section>

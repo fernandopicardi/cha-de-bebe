@@ -1,6 +1,8 @@
 
 'use server'; // Mark module for server-side execution
 
+import { revalidatePath } from 'next/cache'; // Import revalidatePath
+
 // Define interfaces for better type safety
 export interface GiftItem {
   id: string;
@@ -65,6 +67,15 @@ let eventSettings: EventSettings = {
   headerImageUrl: null, // Initialize header image URL as null
 };
 
+
+// Helper function to revalidate both pages
+const triggerRevalidation = () => {
+  console.log("Triggering revalidation for '/' and '/admin'");
+  revalidatePath('/');
+  revalidatePath('/admin');
+};
+
+
 /**
  * Retrieves the current event settings.
  * @returns A promise resolving to the event settings object.
@@ -111,7 +122,7 @@ export async function updateEventSettings(updates: Partial<EventSettings>): Prom
     };
 
     console.log('Event settings updated in store:', eventSettings);
-    // Revalidation removed - should be handled by the caller action
+    triggerRevalidation(); // Revalidate after update
 
     // Return a deep copy of the updated settings
     return JSON.parse(JSON.stringify(eventSettings));
@@ -161,7 +172,7 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
   ];
 
   console.log(`Item ${itemId} selected by ${guestName}. Total items: ${giftItems.length}`);
-  // Revalidation removed - should be handled by the caller action
+  triggerRevalidation(); // Revalidate after update
   return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
@@ -194,7 +205,7 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
     ];
 
     console.log(`Admin marked item ${itemId} as not needed. Total items: ${giftItems.length}`);
-    // Revalidation removed - should be handled by the caller action
+    triggerRevalidation(); // Revalidate after update
     return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
@@ -223,7 +234,7 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
   giftItems = [...giftItems, newItem];
 
   console.log(`Item "${newItem.name}" added and selected by ${newItem.selectedBy}. Total items: ${giftItems.length}`);
-  // Revalidation removed - should be handled by the caller action
+  triggerRevalidation(); // Revalidate after update
   return JSON.parse(JSON.stringify(newItem)); // Return a copy
 }
 
@@ -261,7 +272,7 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
     ];
 
     console.log(`Item ${itemId} reverted to available by admin. Total items: ${giftItems.length}`);
-    // Revalidation removed - should be handled by the caller action
+    triggerRevalidation(); // Revalidate after update
     return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
@@ -292,7 +303,7 @@ export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'
 
     giftItems = [...giftItems, newItem];
     console.log(`Admin added new gift: ${newItem.name} with status ${newItem.status}. Total items: ${giftItems.length}`);
-    // Revalidation removed - should be handled by the caller action
+    triggerRevalidation(); // Revalidate after update
     return JSON.parse(JSON.stringify(newItem)); // Return a copy
 }
 
@@ -359,7 +370,7 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
      ];
 
      console.log(`Item ${itemId} updated by admin. New data:`, updatedItem);
-    // Revalidation removed - should be handled by the caller action
+     triggerRevalidation(); // Revalidate after update
      return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
@@ -377,7 +388,7 @@ export async function deleteGift(itemId: string): Promise<boolean> {
     const success = giftItems.length < initialLength;
     if (success) {
         console.log(`Item ${itemId} deleted by admin. Total items: ${giftItems.length}`);
-        // Revalidation removed - should be handled by the caller action
+        triggerRevalidation(); // Revalidate after update
     } else {
         console.warn(`Item ${itemId} not found for deletion by admin.`);
     }
@@ -417,3 +428,4 @@ export async function logCurrentStoreState() {
     console.log("Gift Items:", giftItems);
     console.log("-------------------------------------");
 }
+

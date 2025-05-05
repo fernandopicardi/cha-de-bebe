@@ -23,11 +23,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { addGift, updateGift, deleteGift, revertSelection, markGiftAsNotNeeded, type GiftItem } from '@/data/gift-store';
-import { revalidateAdminPage, revalidateHomePage } from '@/actions/revalidate'; // Import revalidation actions
+
 
 interface AdminItemManagementTableProps {
   gifts: GiftItem[];
-  onDataChange: () => void; // Callback to refresh data in parent (can likely be removed if revalidation works)
+  onDataChange?: () => void; // Optional: Keep if parent needs immediate UI feedback before revalidation finishes
 }
 
 // Validation Schema for the Add/Edit Form
@@ -97,11 +97,9 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
     reset(); // Clear form on close
   };
 
-  // Trigger revalidation and show toast
-  const handleSuccess = async (message: string) => {
-      await revalidateAdminPage();
-      await revalidateHomePage();
-      onDataChange(); // Keep for potential immediate UI updates if needed before revalidation completes
+  // Show toast after data store mutation completes (which includes revalidation)
+  const handleSuccess = (message: string) => {
+      onDataChange?.(); // Call optional callback if provided
       toast({ title: "Sucesso!", description: message });
       handleDialogClose(); // Close dialog on success
   };
@@ -126,7 +124,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
 
     try {
       if (editingItem) {
-        // Update existing item
+        // Update existing item - updateGift now handles revalidation
         await updateGift(editingItem.id, {
              name: data.name,
              description: data.description,
@@ -134,9 +132,9 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
              status: data.status ?? editingItem.status,
              selectedBy: data.status === 'selected' ? data.selectedBy : undefined,
         });
-        await handleSuccess(`Item "${data.name}" atualizado.`);
+        handleSuccess(`Item "${data.name}" atualizado.`); // Show toast
       } else {
-        // Add new item
+        // Add new item - addGift now handles revalidation
         await addGift({
              name: data.name,
              description: data.description,
@@ -144,7 +142,7 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
              status: data.status ?? 'available',
              selectedBy: data.status === 'selected' ? data.selectedBy : undefined,
         });
-        await handleSuccess(`Item "${data.name}" adicionado.`);
+        handleSuccess(`Item "${data.name}" adicionado.`); // Show toast
       }
     } catch (error) {
         handleError(`Falha ao salvar o item`, data.name);
@@ -157,8 +155,9 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
       if (confirm(`Tem certeza que deseja excluir o item "${item.name}"? Esta ação não pode ser desfeita.`)) {
           setActionLoading(`delete-${item.id}`);
           try {
+              // deleteGift now handles revalidation
               await deleteGift(item.id);
-              await handleSuccess(`Item "${item.name}" excluído.`); // Use handleSuccess for revalidation+toast
+              handleSuccess(`Item "${item.name}" excluído.`); // Show toast
           } catch (error) {
               handleError(`Falha ao excluir o item`, item.name);
           } finally {
@@ -176,8 +175,9 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
        if (confirm(`Tem certeza que deseja ${actionText} do item "${item.name}"${guestNameInfo}? O item voltará a ficar disponível.`)) {
            setActionLoading(`revert-${item.id}`);
            try {
+               // revertSelection now handles revalidation
                await revertSelection(item.id);
-               await handleSuccess(`Item "${item.name}" revertido para disponível.`);
+               handleSuccess(`Item "${item.name}" revertido para disponível.`); // Show toast
            } catch (error) {
                handleError(`Falha ao reverter o item`, item.name);
            } finally {
@@ -193,8 +193,9 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
         if (confirm(`Tem certeza que deseja marcar o item "${item.name}" como "Não Precisa"?`)) {
              setActionLoading(`mark-${item.id}`);
             try {
+                // markGiftAsNotNeeded now handles revalidation
                 await markGiftAsNotNeeded(item.id);
-                await handleSuccess(`Item "${item.name}" marcado como "Não Precisa".`);
+                handleSuccess(`Item "${item.name}" marcado como "Não Precisa".`); // Show toast
             } catch (error) {
                  handleError(`Falha ao marcar o item como "Não Precisa"`, item.name);
             } finally {

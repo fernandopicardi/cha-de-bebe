@@ -15,11 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { RotateCcw, User, CalendarDays, Loader2 } from 'lucide-react'; // Added Loader2
 import { revertSelection, type GiftItem } from '@/data/gift-store'; // Import store function
 import { useToast } from '@/hooks/use-toast';
-import { revalidateAdminPage, revalidateHomePage } from '@/actions/revalidate'; // Import revalidation actions
+
 
 interface AdminSelectionViewerProps {
   selectedItems: GiftItem[]; // Items with 'selected' status
-  onDataChange: () => void; // Callback to refresh data in parent (can likely be removed)
+  onDataChange?: () => void; // Optional: Keep if parent needs immediate UI feedback before revalidation finishes
 }
 
 export default function AdminSelectionViewer({ selectedItems, onDataChange }: AdminSelectionViewerProps) {
@@ -33,14 +33,11 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
     if (confirm(`Tem certeza que deseja reverter a seleção de "${item.name}" por ${item.selectedBy}? O item voltará a ficar disponível.`)) {
       setLoadingItemId(item.id); // Set loading state for this item
       try {
+        // revertSelection now handles revalidation internally
         await revertSelection(item.id);
 
-        // Trigger revalidation
-        await revalidateAdminPage();
-        await revalidateHomePage();
-
         toast({ title: "Sucesso!", description: `Seleção do item "${item.name}" revertida.` });
-        onDataChange(); // Keep for potential immediate UI updates if needed
+        onDataChange?.(); // Call optional callback
       } catch (error) {
         console.error("Error reverting selection:", error);
         toast({ title: "Erro!", description: `Falha ao reverter a seleção do item "${item.name}".`, variant: "destructive" });
