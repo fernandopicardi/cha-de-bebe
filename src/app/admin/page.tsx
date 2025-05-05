@@ -19,7 +19,8 @@ import {
   Loader2,
   LogOut,
   Home,
-  AlertTriangle, // Import AlertTriangle
+  AlertTriangle,
+  Frown, // Import Frown icon for 404
 } from "lucide-react";
 import {
   getGifts,
@@ -27,7 +28,7 @@ import {
   exportGiftsToCSV,
   type GiftItem,
   type EventSettings,
-} from "@/data/gift-store"; // Updated import path
+} from "@/lib/firebase-adapter"; // Updated import path
 import AdminItemManagementTable from "@/components/admin/item-management-table";
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
 import AdminEventSettingsForm from "@/components/admin/event-settings-form";
@@ -155,25 +156,25 @@ export default function AdminPage() {
   }
 
   // Handle Authentication Error or Unauthenticated User (after auth check)
+  // Display a 404-like message instead of "Access Denied"
   if (authError || !user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background">
-        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-semibold mb-2 text-foreground">Acesso Negado</h1>
-        <p className="text-muted-foreground mb-6">
-          {authError
-            ? `Erro de autenticação: ${authError}`
-            : "Você precisa estar logado como administrador para acessar esta página."}
-        </p>
-        <Link href="/login">
-          <Button variant="outline">Ir para Login</Button>
-        </Link>
-        <Link href="/" className="mt-4">
-          <Button variant="link">Voltar para a Página Inicial</Button>
-        </Link>
-      </div>
+        <div className="flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background">
+            <Frown className="h-16 w-16 text-muted-foreground mb-4" />
+            <h1 className="text-4xl font-bold text-foreground mb-2">404</h1>
+            <p className="text-xl text-muted-foreground mb-6">
+                Esta página não pôde ser encontrada.
+            </p>
+            {authError && ( // Optionally log the auth error internally but don't show it to the user
+                <p className="text-xs text-destructive/70 mb-4">(Erro de autenticação: {authError})</p>
+            )}
+            <Link href="/">
+                <Button variant="outline">Voltar para a Página Inicial</Button>
+            </Link>
+        </div>
     );
-  }
+}
+
 
   // Show data loading state *after* authentication is confirmed
   if (isLoading) {
