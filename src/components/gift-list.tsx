@@ -48,7 +48,7 @@ export default function GiftList({
    // Log received items whenever the prop changes
    useEffect(() => {
     console.log(`GiftList (${filterStatus}): Received items prop update. Count: ${items?.length ?? 0}`);
-    // console.log(`GiftList (${filterStatus}): Sample items received in prop:`, items?.slice(0, 5) ?? []);
+    // console.log(`GiftList (${filterStatus}): Sample items received in prop:`, items?.slice(0, 5));
   }, [items, filterStatus]);
 
 
@@ -75,7 +75,7 @@ export default function GiftList({
       return statusMatch && categoryMatch;
     });
     console.log(`GiftList (${filterStatus}): Filtered down to ${result.length} items.`);
-    console.log(`GiftList (${filterStatus}): Filtered items result:`, result.slice(0, 5));
+    // console.log(`GiftList (${filterStatus}): Filtered items result:`, result.slice(0, 5));
     return result;
   }, [items, filterStatus, filterCategory]);
 
@@ -176,49 +176,53 @@ export default function GiftList({
     }
   };
 
-   // Determine if the component is in a loading state (items prop might still be empty/null initially)
-   // We rely on the parent component (page.tsx) to handle the primary loading state.
-   // Here, we just check if items are available for rendering.
-   const isListEmpty = !items || items.length === 0;
-   const isFilteredListEmpty = filteredItems.length === 0;
-
-   console.log(`GiftList (${filterStatus}): Rendering check - isListEmpty: ${isListEmpty}, isFilteredListEmpty: ${isFilteredListEmpty}`);
+   // Determine if the list is genuinely empty (after data has loaded) or just filtered down to zero.
+   const isInitialLoad = !items; // If 'items' prop is null/undefined, parent is likely still loading.
+   const hasLoadedItems = Array.isArray(items); // Check if items prop is an array (even if empty)
+   const hasNoItemsInDatabase = hasLoadedItems && items.length === 0;
+   const isFilteredListEmpty = hasLoadedItems && filteredItems.length === 0;
 
 
-   if (isListEmpty && filterStatus === 'all') { // Check if original items array is empty/null/undefined
-     // This state occurs typically before data is loaded or if fetch returns nothing.
-     // Parent page.tsx handles the main Loading... spinner.
-     // Here, we show a message if the parent isn't loading but items are still empty.
-     console.log(`GiftList (${filterStatus}): Rendering initial empty state (no items passed or fetched yet).`);
-     return (
-         <div className="text-center pt-16 pb-10 text-muted-foreground">
-             <Gift className="mx-auto h-12 w-12 mb-4" />
-             <p>A lista de presentes ainda está vazia ou carregando...</p>
-         </div>
-     );
+   console.log(`GiftList (${filterStatus}): Rendering check - isInitialLoad: ${isInitialLoad}, hasLoadedItems: ${hasLoadedItems}, hasNoItemsInDatabase: ${hasNoItemsInDatabase}, isFilteredListEmpty: ${isFilteredListEmpty}`);
+
+   // Scenario 1: Parent component is still loading (items prop is likely null/undefined). Show nothing here.
+   // The parent page.tsx will show the main loader.
+   if (isInitialLoad) {
+       console.log(`GiftList (${filterStatus}): Parent is likely loading (items prop is not an array). Rendering nothing.`);
+       return null; // Let the parent handle the loading state
    }
 
-  if (isFilteredListEmpty && filterStatus !== "all") { // Only show specific empty message if a filter is active AND items have loaded
-    let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
-    if (filterStatus === "available")
-      emptyMessage =
-        "Todos os presentes disponíveis já foram escolhidos ou marcados como 'Não Precisa'!";
-    if (filterStatus === "selected")
-      emptyMessage = "Nenhum presente foi selecionado ainda.";
-    if (filterStatus === "not_needed")
-      emptyMessage = "Nenhum item marcado como 'Não precisa'.";
+   // Scenario 2: Data has loaded, but the database has zero items. Show 'empty list' message for 'all' filter.
+   if (hasNoItemsInDatabase && filterStatus === 'all') {
+       console.log(`GiftList (${filterStatus}): Rendering empty state (database has no items).`);
+       return (
+           <div className="text-center pt-16 pb-10 text-muted-foreground">
+               <Gift className="mx-auto h-12 w-12 mb-4" />
+               <p>A lista de presentes ainda está vazia.</p>
+           </div>
+       );
+   }
 
-      console.log(`GiftList (${filterStatus}): Rendering specific empty message for active filter: ${emptyMessage}`);
-    return (
-      <div className="text-center pt-16 pb-10 text-muted-foreground">
-        <Gift className="mx-auto h-12 w-12 mb-4" />
-        <p>{emptyMessage}</p>
-      </div>
-    );
-  }
+   // Scenario 3: Data has loaded, there are items in the database, but the current filter results in an empty list.
+   if (isFilteredListEmpty && !hasNoItemsInDatabase) { // Only show specific empty message if a filter is active AND items exist in general
+       let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
+       if (filterStatus === "available")
+           emptyMessage = "Todos os presentes disponíveis já foram escolhidos ou marcados como 'Não Precisa'.";
+       if (filterStatus === "selected")
+           emptyMessage = "Nenhum presente foi selecionado ainda.";
+       if (filterStatus === "not_needed")
+           emptyMessage = "Nenhum item marcado como 'Não precisa'.";
 
+       console.log(`GiftList (${filterStatus}): Rendering specific empty message for active filter: ${emptyMessage}`);
+       return (
+           <div className="text-center pt-16 pb-10 text-muted-foreground">
+               <Gift className="mx-auto h-12 w-12 mb-4" />
+               <p>{emptyMessage}</p>
+           </div>
+       );
+   }
 
-
+  // Scenario 4: Items have loaded and the filtered list is not empty. Render the items.
   console.log(`GiftList (${filterStatus}): Rendering ${filteredItems.length} items.`);
   return (
     <>

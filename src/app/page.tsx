@@ -24,7 +24,7 @@ import { Loader2 } from "lucide-react";
 
 export default function Home() {
   const [eventDetails, setEventDetails] = useState<EventSettings | null>(null);
-  const [gifts, setGifts] = useState<GiftItem[]>([]); // Use GiftItem[] type
+  const [gifts, setGifts] = useState<GiftItem[] | null>(null); // Start as null to indicate initial loading
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null); // State for errors
 
@@ -46,7 +46,7 @@ export default function Home() {
       console.log("Home Page: Fetched Event Settings:", eventData ? "Data received" : "Null/Undefined");
       console.log("Home Page: Fetched Gifts Count:", giftsData?.length ?? 0);
       // Log raw gifts data immediately after fetch
-      console.log("Home Page: Raw Gifts Data from getGifts:", giftsData?.slice(0, 5) ?? []);
+      // console.log("Home Page: Raw Gifts Data from getGifts:", giftsData?.slice(0, 5) ?? []);
 
       // Add null check before setting state
       if (eventData) {
@@ -59,10 +59,11 @@ export default function Home() {
       }
 
       // Add null/undefined check for giftsData
+      // Ensure gifts state is set to an array (even empty) after loading finishes
       if (giftsData) {
         console.log(`Home Page: Setting gifts state with ${giftsData.length} fetched gifts.`);
         // Log details of the first few gifts to verify data structure before setting state
-        console.log("Home Page: Sample gifts being set to state:", giftsData.slice(0, 5));
+        // console.log("Home Page: Sample gifts being set to state:", giftsData.slice(0, 5));
         setGifts(giftsData);
       } else {
          console.warn("Home Page: Gifts data was null or undefined after fetch.");
@@ -75,7 +76,7 @@ export default function Home() {
       setError(`Erro ao carregar os dados: ${err.message || 'Erro desconhecido'}`);
       console.log("Home Page: Clearing state due to error.");
       setEventDetails(null); // Clear on error
-      setGifts([]); // Clear on error
+      setGifts([]); // Set to empty array on error
     } finally {
       setIsLoading(false);
       console.log("Home Page: Fetching complete, loading set to false.");
@@ -166,8 +167,8 @@ export default function Home() {
   }
 
   // Add log just before render to check final state being passed to GiftList
-  console.log(`Home Page: Rendering page. Passing ${gifts.length} gifts to GiftList component.`);
-  console.log(`Home Page: Sample gifts being passed as prop:`, gifts.slice(0, 5));
+  console.log(`Home Page: Rendering page. Passing ${gifts?.length ?? 'null'} gifts to GiftList component.`);
+  // console.log(`Home Page: Sample gifts being passed as prop:`, gifts?.slice(0, 5));
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
@@ -265,20 +266,20 @@ export default function Home() {
           </TabsList>
 
           {/* Increased top margin on tabs content */}
-           {/* Pass fetched gifts and stable refresh callback to GiftList */}
-           {/* Ensure gifts is passed correctly here */}
+           {/* Pass fetched gifts (ensure it's an array) and stable refresh callback to GiftList */}
+           {/* GiftList now handles its own empty/loading states */}
           <TabsContent value="all" className="mt-6">
-            <GiftList items={gifts} filterStatus="all" onItemAction={fetchData} />
+            <GiftList items={gifts ?? []} filterStatus="all" onItemAction={fetchData} />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
-            <GiftList items={gifts} filterStatus="available" onItemAction={fetchData} />
+            <GiftList items={gifts ?? []} filterStatus="available" onItemAction={fetchData} />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
-            <GiftList items={gifts} filterStatus="selected" onItemAction={fetchData} />
+            <GiftList items={gifts ?? []} filterStatus="selected" onItemAction={fetchData} />
           </TabsContent>
            {/* Added 'not_needed' tab content back */}
            <TabsContent value="not_needed" className="mt-6">
-              <GiftList items={gifts} filterStatus="not_needed" onItemAction={fetchData} />
+              <GiftList items={gifts ?? []} filterStatus="not_needed" onItemAction={fetchData} />
            </TabsContent>
         </Tabs>
       </section>
