@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -15,6 +14,7 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2, Image as ImageIcon, XCircle } from 'lucide-react'; // Added icons
 import { getEventSettings, updateEventSettings, type EventSettings } from '@/data/gift-store';
+import { revalidateAdminPage, revalidateHomePage } from '@/actions/revalidate'; // Import revalidation actions
 
 
 interface AdminEventSettingsFormProps {
@@ -129,6 +129,10 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
 
       await updateEventSettings(finalSettings);
 
+      // Trigger revalidation for relevant pages
+      await revalidateAdminPage();
+      await revalidateHomePage();
+
       toast({ title: "Sucesso!", description: "Detalhes do evento atualizados." });
 
       // Re-fetch the latest settings AFTER successful save and reset the form
@@ -192,7 +196,7 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
                        alt="Prévia da imagem do cabeçalho"
                        fill // Use fill instead of layout
                        style={{ objectFit: 'cover' }} // Ensure image covers the area
-                       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Provide sizes hint
+                       sizes="(max-width: 768px) 96px, 96px" // Size based on w-24
                        data-ai-hint="baby celebration banner"
                        onError={() => {
                          // Handle potential image loading errors (e.g., invalid data URI)
@@ -287,4 +291,3 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
     </form>
   );
 }
-    

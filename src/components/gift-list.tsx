@@ -1,54 +1,37 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Gift, Check, X, Hourglass, User, Tag, Ban, Loader2 } from 'lucide-react'; // Ban icon remains for status badge, but button is removed
+import { Gift, Check, X, Hourglass, User, Tag, Ban, Loader2 } from 'lucide-react';
 import SelectItemDialog from './select-item-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getGifts, selectGift, type GiftItem } from '@/data/gift-store'; // Removed markGiftAsNotNeeded import
+import { selectGift, type GiftItem } from '@/data/gift-store';
 import { useToast } from '@/hooks/use-toast';
 
 interface GiftListProps {
+  items: GiftItem[]; // Accept items as prop
   filterStatus?: 'all' | 'available' | 'selected' | 'not_needed';
   filterCategory?: string;
-  showSelectedByName?: boolean;
-  onDataChange?: () => void;
+  showSelectedByName?: boolean; // Keep this prop for admin/public differentiation if needed elsewhere
+  onClientAction?: () => Promise<void>; // Callback to trigger revalidation after client actions
 }
 
 export default function GiftList({
+  items, // Use passed items
   filterStatus = 'all',
   filterCategory,
-  showSelectedByName = false,
-  onDataChange
+  showSelectedByName = false, // By default, don't show name on public list
+  onClientAction,
 }: GiftListProps) {
-  const [items, setItems] = useState<GiftItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Only for client-side actions like selection
   const [selectedItem, setSelectedItem] = useState<GiftItem | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  // Removed markingItemId state as the button is removed
-  // const [markingItemId, setMarkingItemId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Fetch initial data
-  useEffect(() => {
-    async function fetchGifts() {
-      setLoading(true);
-      try {
-        const gifts = await getGifts();
-        setItems(gifts);
-      } catch (error) {
-        console.error("Error fetching gifts:", error);
-        toast({ title: "Erro ao carregar", description: "Não foi possível buscar a lista de presentes.", variant: "destructive" });
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchGifts();
-  }, [toast]); // Added toast to dependency array if used inside effect
-
+  // Filter items based on props, now derived from the passed 'items' array
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       if (filterStatus !== 'all' && item.status !== filterStatus) {
@@ -72,73 +55,60 @@ export default function GiftList({
     setSelectedItem(null);
   };
 
+  // This function now performs the client-side action and triggers revalidation
   const handleItemSelectionSuccess = async (itemId: string, guestName: string) => {
+     setLoading(true); // Indicate loading during the selection process
      try {
        const updatedItem = await selectGift(itemId, guestName);
        if (updatedItem) {
-         setItems(prevItems =>
-           prevItems.map(item =>
-             item.id === itemId ? updatedItem : item
-           )
-         );
-         onDataChange?.();
+         // Trigger revalidation via the callback prop
+         await onClientAction?.();
+         toast({
+            title: "Sucesso!",
+            description: `Obrigado, ${guestName}! "${updatedItem.name}" foi reservado com sucesso!`,
+            variant: "default",
+         });
        } else {
          console.warn(`Failed to select item ${itemId}, it might have been selected by someone else.`);
-         toast({ title: "Ops!", description: "Este item já foi selecionado. Tente atualizar a página.", variant: "destructive" });
-         // Re-fetch to get the latest state
-         const currentGifts = await getGifts();
-         setItems(currentGifts);
+         toast({ title: "Ops!", description: "Este item já foi selecionado. A lista será atualizada.", variant: "destructive" });
+         // Trigger revalidation to show the latest state
+         await onClientAction?.();
        }
      } catch (error) {
        console.error("Error selecting gift:", error);
        toast({ title: "Erro!", description: "Não foi possível selecionar o presente.", variant: "destructive" });
+     } finally {
+        setLoading(false); // Stop loading indicator
+        handleDialogClose(); // Close dialog regardless of success/failure after action attempt
      }
   };
 
-  // Removed handleMarkNotNeededClick function
 
   const getStatusBadge = (status: GiftItem['status'], selectedBy?: string) => {
     switch (status) {
       case 'available':
         return <Badge variant="default" className="bg-success text-success-foreground"><Check className="mr-1 h-3 w-3" /> Disponível</Badge>;
       case 'selected':
-        const displayName = showSelectedByName && selectedBy ? ` por ${selectedBy}` : '';
+        // Always hide the name on the public list as per the requirement
         return (
           <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
-            <User className="mr-1 h-3 w-3" /> Selecionado{displayName}
+            <User className="mr-1 h-3 w-3" /> Selecionado
           </Badge>
         );
       case 'not_needed':
-        // Use Ban icon for the status badge display
         return <Badge variant="destructive" className="bg-destructive/80 text-destructive-foreground"><Ban className="mr-1 h-3 w-3" /> Não Precisa</Badge>;
       default:
         return <Badge variant="outline"><Hourglass className="mr-1 h-3 w-3" /> Indefinido</Badge>;
     }
   };
 
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-        {[...Array(6)].map((_, index) => (
-           <Card key={index} className="animate-pulse">
-             <CardHeader>
-               <Skeleton className="h-6 w-3/4" />
-               <Skeleton className="h-4 w-1/2" />
-             </CardHeader>
-             <CardContent>
-               <Skeleton className="h-4 w-full" />
-             </CardContent>
-             <CardFooter className="flex justify-between">
-                <Skeleton className="h-8 w-1/4" />
-               <Skeleton className="h-10 w-1/3" />
-             </CardFooter>
-           </Card>
-        ))}
-      </div>
-    );
-  }
+  // Skeleton rendering is still useful if the parent component is loading initial data
+  // but GiftList itself doesn't manage the initial loading state anymore.
+  // The parent (Home page) should handle the overall loading state.
+  // We keep a simpler loading state for the 'Choose' button interaction.
 
-  if (filteredItems.length === 0 && !loading) {
+
+  if (filteredItems.length === 0) {
      let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
      if (filterStatus === 'available') emptyMessage = "Todos os presentes disponíveis já foram escolhidos ou marcados como 'Não Precisa'!";
      if (filterStatus === 'selected') emptyMessage = "Nenhum presente foi selecionado ainda.";
@@ -174,35 +144,20 @@ export default function GiftList({
                {getStatusBadge(item.status, item.selectedBy)}
                <div className="flex gap-2 flex-wrap justify-end">
                   {item.status === 'available' && (
-                    <>
-                      {/* Removed 'Mark Not Needed' button */}
-                      {/*
-                      <Button
-                         size="sm"
-                         variant="outline"
-                         className="border-destructive text-destructive hover:bg-destructive/10"
-                         onClick={() => handleMarkNotNeededClick(item.id)}
-                         disabled={markingItemId === item.id}
-                         aria-label={`Marcar ${item.name} como não precisa`}
-                      >
-                         {markingItemId === item.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                         ) : (
-                            <Ban className="h-4 w-4" />
-                         )}
-                         <span className="ml-1">Não Precisa</span>
-                      </Button>
-                      */}
-                      <Button
-                         size="sm"
-                         className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
-                         onClick={() => handleSelectItemClick(item)}
-                         aria-label={`Selecionar ${item.name}`}
-                         // Removed disable logic related to markingItemId
-                      >
-                         <Gift className="mr-2 h-4 w-4" /> Escolher
-                      </Button>
-                    </>
+                    <Button
+                       size="sm"
+                       className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
+                       onClick={() => handleSelectItemClick(item)}
+                       aria-label={`Selecionar ${item.name}`}
+                       disabled={loading} // Disable button while an item is being selected
+                    >
+                      {loading && selectedItem?.id === item.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                          <Gift className="mr-2 h-4 w-4" />
+                      )}
+                       Escolher
+                    </Button>
                   )}
                   {/* No buttons for 'selected' or 'not_needed' on public page */}
               </div>
@@ -211,12 +166,13 @@ export default function GiftList({
         ))}
       </div>
 
+      {/* Dialog remains the same, but uses the new handleItemSelectionSuccess */}
       {selectedItem && selectedItem.status === 'available' && (
         <SelectItemDialog
           item={selectedItem}
           isOpen={isDialogOpen}
           onClose={handleDialogClose}
-          onSuccess={handleItemSelectionSuccess}
+          onSuccess={handleItemSelectionSuccess} // Pass the updated handler
         />
       )}
     </>

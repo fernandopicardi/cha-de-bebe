@@ -1,5 +1,4 @@
 
-
 import Link from 'next/link';
 import Image from 'next/image'; // Import next/image
 import { Baby, CalendarDays, Gift, MapPin, LogIn } from 'lucide-react';
@@ -9,13 +8,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GiftList from '@/components/gift-list';
 import AddToCalendarButton from '@/components/add-to-calendar-button';
 import SuggestItemButton from '@/components/suggest-item-button';
-import { getEventSettings } from '@/data/gift-store'; // Import getEventSettings directly
+import { getEventSettings, getGifts } from '@/data/gift-store'; // Import getGifts
 import { ThemeToggle } from '@/components/theme-toggle';
+import { revalidateHomePage } from '@/actions/revalidate'; // Import revalidation action
 
 
 export default async function Home() {
    // Fetch the latest event settings directly on the server component
   const eventDetails = await getEventSettings();
+  // Fetch the gift list on the server
+  const gifts = await getGifts();
 
    // Formatting Date and Time
    let formattedDate = 'Data inválida';
@@ -70,7 +72,7 @@ export default async function Home() {
               fill // Use fill to cover the container
               style={{ objectFit: 'cover' }} // Ensure image covers the area
               priority // Prioritize loading the header image
-              sizes="(max-width: 768px) 50vw, 200px" // Provide sizes hint
+              sizes="(max-width: 768px) 128px, 160px" // Provide sizes hint based on w-32/w-40
               data-ai-hint="baby celebration banner"
             />
           </div>
@@ -80,7 +82,9 @@ export default async function Home() {
 
         {/* Display dynamic title */}
         <h1 className="text-3xl md:text-4xl font-semibold text-primary">{pageTitle}</h1>
-        <p className="text-lg text-muted-foreground px-4 md:px-8">{eventDetails.welcomeMessage}</p>
+         <p className="text-lg text-muted-foreground px-4 md:px-8">
+           {eventDetails.welcomeMessage || 'Sua presença é o nosso maior presente! Esta lista é um guia carinhoso para quem desejar nos presentear, mas sinta-se totalmente à vontade, o importante é celebrar conosco!'}
+         </p>
       </header>
 
       <Card className="bg-card shadow-md rounded-lg overflow-hidden">
@@ -107,12 +111,14 @@ export default async function Home() {
           <h2 className="text-2xl font-semibold flex items-center gap-2">
             <Gift className="h-6 w-6 text-primary" /> Lista de Presentes
           </h2>
-           <SuggestItemButton />
+           {/* Pass revalidation action to SuggestItemButton */}
+           <SuggestItemButton onSuggestionAdded={revalidateHomePage} />
         </div>
 
         <Tabs defaultValue="all" className="w-full">
            {/* Increased bottom margin on tabs list */}
-           <TabsList className="w-full grid grid-cols-2 sm:flex sm:justify-start sm:w-auto overflow-x-auto whitespace-nowrap pb-2 mb-4 md:mb-6">
+           {/* Ensure all TabsTriggers are present */}
+           <TabsList className="w-full grid grid-cols-2 sm:grid-cols-4 sm:w-auto overflow-x-auto whitespace-nowrap pb-2 mb-4 md:mb-6">
             <TabsTrigger value="all" className="flex-shrink-0">Todos</TabsTrigger>
             <TabsTrigger value="available" className="flex-shrink-0">Disponíveis</TabsTrigger>
             <TabsTrigger value="selected" className="flex-shrink-0">Selecionados</TabsTrigger>
@@ -120,17 +126,18 @@ export default async function Home() {
           </TabsList>
 
            {/* Increased top margin on tabs content */}
+           {/* Pass fetched gifts and revalidation action to GiftList */}
           <TabsContent value="all" className="mt-6">
-            <GiftList filterStatus="all" showSelectedByName={false} />
+            <GiftList items={gifts} filterStatus="all" onClientAction={revalidateHomePage} />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
-            <GiftList filterStatus="available" showSelectedByName={false} />
+            <GiftList items={gifts} filterStatus="available" onClientAction={revalidateHomePage} />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
-            <GiftList filterStatus="selected" showSelectedByName={false} />
+            <GiftList items={gifts} filterStatus="selected" onClientAction={revalidateHomePage} />
           </TabsContent>
            <TabsContent value="not_needed" className="mt-6">
-            <GiftList filterStatus="not_needed" showSelectedByName={false} />
+            <GiftList items={gifts} filterStatus="not_needed" onClientAction={revalidateHomePage} />
           </TabsContent>
         </Tabs>
       </section>
@@ -138,4 +145,3 @@ export default async function Home() {
     </div>
   );
 }
-

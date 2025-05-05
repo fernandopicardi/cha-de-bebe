@@ -1,8 +1,5 @@
 
-
-'use server'; // Mark module for server-side execution if potentially used in Server Actions
-
-import { revalidatePath } from 'next/cache'; // Import revalidatePath
+'use server'; // Mark module for server-side execution
 
 // Define interfaces for better type safety
 export interface GiftItem {
@@ -110,10 +107,7 @@ export async function updateEventSettings(updates: Partial<EventSettings>): Prom
     };
 
     console.log('Event settings updated in store:', eventSettings);
-
-    // Revalidate paths to ensure pages using this data are updated
-    revalidatePath('/'); // Revalidate home page
-    revalidatePath('/admin'); // Revalidate admin page
+    // Revalidation removed - should be handled by the caller action
 
     // Return a deep copy of the updated settings
     return JSON.parse(JSON.stringify(eventSettings));
@@ -161,8 +155,7 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
   ];
 
   console.log(`Item ${itemId} selected by ${guestName}.`);
-  revalidatePath('/'); // Revalidate home page when selection changes
-  revalidatePath('/admin'); // Revalidate admin page
+  // Revalidation removed - should be handled by the caller action
   return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
@@ -195,8 +188,7 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
     ];
 
     console.log(`Admin marked item ${itemId} as not needed.`);
-    revalidatePath('/'); // Revalidate home page
-    revalidatePath('/admin'); // Revalidate admin page
+    // Revalidation removed - should be handled by the caller action
     return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
@@ -225,8 +217,7 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
   giftItems = [...giftItems, newItem];
 
   console.log(`Item "${newItem.name}" added and selected by ${newItem.selectedBy}.`);
-  revalidatePath('/'); // Revalidate home page
-  revalidatePath('/admin'); // Revalidate admin page
+  // Revalidation removed - should be handled by the caller action
   return JSON.parse(JSON.stringify(newItem)); // Return a copy
 }
 
@@ -263,8 +254,7 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
     ];
 
     console.log(`Item ${itemId} reverted to available by admin.`);
-    revalidatePath('/'); // Revalidate home page
-    revalidatePath('/admin'); // Revalidate admin page
+    // Revalidation removed - should be handled by the caller action
     return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
@@ -294,8 +284,7 @@ export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'
 
     giftItems = [...giftItems, newItem];
     console.log(`Admin added new gift: ${newItem.name} with status ${newItem.status}`);
-    revalidatePath('/'); // Revalidate home page
-    revalidatePath('/admin'); // Revalidate admin page
+    // Revalidation removed - should be handled by the caller action
     return JSON.parse(JSON.stringify(newItem)); // Return a copy
 }
 
@@ -361,8 +350,7 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
      ];
 
      console.log(`Item ${itemId} updated by admin. New data:`, updatedItem);
-     revalidatePath('/'); // Revalidate home page
-     revalidatePath('/admin'); // Revalidate admin page
+    // Revalidation removed - should be handled by the caller action
      return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
@@ -379,8 +367,7 @@ export async function deleteGift(itemId: string): Promise<boolean> {
     const success = giftItems.length < initialLength;
     if (success) {
         console.log(`Item ${itemId} deleted by admin.`);
-        revalidatePath('/'); // Revalidate home page
-        revalidatePath('/admin'); // Revalidate admin page
+        // Revalidation removed - should be handled by the caller action
     } else {
         console.warn(`Item ${itemId} not found for deletion by admin.`);
     }
@@ -412,4 +399,3 @@ export async function exportGiftsToCSV(): Promise<string> {
 
     return [headers.join(','), ...rows].join('\n');
 }
-    

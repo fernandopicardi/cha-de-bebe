@@ -20,25 +20,30 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, PlusCircle, Send } from 'lucide-react'; // Changed icon from Lightbulb to PlusCircle
-import { addSuggestion } from '@/data/gift-store'; // Import the store function (now adds directly)
+import { Loader2, PlusCircle, Send } from 'lucide-react';
+import { addSuggestion } from '@/data/gift-store';
 
 // Define validation schema for adding an item
 const AddItemSchema = z.object({
   itemName: z.string().min(3, { message: 'Nome do item muito curto (mínimo 3 caracteres).' }).max(100, { message: 'Nome do item muito longo (máximo 100 caracteres).' }),
   itemDescription: z.string().max(200, { message: 'Descrição muito longa (máximo 200 caracteres).' }).optional(),
-  suggesterName: z.string().min(2, { message: 'Por favor, insira seu nome (mínimo 2 caracteres).' }).max(50, { message: 'Nome muito longo (máximo 50 caracteres).' }), // Changed label conceptually
+  suggesterName: z.string().min(2, { message: 'Por favor, insira seu nome (mínimo 2 caracteres).' }).max(50, { message: 'Nome muito longo (máximo 50 caracteres).' }),
 });
 
 type AddItemFormData = z.infer<typeof AddItemSchema>;
 
-export default function SuggestItemButton() {
+// Add prop for callback after suggestion is added
+interface SuggestItemButtonProps {
+    onSuggestionAdded?: () => Promise<void>;
+}
+
+export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const { register, handleSubmit, formState: { errors }, reset } = useForm<AddItemFormData>({
     resolver: zodResolver(AddItemSchema),
-    defaultValues: { // Set default values for controlled reset
+    defaultValues: {
       itemName: '',
       itemDescription: '',
       suggesterName: ''
@@ -48,26 +53,28 @@ export default function SuggestItemButton() {
   const onSubmit: SubmitHandler<AddItemFormData> = async (data) => {
     setIsSubmitting(true);
     try {
-      // Use the imported function to add the item (now adds as 'selected')
-      await addSuggestion({
+      const newItem = await addSuggestion({
         itemName: data.itemName,
         itemDescription: data.itemDescription,
-        suggesterName: data.suggesterName, // This name selects the item
+        suggesterName: data.suggesterName,
       });
+
+      // Call the revalidation callback if provided
+      await onSuggestionAdded?.();
 
       toast({
         title: ( <div className="flex items-center gap-2"> <PlusCircle className="h-5 w-5 text-success-foreground" /> Item Adicionado! </div> ),
-        description: `Obrigado, ${data.suggesterName}! O item "${data.itemName}" foi adicionado à lista e marcado como escolhido por você.`, // Updated success message
+        description: `Obrigado, ${data.suggesterName}! O item "${data.itemName}" foi adicionado à lista e marcado como escolhido por você.`,
         variant: 'default',
         className: 'bg-success text-success-foreground border-success',
       });
-      reset(); // Reset form fields
-      setIsOpen(false); // Close the dialog
+      reset();
+      setIsOpen(false);
     } catch (error) {
-      console.error("Erro ao adicionar item:", error); // Updated error context
+      console.error("Erro ao adicionar item:", error);
       toast({
         title: 'Ops! Algo deu errado.',
-        description: 'Não foi possível adicionar seu item. Tente novamente.', // Updated error message
+        description: 'Não foi possível adicionar seu item. Tente novamente.',
         variant: 'destructive',
       });
     } finally {
@@ -75,10 +82,9 @@ export default function SuggestItemButton() {
     }
   };
 
-  // Reset form when dialog closes
   React.useEffect(() => {
     if (!isOpen) {
-      reset(); // Reset to default values
+      reset();
     }
   }, [isOpen, reset]);
 
@@ -87,16 +93,16 @@ export default function SuggestItemButton() {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" className="border-accent text-accent-foreground hover:bg-accent/10">
-          <PlusCircle className="mr-2 h-4 w-4" /> {/* Changed Icon */}
+          <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar um Item
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[480px] bg-card">
         <DialogHeader>
-          <DialogTitle>Adicionar Novo Item à Lista</DialogTitle> {/* Changed Title */}
+          <DialogTitle>Adicionar Novo Item à Lista</DialogTitle>
           <DialogDescription>
             Não encontrou o que procurava? Adicione um item à lista. Ele será automaticamente marcado como escolhido por você.
-          </DialogDescription> {/* Changed Description */}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
           {/* Item Name */}
@@ -166,7 +172,7 @@ export default function SuggestItemButton() {
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Adicionar e Escolher Item {/* Changed Button Text */}
+                  Adicionar e Escolher Item
                 </>
               )}
             </Button>

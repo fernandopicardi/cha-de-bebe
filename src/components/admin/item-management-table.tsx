@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -21,11 +22,12 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { addGift, updateGift, deleteGift, revertSelection, markGiftAsNotNeeded, type GiftItem } from '@/data/gift-store'; // Added markGiftAsNotNeeded
+import { addGift, updateGift, deleteGift, revertSelection, markGiftAsNotNeeded, type GiftItem } from '@/data/gift-store';
+import { revalidateAdminPage, revalidateHomePage } from '@/actions/revalidate'; // Import revalidation actions
 
 interface AdminItemManagementTableProps {
   gifts: GiftItem[];
-  onDataChange: () => void; // Callback to refresh data in parent
+  onDataChange: () => void; // Callback to refresh data in parent (can likely be removed if revalidation works)
 }
 
 // Validation Schema for the Add/Edit Form
@@ -95,6 +97,21 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
     reset(); // Clear form on close
   };
 
+  // Trigger revalidation and show toast
+  const handleSuccess = async (message: string) => {
+      await revalidateAdminPage();
+      await revalidateHomePage();
+      onDataChange(); // Keep for potential immediate UI updates if needed before revalidation completes
+      toast({ title: "Sucesso!", description: message });
+      handleDialogClose(); // Close dialog on success
+  };
+
+  const handleError = (message: string, itemName: string) => {
+       console.error(message, itemName);
+       toast({ title: "Erro!", description: `${message} "${itemName}".`, variant: "destructive" });
+  };
+
+
   // Form submission for Add/Edit
   const onSubmit = async (data: GiftFormData) => {
      // Validate that 'selectedBy' is provided if status is 'selected'
@@ -109,48 +126,41 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
 
     try {
       if (editingItem) {
-        // Update existing item - including status and selectedBy if changed
+        // Update existing item
         await updateGift(editingItem.id, {
              name: data.name,
              description: data.description,
              category: data.category,
-             status: data.status ?? editingItem.status, // Use new status or keep old
-             selectedBy: data.status === 'selected' ? data.selectedBy : undefined, // Set or clear selectedBy based on status
-             // selectionDate will be handled by updateGift if status becomes 'selected'
+             status: data.status ?? editingItem.status,
+             selectedBy: data.status === 'selected' ? data.selectedBy : undefined,
         });
-        toast({ title: "Sucesso!", description: `Item "${data.name}" atualizado.` });
+        await handleSuccess(`Item "${data.name}" atualizado.`);
       } else {
         // Add new item
         await addGift({
              name: data.name,
              description: data.description,
              category: data.category,
-             status: data.status ?? 'available', // Use selected status or default to available
-             selectedBy: data.status === 'selected' ? data.selectedBy : undefined, // Set selector if added as selected
-             // selectionDate will be handled by addGift if status is 'selected'
+             status: data.status ?? 'available',
+             selectedBy: data.status === 'selected' ? data.selectedBy : undefined,
         });
-        toast({ title: "Sucesso!", description: `Item "${data.name}" adicionado.` });
+        await handleSuccess(`Item "${data.name}" adicionado.`);
       }
-      onDataChange(); // Refresh parent data
-      handleDialogClose();
     } catch (error) {
-      console.error("Error saving item:", error);
-      toast({ title: "Erro!", description: `Falha ao salvar o item "${data.name}".`, variant: "destructive" });
+        handleError(`Falha ao salvar o item`, data.name);
     }
   };
 
   // Row Action: Delete
   const handleDelete = async (item: GiftItem) => {
-      if (actionLoading) return; // Prevent multiple actions
+      if (actionLoading) return;
       if (confirm(`Tem certeza que deseja excluir o item "${item.name}"? Esta ação não pode ser desfeita.`)) {
           setActionLoading(`delete-${item.id}`);
           try {
               await deleteGift(item.id);
-              toast({ title: "Sucesso!", description: `Item "${item.name}" excluído.` });
-              onDataChange();
+              await handleSuccess(`Item "${item.name}" excluído.`); // Use handleSuccess for revalidation+toast
           } catch (error) {
-              console.error("Error deleting item:", error);
-              toast({ title: "Erro!", description: `Falha ao excluir o item "${item.name}".`, variant: "destructive" });
+              handleError(`Falha ao excluir o item`, item.name);
           } finally {
               setActionLoading(null);
           }
@@ -167,30 +177,26 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
            setActionLoading(`revert-${item.id}`);
            try {
                await revertSelection(item.id);
-               toast({ title: "Sucesso!", description: `Item "${item.name}" revertido para disponível.` });
-               onDataChange();
+               await handleSuccess(`Item "${item.name}" revertido para disponível.`);
            } catch (error) {
-               console.error("Error reverting item:", error);
-               toast({ title: "Erro!", description: `Falha ao reverter o item "${item.name}".`, variant: "destructive" });
+               handleError(`Falha ao reverter o item`, item.name);
            } finally {
               setActionLoading(null);
            }
        }
    };
 
-   // Row Action: Mark as Not Needed (Uses dedicated function now)
+   // Row Action: Mark as Not Needed
     const handleMarkNotNeeded = async (item: GiftItem) => {
         if (actionLoading) return;
-        if (item.status !== 'available') return; // Only mark available items
+        if (item.status !== 'available') return;
         if (confirm(`Tem certeza que deseja marcar o item "${item.name}" como "Não Precisa"?`)) {
              setActionLoading(`mark-${item.id}`);
             try {
-                await markGiftAsNotNeeded(item.id); // Use the dedicated function
-                toast({ title: "Sucesso!", description: `Item "${item.name}" marcado como "Não Precisa".` });
-                onDataChange();
+                await markGiftAsNotNeeded(item.id);
+                await handleSuccess(`Item "${item.name}" marcado como "Não Precisa".`);
             } catch (error) {
-                console.error("Error marking as not needed:", error);
-                toast({ title: "Erro!", description: `Falha ao marcar o item "${item.name}" como "Não Precisa".`, variant: "destructive" });
+                 handleError(`Falha ao marcar o item como "Não Precisa"`, item.name);
             } finally {
                 setActionLoading(null);
             }

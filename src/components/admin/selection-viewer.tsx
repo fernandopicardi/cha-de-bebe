@@ -1,6 +1,7 @@
+
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react'; // Import useState for loading state
 import {
   Table,
   TableBody,
@@ -11,28 +12,40 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RotateCcw, User, CalendarDays } from 'lucide-react';
+import { RotateCcw, User, CalendarDays, Loader2 } from 'lucide-react'; // Added Loader2
 import { revertSelection, type GiftItem } from '@/data/gift-store'; // Import store function
 import { useToast } from '@/hooks/use-toast';
+import { revalidateAdminPage, revalidateHomePage } from '@/actions/revalidate'; // Import revalidation actions
 
 interface AdminSelectionViewerProps {
   selectedItems: GiftItem[]; // Items with 'selected' status
-  onDataChange: () => void; // Callback to refresh data in parent
+  onDataChange: () => void; // Callback to refresh data in parent (can likely be removed)
 }
 
 export default function AdminSelectionViewer({ selectedItems, onDataChange }: AdminSelectionViewerProps) {
   const { toast } = useToast();
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null); // State to track loading item
 
   const handleRevert = async (item: GiftItem) => {
+    if (loadingItemId) return; // Prevent multiple actions
     if (!item.selectedBy) return; // Should always have selectedBy, but check anyway
+
     if (confirm(`Tem certeza que deseja reverter a seleção de "${item.name}" por ${item.selectedBy}? O item voltará a ficar disponível.`)) {
+      setLoadingItemId(item.id); // Set loading state for this item
       try {
         await revertSelection(item.id);
+
+        // Trigger revalidation
+        await revalidateAdminPage();
+        await revalidateHomePage();
+
         toast({ title: "Sucesso!", description: `Seleção do item "${item.name}" revertida.` });
-        onDataChange(); // Refresh parent data
+        onDataChange(); // Keep for potential immediate UI updates if needed
       } catch (error) {
         console.error("Error reverting selection:", error);
         toast({ title: "Erro!", description: `Falha ao reverter a seleção do item "${item.name}".`, variant: "destructive" });
+      } finally {
+        setLoadingItemId(null); // Clear loading state
       }
     }
   };
@@ -58,7 +71,7 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
               </TableRow>
             ) : (
               selectedItems.map((item) => (
-                <TableRow key={item.id}>
+                <TableRow key={item.id} className={loadingItemId === item.id ? 'opacity-50' : ''}>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell>{item.selectedBy || 'Desconhecido'}</TableCell>
                   <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
@@ -75,8 +88,14 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
                       onClick={() => handleRevert(item)}
                       title="Reverter Seleção"
                       className="border-orange-500 text-orange-600 hover:bg-orange-500/10"
+                      disabled={loadingItemId === item.id} // Disable button while loading this item
                     >
-                      <RotateCcw className="mr-1 h-4 w-4" /> Reverter
+                       {loadingItemId === item.id ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                       ) : (
+                          <RotateCcw className="mr-1 h-4 w-4" />
+                       )}
+                       Reverter
                     </Button>
                   </TableCell>
                 </TableRow>
