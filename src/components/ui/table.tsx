@@ -54,18 +54,18 @@ TableFooter.displayName = "TableFooter"
 const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
->(({ className, children, ...props }, ref) => (
-  <tr
+>(({ className, children, ...props }, ref) => {
+  // Ensure no leading/trailing whitespace around children
+  return (
+    <tr
     ref={ref}
     className={cn(
       "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
       className
     )}
     {...props}
-  >
-    {children}
-  </tr>
-));
+  >{children}</tr>
+)});
 TableRow.displayName = "TableRow"
 
 const TableHead = React.forwardRef<
@@ -79,9 +79,7 @@ const TableHead = React.forwardRef<
       className
     )}
     {...props}
-  >
-    {children}
-  </th>
+  >{children}</th>
 ));
 TableHead.displayName = "TableHead"
 
@@ -93,9 +91,7 @@ const TableCell = React.forwardRef<
     ref={ref}
     className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
     {...props}
-  >
-    {children}
-  </td>
+  >{children}</td>
 ));
 TableCell.displayName = "TableCell"
 
@@ -107,9 +103,7 @@ const TableCaption = React.forwardRef<
     ref={ref}
     className={cn("mt-4 text-sm text-muted-foreground", className)}
     {...props}
-  >
-    {children}
-  </caption>
+  >{children}</caption>
 ));
 TableCaption.displayName = "TableCaption"
 
