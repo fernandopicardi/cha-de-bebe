@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -89,5 +88,3 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
     </div>
   );
 }
-
-    
