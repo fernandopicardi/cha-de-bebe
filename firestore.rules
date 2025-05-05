@@ -3,39 +3,36 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Allow public read access to settings
-    match /settings/main {
+    // Settings: Public read, admin write
+    match /settings/{settingId} {
       allow read: if true;
-      // WARNING: Allowing any write for now, secure this later with admin auth
-      // This allows the admin panel (without Firebase Auth) and potentially other
-      // functions to modify settings.
-      allow write: if true; // TODO: Secure this rule (e.g., if request.auth.uid in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.roles)
+      // Allow write only if the user is authenticated and is an admin
+      allow write: if request.auth != null && isAdmin();
     }
 
-    // Allow public read access to gifts
+    // Gifts: Public read, anyone can create (add suggestion), admin can update/delete
     match /gifts/{giftId} {
       allow read: if true;
+      // Allow creating a new gift document (for suggestions/selections) by anyone
+      allow create: if true;
+      // Allow update/delete only if the user is authenticated and is an admin
+      allow update, delete: if request.auth != null && isAdmin();
+    }
 
-      // Allow anyone to create a new gift (for suggestions)
-      // Basic validation: Ensure name exists, status is 'selected', and selectedBy is set.
-      allow create: if request.resource.data.name != null &&
-                       request.resource.data.status == 'selected' &&
-                       request.resource.data.selectedBy != null &&
-                       request.resource.data.category == 'Outros'; // Ensure suggestions are categorized correctly
+    // Function to check if the authenticated user is one of the admins
+    function isAdmin() {
+      // Check if the user is authenticated and their UID is in the admin list
+      return request.auth != null && request.auth.uid in [
+        // Replace with actual Admin User UIDs from Firebase Authentication
+        'JoO9fy5roDY6FTtqajp1UG8aYzS2', // Example UID for fernandopicardi@gmail.com (REPLACE WITH ACTUAL UID)
+        'VnCKbFH5nrYijsUda0fhK3HdwSF2'  // Example UID for naiaralofgren@gmail.com (REPLACE WITH ACTUAL UID)
+        // Add other admin UIDs here if needed
+      ];
+    }
 
-      // WARNING: Allowing most updates for now, secure this later with admin auth
-      // This allows selecting items, suggesting items (implicitly via create),
-      // reverting selections/not_needed status by anyone, and admin updates.
-      allow update: if true; // TODO: Secure this rule (allow specific state transitions publicly, restrict others to admins)
-                       // Example of more secure public update rule:
-                       // allow update: if (resource.data.status == 'available' && request.resource.data.status == 'selected' && request.resource.data.selectedBy != null) || // Selecting available
-                       //                 (resource.data.status == 'selected' && request.resource.data.status == 'available' && request.auth != null) || // Admin Reverting selection
-                       //                 (resource.data.status == 'not_needed' && request.resource.data.status == 'available' && request.auth != null) || // Admin Reverting not_needed
-                       //                 (resource.data.status == 'available' && request.resource.data.status == 'not_needed' && request.auth != null); // Admin Marking as not needed
-
-      // WARNING: Allowing deletion for now, secure this later with admin auth
-      // This allows anyone to delete gift items.
-      allow delete: if true; // TODO: Secure this rule (e.g., if request.auth.uid in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.roles)
+    // Deny writes to any other collections by default
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
