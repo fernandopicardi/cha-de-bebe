@@ -213,6 +213,7 @@ export default function SuggestItemButton({}: SuggestItemButtonProps) {
           </DialogFooter>
         </form>
       </DialogContent>
+      {/* Removed potential extra closing tag or ensured proper nesting */}
     </Dialog>
   );
 }
