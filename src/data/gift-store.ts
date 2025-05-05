@@ -1,4 +1,3 @@
-// src/data/gift-store.ts
 "use server";
 
 /*
@@ -43,7 +42,7 @@ service cloud.firestore {
     // Admin check function (Requires Firebase Authentication)
     // Make sure the UIDs here are correct and correspond to authenticated admin users.
     function isAdmin() {
-      return request.auth != null && request.auth.uid in ['ADMIN_UID_1', 'ADMIN_UID_2']; // Replace with actual Admin UIDs
+      return request.auth != null && request.auth.uid in ['JoO9fy5roDY6FTtqajp1UG8aYzS2', 'VnCKbFH5nrYijsUda0fhK3HdwSF2']; // Replace with actual Admin UIDs
     }
   }
 }
@@ -55,7 +54,6 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   setDoc,
   addDoc,
   updateDoc,
@@ -67,6 +65,7 @@ import {
   serverTimestamp, // Use serverTimestamp for createdAt consistency
   DocumentReference, // Import type
   FirestoreError, // Import type
+  getDocs
 } from "firebase/firestore";
 import { db } from "@/firebase/config"; // Import Firestore instance
 
@@ -203,89 +202,78 @@ const forceRevalidation = () => {
 
 /**
  * Fetches event settings from Firestore. Initializes with defaults if not found.
- * Removed React cache wrapper.
  */
-export const getEventSettings = (async (): Promise<EventSettings> => {
-  const settingsPath = settingsDocRef.path; // Get the path for logging
-  console.log(`Firestore: Attempting to fetch event settings from path: ${settingsPath}`);
-  try {
-    const docSnap = await getDoc(settingsDocRef);
-    if (docSnap.exists()) {
-      console.log(`Firestore: Event settings found at ${settingsPath}.`);
-      // Ensure all default fields exist in the fetched data
-      const fetchedData = docSnap.data();
-      const completeSettings = { ...defaultEventSettings, ...fetchedData };
-      return completeSettings;
-    } else {
-      console.warn(`Firestore: Settings document '${settingsPath}' does not exist. Returning defaults. Consider initializing it manually or via admin panel if needed.`);
-      // Avoid automatic writes in a read function for safety.
-      // Initialization should ideally be a separate process or handled by an admin.
-      // await setDoc(settingsDocRef, defaultEventSettings); // Removed initialization from read function
+export const getEventSettings = async (): Promise<EventSettings> => {
+    const settingsPath = settingsDocRef.path; // Get the path for logging
+    console.log(`Firestore: Attempting to fetch event settings from path: ${settingsPath}`);
+    try {
+      const docSnap = await getDoc(settingsDocRef);
+      if (docSnap.exists()) {
+        console.log(`Firestore: Event settings found at ${settingsPath}.`);
+        // Ensure all default fields exist in the fetched data
+        const fetchedData = docSnap.data();
+        const completeSettings = { ...defaultEventSettings, ...fetchedData };
+        return completeSettings;
+      } else {
+        console.warn(`Firestore: Settings document '${settingsPath}' does not exist. Returning defaults. Consider initializing it manually or via admin panel if needed.`);
+        return defaultEventSettings;
+      }
+    } catch (error) {
+      console.error(`Firestore: Error fetching event settings from ${settingsPath}:`, error);
+      // Check if error is permissions related and provide more specific feedback
+       if ((error as FirestoreError)?.code === 'permission-denied') {
+          console.error(`Firestore: PERMISSION DENIED fetching event settings from ${settingsPath}.`);
+          console.error("Firestore Rules Check: Ensure the rule 'allow read: if true;' is correctly deployed for the path 'settings/main' in your Firebase Console.");
+       }
+      // Return defaults on error for resilience, but the permission issue needs fixing in Firebase.
       return defaultEventSettings;
     }
-  } catch (error) {
-    console.error(`Firestore: Error fetching event settings from ${settingsPath}:`, error);
-    // Check if error is permissions related and provide more specific feedback
-     if ((error as FirestoreError)?.code === 'permission-denied') {
-        console.error(`Firestore: PERMISSION DENIED fetching event settings from ${settingsPath}.`);
-        console.error("Firestore Rules Check: Ensure the rule 'allow read: if true;' is correctly deployed for the path 'settings/main' in your Firebase Console.");
-     }
-    // Return defaults on error for resilience, but the permission issue needs fixing in Firebase.
-    return defaultEventSettings;
-  }
-}); // Removed cache wrapper
+  };
 
 /**
  * Fetches all gift items from Firestore, ordered by creation time.
- * Initializes with defaults if the collection is empty.
- * Removed React cache wrapper.
  */
-export const getGifts = (async (): Promise<GiftItem[]> => {
-  console.log("Firestore: Fetching gifts...");
-  try {
-    // Order by name as a secondary sort criteria after createdAt might be useful
-    const q = query(giftsCollection, orderBy("createdAt", "desc"), orderBy("name"));
-    const querySnapshot = await getDocs(q);
+export const getGifts = async (): Promise<GiftItem[]> => {
+    console.log("Firestore: Fetching gifts...");
+    try {
+        const q = query(giftsCollection, orderBy("createdAt", "desc"), orderBy("name"));
+        const querySnapshot = await getDocs(q);
 
-    if (querySnapshot.empty) {
-      console.log("Firestore: Gifts collection empty, attempting to initialize defaults.");
-       // Let's try initializing defaults here if collection is truly empty.
-       // This should only run once. Ensure Firestore rules allow admin/server writes.
-       try {
-          const batch = writeBatch(db);
-          defaultGiftItems.forEach((item) => {
-            const docRef = doc(giftsCollection); // Auto-generate ID
-            // Use serverTimestamp() for createdAt
-            batch.set(docRef, { ...item, createdAt: serverTimestamp() });
-          });
-          await batch.commit();
-          console.log("Firestore: Default gifts added.");
-          // Re-fetch after adding defaults
-          const newSnapshot = await getDocs(q);
-          const gifts = newSnapshot.docs.map(giftFromDoc);
-          console.log(`Firestore: Fetched ${gifts.length} gifts after initialization.`);
-          return gifts;
-       } catch (initError) {
-          console.error("Firestore: Error initializing default gifts:", initError);
-           if ((initError as FirestoreError)?.code === 'permission-denied') {
-               console.error("Firestore: PERMISSION DENIED initializing default gifts. Check Firestore rules allow create/write (likely admin only).");
-           }
-          // If initialization fails, return empty array
-          return [];
-       }
-    } else {
-        const gifts = querySnapshot.docs.map(giftFromDoc);
-        console.log(`Firestore: Fetched ${gifts.length} gifts.`);
-        return gifts;
+        if (querySnapshot.empty) {
+            console.log("Firestore: Gifts collection empty, attempting to initialize defaults.");
+            try {
+                const batch = writeBatch(db);
+                defaultGiftItems.forEach((item) => {
+                    const docRef = doc(giftsCollection);
+                    batch.set(docRef, { ...item, createdAt: serverTimestamp() });
+                });
+                await batch.commit();
+                console.log("Firestore: Default gifts added.");
+
+                const newSnapshot = await getDocs(q);
+                const gifts = newSnapshot.docs.map(giftFromDoc);
+                console.log(`Firestore: Fetched ${gifts.length} gifts after initialization.`);
+                return gifts;
+            } catch (initError) {
+                console.error("Firestore: Error initializing default gifts:", initError);
+                 if ((initError as FirestoreError)?.code === 'permission-denied') {
+                    console.error("Firestore: PERMISSION DENIED initializing default gifts. Check Firestore rules allow create/write (likely admin only).");
+                 }
+                return [];
+            }
+        } else {
+            const gifts = querySnapshot.docs.map(giftFromDoc);
+            console.log(`Firestore: Fetched ${gifts.length} gifts.`);
+            return gifts;
+        }
+    } catch (error) {
+        console.error("Firestore: Error fetching gifts:", error);
+         if ((error as FirestoreError)?.code === 'permission-denied') {
+            console.error("Firestore: PERMISSION DENIED fetching gifts. Check Firestore rules allow read on the 'gifts' collection.");
+         }
+        return [];
     }
-  } catch (error) {
-    console.error("Firestore: Error fetching gifts:", error);
-    if ((error as FirestoreError)?.code === 'permission-denied') {
-        console.error("Firestore: PERMISSION DENIED fetching gifts. Check Firestore rules allow read on the 'gifts' collection.");
-     }
-    return []; // Return empty array on error
-  }
-}); // Removed cache wrapper
+};
 
 /**
  * Updates event settings in Firestore.
@@ -651,7 +639,7 @@ export async function deleteGift(itemId: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error(`Firestore: Error deleting gift ${itemId}:`, error);
-    if ((error as FirestoreError)?.code === 'permission-denied') {
+     if ((error as FirestoreError)?.code === 'permission-denied') {
         console.error(`Firestore: PERMISSION DENIED deleting gift ${itemId}. Check Firestore rules allow admin delete.`);
      }
     return false;
@@ -660,82 +648,80 @@ export async function deleteGift(itemId: string): Promise<boolean> {
 
 /**
  * Exports gift data to a CSV string.
- * Fetches fresh data from Firestore before exporting.
  */
 export async function exportGiftsToCSV(): Promise<string> {
-  console.log("Firestore: Exporting gifts to CSV...");
-  try {
-    const currentGifts = await getGifts(); // Fetch latest data
+    console.log("Firestore: Exporting gifts to CSV...");
+    try {
+        const currentGifts = await getGifts();
 
-    const headers = [
-      "ID",
-      "Nome",
-      "Descrição",
-      "Categoria",
-      "Status",
-      "Selecionado Por",
-      "Data Seleção",
-      "Data Criação",
-    ];
+        const headers = [
+            "ID",
+            "Nome",
+            "Descrição",
+            "Categoria",
+            "Status",
+            "Selecionado Por",
+            "Data Seleção",
+            "Data Criação",
+        ];
 
-    const rows = currentGifts.map((item) => {
-        let selectionDateStr = "";
-        if (item.selectionDate) {
-            try {
-                const date = item.selectionDate instanceof Timestamp
-                    ? item.selectionDate.toDate()
-                    : new Date(item.selectionDate);
-                 // Check if date is valid before formatting
-                 if (!isNaN(date.getTime())) {
-                   selectionDateStr = date.toLocaleString("pt-BR", {
-                       dateStyle: "short",
-                       timeStyle: "short",
-                   });
-                 } else {
-                    console.warn("Invalid selection date encountered during CSV export:", item.selectionDate);
-                 }
-            } catch (e) {
-                console.warn("Could not parse selection date for CSV:", item.selectionDate, e);
+        const rows = currentGifts.map((item) => {
+            let selectionDateStr = "";
+            if (item.selectionDate) {
+                try {
+                    const date = item.selectionDate instanceof Timestamp
+                        ? item.selectionDate.toDate()
+                        : new Date(item.selectionDate);
+                     // Check if date is valid before formatting
+                     if (!isNaN(date.getTime())) {
+                       selectionDateStr = date.toLocaleString("pt-BR", {
+                           dateStyle: "short",
+                           timeStyle: "short",
+                       });
+                     } else {
+                        console.warn("Invalid selection date encountered during CSV export:", item.selectionDate);
+                     }
+                } catch (e) {
+                    console.warn("Could not parse selection date for CSV:", item.selectionDate, e);
+                }
             }
-        }
-        let createdAtStr = "";
-         if (item.createdAt) {
-            try {
-                 const date = item.createdAt instanceof Timestamp
-                    ? item.createdAt.toDate()
-                    : new Date(item.createdAt);
-                 // Check if date is valid before formatting
-                 if (!isNaN(date.getTime())) {
-                    createdAtStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-                 } else {
-                    console.warn("Invalid creation date encountered during CSV export:", item.createdAt);
-                 }
-            } catch (e) {
-                console.warn("Could not parse creation date for CSV:", item.createdAt, e);
+            let createdAtStr = "";
+             if (item.createdAt) {
+                try {
+                     const date = item.createdAt instanceof Timestamp
+                        ? item.createdAt.toDate()
+                        : new Date(item.createdAt);
+                     // Check if date is valid before formatting
+                     if (!isNaN(date.getTime())) {
+                        createdAtStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+                     } else {
+                        console.warn("Invalid creation date encountered during CSV export:", item.createdAt);
+                     }
+                } catch (e) {
+                    console.warn("Could not parse creation date for CSV:", item.createdAt, e);
+                }
             }
-        }
 
 
-        return [
-            item.id,
-            item.name,
-            item.description || "",
-            item.category,
-            item.status,
-            item.selectedBy || "",
-            selectionDateStr,
-            createdAtStr,
-        ]
-        .map((value) => `"${String(value).replace(/"/g, '""')}"`) // Escape quotes
-        .join(",");
-    });
+            return [
+                item.id,
+                item.name,
+                item.description || "",
+                item.category,
+                item.status,
+                item.selectedBy || "",
+                selectionDateStr,
+                createdAtStr,
+            ]
+            .map((value) => `"${String(value).replace(/"/g, '""')}"`) // Escape quotes
+            .join(",");
+        });
 
 
-    console.log("Firestore: CSV export generated successfully.");
-    return [headers.join(","), ...rows].join("\n");
-  } catch (error) {
-    console.error("Firestore: Error exporting gifts to CSV:", error);
-    throw error;
-  }
+        console.log("Firestore: CSV export generated successfully.");
+        return [headers.join(","), ...rows].join("\n");
+    } catch (error) {
+        console.error("Firestore: Error exporting gifts to CSV:", error);
+        throw error;
+    }
 }
-

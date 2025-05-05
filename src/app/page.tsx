@@ -1,3 +1,6 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image"; // Import next/image
 import { Baby, CalendarDays, Gift, MapPin, LogIn } from "lucide-react";
@@ -13,57 +16,81 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftList from "@/components/gift-list";
 import AddToCalendarButton from "@/components/add-to-calendar-button";
 import SuggestItemButton from "@/components/suggest-item-button";
-import { getEventSettings, getGifts } from "@/data/gift-store"; // Import getGifts
+import { getEventSettings, getGifts, type EventSettings } from "@/data/gift-store"; // Import getGifts
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Loader2 } from "lucide-react";
 
-// Force dynamic rendering to ensure data is fetched on each request
-// export const dynamic = 'force-dynamic'; // Commented out - may not be necessary if cache is removed from data functions
 
-export default async function Home() {
-  // Fetch the latest data directly on the server component on each request
-  // Removed React cache from getEventSettings and getGifts, so they should fetch fresh data
-  const eventDetails = await getEventSettings();
-  const gifts = await getGifts();
+export default function Home() {
+  const [eventDetails, setEventDetails] = useState<EventSettings | null>(null);
+  const [gifts, setGifts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  console.log("Home Page: Fetched gifts count:", gifts.length); // Log fetched gifts count
-  console.log("Home Page: Fetched event settings:", eventDetails); // Log fetched settings
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const eventData = await getEventSettings();
+        const giftsData = await getGifts();
+        setEventDetails(eventData);
+        setGifts(giftsData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        // Handle error appropriately
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
 
   // Formatting Date and Time
   let formattedDate = "Data inválida";
   let formattedTime = "Hora inválida";
-  try {
-    // Ensure time exists before attempting to parse
-    const timeString = eventDetails.time || "00:00"; // Default time if missing
-    const eventDate = new Date(`${eventDetails.date}T${timeString}:00`);
-    if (!isNaN(eventDate.getTime())) {
-      formattedDate = eventDate.toLocaleDateString("pt-BR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-      formattedTime = eventDate.toLocaleTimeString("pt-BR", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-    } else {
-      // Keep console.error for important parsing failures
-      console.error(
-        "Failed to parse event date/time:",
-        eventDetails.date,
-        eventDetails.time,
-      );
+
+  if (eventDetails) {
+    try {
+      const timeString = eventDetails.time || "00:00";
+      const eventDate = new Date(`${eventDetails.date}T${timeString}:00`);
+
+      if (!isNaN(eventDate.getTime())) {
+        formattedDate = eventDate.toLocaleDateString("pt-BR", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        formattedTime = eventDate.toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+      } else {
+        console.error(
+          "Failed to parse event date/time:",
+          eventDetails.date,
+          eventDetails.time,
+        );
+      }
+    } catch (e) {
+      console.error("Error formatting date/time:", e);
     }
-  } catch (e) {
-    // Keep console.error for important formatting errors
-    console.error("Error formatting date/time:", e);
   }
 
-  // Construct the dynamic title including baby name if available
-  const pageTitle = eventDetails.babyName
-    ? `${eventDetails.title} ${eventDetails.babyName}!` // Append baby name if exists and not null/empty
-    : eventDetails.title; // Use only the base title otherwise
+
+  const pageTitle = eventDetails?.babyName
+    ? `${eventDetails.title} ${eventDetails.babyName}!`
+    : eventDetails?.title || "Chá de Bebê";
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+        Carregando...
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
@@ -81,7 +108,7 @@ export default async function Home() {
       {/* Header Text - Adjust padding */}
       <header className="text-center space-y-4 pt-16">
         {/* Conditionally render Image or Baby Icon */}
-        {eventDetails.headerImageUrl ? (
+        {eventDetails?.headerImageUrl ? (
           // Increased size (w-32 h-32) and margin-bottom (mb-6)
           <div className="relative mx-auto w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden shadow-lg mb-6 border-4 border-secondary">
             <Image
@@ -103,7 +130,7 @@ export default async function Home() {
           {pageTitle}
         </h1>
         <p className="text-lg text-muted-foreground px-4 md:px-8">
-          {eventDetails.welcomeMessage ||
+          {eventDetails?.welcomeMessage ||
             "Sua presença é o nosso maior presente! Esta lista é um guia carinhoso para quem desejar nos presentear, mas sinta-se totalmente à vontade, o importante é celebrar conosco!"}
         </p>
       </header>
@@ -124,7 +151,7 @@ export default async function Home() {
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-accent-foreground" />
             <span>
-              {eventDetails.location} - {eventDetails.address}
+              {eventDetails?.location} - {eventDetails?.address}
             </span>
           </div>
           <AddToCalendarButton eventDetails={eventDetails} />
