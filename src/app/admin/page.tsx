@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -23,14 +24,14 @@ import {
   ClipboardList, // Icon for Confirmations list
 } from "lucide-react";
 import {
-  getGifts, // Import getGifts
+  getGifts,
   getEventSettings,
   exportGiftsToCSV,
-  getConfirmations, // Import function to get confirmations
+  getConfirmations,
   type GiftItem,
   type EventSettings,
-  type Confirmation, // Import Confirmation type
-} from "@/data/gift-store"; // Updated import path
+  type Confirmation,
+} from "@/data/gift-store"; // Ensure correct path
 import AdminItemManagementTable from "@/components/admin/item-management-table";
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
 import AdminEventSettingsForm from "@/components/admin/event-settings-form";
@@ -81,7 +82,7 @@ export default function AdminPage() {
           console.log("AdminPage: Fetched Event Settings:", settingsData ? "Data received" : "Null/Undefined");
           console.log(`AdminPage: Fetched ${confirmationsData?.length ?? 0} confirmations.`); // Log confirmations count
           // Log raw gifts data immediately after fetch
-           console.log("AdminPage: Raw Gifts Data from getGifts:", JSON.stringify(giftsData?.slice(0, 5) ?? [], null, 2));
+           console.log("AdminPage: Raw Gifts Data from getGifts:", giftsData ? giftsData.length : 'null');
 
           // Update state with fetched data, handling potential null/undefined
           // Log details of the first few gifts to verify data structure before setting state
@@ -236,9 +237,7 @@ export default function AdminPage() {
   }
 
   // Render the admin dashboard if authenticated and data loaded
-  // Add log just before render to check final state being passed to child components
-  console.log(`AdminPage: Rendering dashboard. Passing ${gifts.length} gifts to AdminItemManagementTable.`);
-  console.log(`AdminPage: Sample gifts being passed:`, JSON.stringify(gifts.slice(0, 5), null, 2));
+  console.log(`AdminPage: Rendering dashboard. Passing ${gifts.length} gifts.`);
   console.log(`AdminPage: Rendering dashboard. Passing ${confirmations.length} confirmations.`); // Log confirmations count before render
 
   return (
@@ -260,10 +259,11 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Main content grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left Column (Item Management) */}
-        <Card className="md:col-span-1 bg-card"> {/* Adjusted col-span */}
+      {/* Main content grid - Responsive: 1 column default, 2 columns on large screens */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+
+        {/* Column 1: Item Management - Takes full width on smaller screens */}
+        <Card className="lg:col-span-1 bg-card shadow-sm"> {/* Occupies one column on large screens */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gift /> Gerenciar Itens da Lista
@@ -273,41 +273,58 @@ export default function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-             {/* Pass gifts and refresh callback */}
-             {/* Ensure gifts are passed correctly */}
-             {/* Add key to force re-render when gifts change, aiding debugging */}
              <AdminItemManagementTable
               key={`item-table-${gifts.length}-${gifts[0]?.id || 'no-items'}`}
               gifts={gifts} // Pass the fetched gifts
-              onDataChange={refreshData} // Pass stable refresh callback
+              onDataChange={() => refreshData("item table change")} // More specific source
             />
           </CardContent>
         </Card>
 
-         {/* Right Column Top: Selections */}
-         <Card className="md:col-span-1 bg-card"> {/* Adjusted col-span */}
+        {/* Column 2: Contains Settings, Selections, Confirmations, Export */}
+        <div className="lg:col-span-1 space-y-6"> {/* Occupies one column on large screens */}
+
+          {/* Event Settings Card */}
+           <Card className="bg-card shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings /> Configurações do Evento
+              </CardTitle>
+              <CardDescription>
+                Atualizar detalhes do evento e mensagens personalizadas.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AdminEventSettingsForm
+                key={user ? `admin-settings-${eventSettings?.title || 'loading'}` : "no-settings"}
+                initialSettings={eventSettings}
+                onSave={() => refreshData("event settings save")} // More specific source
+                isLoading={isDataLoading}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Selection Viewer Card */}
+          <Card className="bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users /> Visualizar Seleções de Presentes
               </CardTitle>
               <CardDescription>
-                Ver quem selecionou quais itens e reverter seleções se
-                necessário.
+                Ver quem selecionou quais itens e reverter seleções.
               </CardDescription>
             </CardHeader>
             <CardContent>
-               {/* Filter gifts before passing */}
-               {/* Ensure selectedItems are passed correctly here */}
               <AdminSelectionViewer
-                key={`selection-viewer-${gifts.filter(g => g && g.status === 'selected').length}`} // Key based on selected items count
+                key={`selection-viewer-${gifts.filter(g => g && g.status === 'selected').length}`}
                 selectedItems={gifts.filter(g => g && g.status === 'selected')}
-                onDataChange={refreshData} // Pass stable refresh callback
+                onDataChange={() => refreshData("selection viewer change")} // More specific source
               />
             </CardContent>
           </Card>
 
-         {/* Left Column Bottom: Confirmations */}
-          <Card className="md:col-span-1 bg-card"> {/* Adjusted col-span */}
+          {/* Confirmations List Card */}
+          <Card className="bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ClipboardList /> Lista de Presença Confirmada
@@ -323,31 +340,8 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-
-        {/* Right Column Bottom (Settings, Export) */}
-        <div className="space-y-6 md:col-span-1"> {/* Adjusted col-span */}
-          <Card className="bg-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings /> Configurações do Evento
-              </CardTitle>
-              <CardDescription>
-                Atualizar detalhes do evento e mensagens personalizadas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Pass settings if available and stable refresh callback */}
-              {/* Pass isLoading to show a loader within the form itself */}
-              <AdminEventSettingsForm
-                key={user ? `admin-settings-${eventSettings?.title || 'loading'}` : "no-settings"} // Use user existence and maybe settings key for re-render
-                initialSettings={eventSettings} // Pass fetched settings
-                onSave={refreshData} // Pass refresh callback
-                isLoading={isDataLoading} // Pass loading state for internal loader
-              />
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card">
+          {/* Export Card */}
+          <Card className="bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileDown /> Exportar Seleções de Presentes
@@ -366,8 +360,11 @@ export default function AdminPage() {
               </Button>
             </CardContent>
           </Card>
-        </div>
-      </div>
+
+        </div> {/* End of Column 2 */}
+      </div> {/* End of main grid */}
     </div>
   );
 }
+
+    
