@@ -2,18 +2,18 @@
 "use client"; // This hook uses client-side state and effects
 
 import { useState, useEffect, useCallback } from 'react';
-import { getAuth, onAuthStateChanged, signOut, User, AuthError, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import {
+    getAuth,
+    onAuthStateChanged,
+    signOut,
+    signInWithEmailAndPassword, // Import email/password sign in
+    User,
+    AuthError,
+    initializeAuth,
+    // Import persistence if needed, e.g., indexedDBLocalPersistence for web
+    // indexedDBLocalPersistence
+ } from 'firebase/auth';
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
-
-// Import db only if needed for other operations, app is initialized locally
-// import { db } from '@/firebase/config';
-
-interface AuthState {
-  user: User | null;
-  loading: boolean;
-  error: string | null;
-  logout: () => Promise<void>;
-}
 
 // Firebase config - needed here to initialize app if not already done
 const firebaseConfig = {
@@ -37,11 +37,19 @@ if (!getApps().length) {
 }
 
 // Initialize Firebase Auth specifically for the client
-// Use initializeAuth for client-side persistence handling if needed, otherwise getAuth is fine
+// Adjust persistence as needed for web (e.g., indexedDBLocalPersistence)
 // const auth = initializeAuth(app, {
-//     persistence: getReactNativePersistence(AsyncStorage) // Example for React Native, adjust for web if necessary (indexedDBLocalPersistence)
+//     persistence: indexedDBLocalPersistence // Example for web
 // });
 const auth = getAuth(app); // Standard web initialization
+
+interface AuthState {
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+  logout: () => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<User | null>; // Add login function type
+}
 
 export default function useAuth(): AuthState {
   const [user, setUser] = useState<User | null>(null);
@@ -85,12 +93,40 @@ export default function useAuth(): AuthState {
     } catch (err: any) {
       console.error("useAuth: Error during logout:", err);
       setError(err.message || "Erro ao fazer logout.");
-      // Keep user state as is? Or set to null anyway? Setting to null is safer.
-      setUser(null);
+      setUser(null); // Ensure user is null on error
     } finally {
         setLoading(false); // Stop loading after logout attempt
     }
   }, []);
 
-  return { user, loading, error, logout };
+  // Function to handle email/password login
+  const loginWithEmail = useCallback(async (email: string, password: string): Promise<User | null> => {
+    console.log("useAuth: Attempting login with email:", email);
+    setLoading(true);
+    setError(null);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log("useAuth: Email/Password login successful. User:", userCredential.user.uid);
+      // No need to setUser here, onAuthStateChanged will handle it
+      return userCredential.user;
+    } catch (err: any) {
+        console.error("useAuth: Error during email/password login:", err);
+        // Set specific error messages based on Firebase error codes
+        let errorMessage = "Falha no login. Verifique suas credenciais ou tente novamente.";
+        if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+            errorMessage = "E-mail ou senha inválidos.";
+        } else if (err.code === 'auth/invalid-email') {
+            errorMessage = "Formato de e-mail inválido.";
+        } else if (err.code === 'auth/too-many-requests') {
+            errorMessage = "Muitas tentativas de login. Tente novamente mais tarde.";
+        }
+        setError(errorMessage);
+        setUser(null); // Ensure user is null on login failure
+        throw err; // Re-throw the error so the calling component knows it failed
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { user, loading, error, logout, loginWithEmail };
 }

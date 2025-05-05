@@ -1,8 +1,9 @@
+
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Admin - Chá de Bebê",
-  description: "Painel de administração da lista de presentes.",
+  title: "Login Admin - Chá de Bebê", // Changed title for login context
+  description: "Acesso ao painel de administração da lista de presentes.",
 };
 
 export default function AdminLayout({
@@ -12,6 +13,7 @@ export default function AdminLayout({
 }) {
   return (
     // Basic layout, can be enhanced with admin-specific navigation if needed
-    <div>{children}</div>
+    // Ensure it doesn't add extra wrappers that might interfere with child page layout
+    <>{children}</>
   );
 }
