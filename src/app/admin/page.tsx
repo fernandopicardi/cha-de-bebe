@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -26,8 +27,7 @@ import {
   exportGiftsToCSV,
   type GiftItem,
   type EventSettings,
-  initializeFirestoreData, // Ensure this is imported if used
-} from "@/data/gift-store";
+} from "@/data/gift-store"; // Updated import path
 import AdminItemManagementTable from "@/components/admin/item-management-table";
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
 import AdminEventSettingsForm from "@/components/admin/event-settings-form";
@@ -35,19 +35,20 @@ import useAuth from "@/hooks/useAuth"; // Import useAuth hook
 import { ThemeToggle } from "@/components/theme-toggle"; // Import ThemeToggle
 import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
 
+
 export default function AdminPage() {
   const [gifts, setGifts] = useState<GiftItem[]>([]);
   const [eventSettings, setEventSettings] = useState<EventSettings | null>(
     null,
   );
-  const [isDataLoading, setIsDataLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null); // State for errors
+  const [isDataLoading, setIsDataLoading] = useState(true); // Separate loading state for page data
+  const [error, setError] = useState<string | null>(null); // State for page data errors
 
   // Use the custom hook for authentication
   const { user, loading: authLoading, error: authError, logout } = useAuth();
 
-  // Combine loading states
-  const isLoading = authLoading || isDataLoading;
+  // Combine loading states: page is loading if auth is checking OR if data is fetching AFTER auth is confirmed
+  const isLoading = authLoading || (user && isDataLoading);
 
   // Fetch data function using useCallback for stability
   const refreshData = useCallback(async (source?: string) => {
@@ -55,23 +56,28 @@ export default function AdminPage() {
     setIsDataLoading(true);
     setError(null); // Clear previous errors
 
-    // Initialize Firestore data if needed (optional, consider if necessary on admin load)
-    // await initializeFirestoreData(); // Call initialization if needed
-
     try {
-      const giftsPromise = getGifts();
-      const settingsPromise = getEventSettings();
+      // Only fetch data if the user is authenticated
+      if (user) {
+          const giftsPromise = getGifts();
+          const settingsPromise = getEventSettings();
 
-      const [giftsData, settingsData] = await Promise.all([
-        giftsPromise,
-        settingsPromise,
-      ]);
+          const [giftsData, settingsData] = await Promise.all([
+            giftsPromise,
+            settingsPromise,
+          ]);
 
-      console.log(`AdminPage: Fetched ${giftsData.length} gifts.`);
-      console.log("AdminPage: Fetched Event Settings:", !!settingsData);
+          console.log(`AdminPage: Fetched ${giftsData.length} gifts.`);
+          console.log("AdminPage: Fetched Event Settings:", !!settingsData);
 
-      setGifts(giftsData);
-      setEventSettings(settingsData);
+          setGifts(giftsData);
+          setEventSettings(settingsData);
+      } else {
+          console.log("AdminPage: Skipping data fetch, user not authenticated.");
+          // Clear data if user becomes unauthenticated during refresh
+          setGifts([]);
+          setEventSettings(null);
+      }
     } catch (err: any) {
       console.error("AdminPage: Error fetching data:", err);
       setError(`Erro ao carregar dados: ${err.message || "Erro desconhecido"}`);
@@ -82,19 +88,23 @@ export default function AdminPage() {
       setIsDataLoading(false);
         console.log("AdminPage: Data fetching complete.");
     }
-  }, []); // No dependencies needed as it doesn't rely on component state/props
+  // Dependency: user object. Refetch if user changes.
+  }, [user]);
 
   // Fetch data on mount and when authentication status changes (user object changes)
   useEffect(() => {
-    if (user) {
-        console.log("AdminPage: User authenticated, fetching data.");
-      refreshData("useEffect[user]");
-    } else if (!authLoading) {
-       console.log("AdminPage: User not authenticated or finished loading auth state.");
-        // Optionally clear data or handle unauthenticated state if needed
-        // setGifts([]);
-        // setEventSettings(null);
-        // setIsDataLoading(false); // Stop data loading if not authenticated
+    // Only trigger refreshData if user is definitively authenticated (not null)
+    // and auth is no longer loading.
+    if (user && !authLoading) {
+      console.log("AdminPage: User authenticated, fetching data.");
+      refreshData("useEffect[user, authLoading]");
+    } else if (!authLoading && !user) {
+      console.log("AdminPage: User not authenticated or auth check complete.");
+      // Clear data and loading state if user is not logged in after auth check
+      setGifts([]);
+      setEventSettings(null);
+      setIsDataLoading(false); // Ensure data loading stops if user isn't logged in
+      setError(null); // Clear any previous data errors
     }
     // Dependency array includes user and authLoading to refetch when auth state is confirmed
   }, [user, authLoading, refreshData]);
@@ -126,13 +136,13 @@ export default function AdminPage() {
   };
 
 
-  // Show loading state while authenticating or fetching initial data
-  if (isLoading) {
+  // Show initial loading state while authenticating
+  if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
         <p className="text-lg text-muted-foreground">
-          {authLoading ? "Verificando acesso..." : "Carregando dados do painel..."}
+          Verificando acesso...
         </p>
         {/* Optional: Skeleton loading for the layout */}
         <div className="mt-8 w-full max-w-4xl space-y-6">
@@ -144,7 +154,7 @@ export default function AdminPage() {
     );
   }
 
-  // Handle Authentication Error or Unauthenticated User
+  // Handle Authentication Error or Unauthenticated User (after auth check)
   if (authError || !user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background">
@@ -165,8 +175,27 @@ export default function AdminPage() {
     );
   }
 
+  // Show data loading state *after* authentication is confirmed
+  if (isLoading) {
+     return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">
+          Carregando dados do painel...
+        </p>
+        {/* Skeleton loading for the layout */}
+        <div className="mt-8 w-full max-w-4xl space-y-6">
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+     )
+  }
+
+
   // Handle Data Loading Error after authentication
-  if (error) {
+  if (error && !isDataLoading) { // Show error only if data loading finished with an error
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
@@ -215,18 +244,11 @@ export default function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Check if gifts array exists before passing */}
-            {!isDataLoading && gifts ? (
-                <AdminItemManagementTable
-                  gifts={gifts}
-                  onDataChange={refreshData} // Pass stable refresh callback
-                />
-            ) : (
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                <p className="ml-2 text-muted-foreground">Carregando itens...</p>
-              </div>
-            )}
+            {/* Pass gifts and refresh callback, ensure revalidation happens on change */}
+            <AdminItemManagementTable
+              gifts={gifts} // Pass the fetched gifts
+              onDataChange={() => refreshData("itemManagementTable")} // Pass stable refresh callback
+            />
           </CardContent>
         </Card>
 
@@ -243,21 +265,12 @@ export default function AdminPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Ensure selectedItems are passed correctly here */}
-              {!isDataLoading && gifts ? (
-                <AdminSelectionViewer
-                  // Filter items safely, ensuring item and item.status exist
-                   selectedItems={gifts.filter(g => g && g.status === 'selected')}
-                  onDataChange={refreshData} // Pass stable refresh callback
-                />
-              ) : (
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  <p className="ml-2 text-muted-foreground">
-                    Carregando seleções...
-                  </p>
-                </div>
-              )}
+               {/* Filter items safely, ensuring item and item.status exist */}
+               {/* Ensure selectedItems are passed correctly here */}
+              <AdminSelectionViewer
+                selectedItems={gifts.filter(g => g && g.status === 'selected')}
+                onDataChange={() => refreshData("selectionViewer")} // Pass stable refresh callback
+              />
             </CardContent>
           </Card>
 
@@ -277,8 +290,8 @@ export default function AdminPage() {
               <AdminEventSettingsForm
                 key={user ? "admin-settings" : "no-settings"} // Use user existence for key
                 initialSettings={eventSettings} // Pass fetched settings
-                onSave={refreshData}
-                isLoading={isDataLoading} // Pass loading state
+                onSave={() => refreshData("eventSettingsForm")}
+                isLoading={isDataLoading} // Pass loading state for internal loader
               />
             </CardContent>
           </Card>
@@ -296,7 +309,7 @@ export default function AdminPage() {
               <Button
                 onClick={handleExport}
                 className="mt-4"
-                disabled={isDataLoading || !gifts || gifts.length === 0}
+                disabled={isDataLoading || !gifts || gifts.length === 0} // Disable if data is loading or no gifts
               >
                 Exportar CSV
               </Button>
