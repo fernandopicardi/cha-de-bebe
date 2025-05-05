@@ -155,11 +155,16 @@ export default function AdminItemManagementTable({
     handleDialogClose(); // Close dialog on success
   };
 
-  const handleError = (message: string, itemName: string) => {
-    console.error(message, itemName);
+  const handleError = (
+    operation: string,
+    itemName: string,
+    errorDetails?: any,
+  ) => {
+    // Log the specific error for debugging
+    console.error(`Error during ${operation} for "${itemName}":`, errorDetails);
     toast({
       title: "Erro!",
-      description: `${message} "${itemName}".`,
+      description: `Falha ao ${operation.toLowerCase()} o item "${itemName}". Verifique o console para mais detalhes.`,
       variant: "destructive",
     });
   };
@@ -179,6 +184,7 @@ export default function AdminItemManagementTable({
       return; // Prevent submission
     }
 
+    const operation = editingItem ? "atualizar" : "adicionar";
     try {
       if (editingItem) {
         // Update existing item - updateGift now handles revalidation
@@ -202,7 +208,8 @@ export default function AdminItemManagementTable({
         handleSuccess(`Item "${data.name}" adicionado.`); // Show toast
       }
     } catch (error) {
-      handleError(`Falha ao salvar o item`, data.name);
+      // Pass the error object to handleError for logging
+      handleError(operation, data.name, error);
     }
   };
 
@@ -220,7 +227,7 @@ export default function AdminItemManagementTable({
         await deleteGift(item.id);
         handleSuccess(`Item "${item.name}" excluído.`); // Show toast
       } catch (error) {
-        handleError(`Falha ao excluir o item`, item.name);
+        handleError("excluir", item.name, error);
       } finally {
         setActionLoading(null);
       }
@@ -247,7 +254,7 @@ export default function AdminItemManagementTable({
         await revertSelection(item.id);
         handleSuccess(`Item "${item.name}" revertido para disponível.`); // Show toast
       } catch (error) {
-        handleError(`Falha ao reverter o item`, item.name);
+        handleError("reverter", item.name, error);
       } finally {
         setActionLoading(null);
       }
@@ -269,7 +276,7 @@ export default function AdminItemManagementTable({
         await markGiftAsNotNeeded(item.id);
         handleSuccess(`Item "${item.name}" marcado como "Não Precisa".`); // Show toast
       } catch (error) {
-        handleError(`Falha ao marcar o item como "Não Precisa"`, item.name);
+        handleError('marcar como "Não Precisa"', item.name, error);
       } finally {
         setActionLoading(null);
       }
