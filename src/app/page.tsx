@@ -1,4 +1,5 @@
 
+
 import Link from 'next/link';
 import Image from 'next/image'; // Import next/image
 import { Baby, CalendarDays, Gift, MapPin, LogIn } from 'lucide-react';
@@ -8,11 +9,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import GiftList from '@/components/gift-list';
 import AddToCalendarButton from '@/components/add-to-calendar-button';
 import SuggestItemButton from '@/components/suggest-item-button';
-import { getEventSettings } from '@/data/gift-store';
+import { getEventSettings } from '@/data/gift-store'; // Import getEventSettings directly
 import { ThemeToggle } from '@/components/theme-toggle';
 
 
 export default async function Home() {
+   // Fetch the latest event settings directly on the server component
   const eventDetails = await getEventSettings();
 
    // Formatting Date and Time
@@ -37,9 +39,9 @@ export default async function Home() {
    }
 
    // Construct the dynamic title including baby name if available
-   const pageTitle = eventDetails.babyName
-      ? `${eventDetails.title} ${eventDetails.babyName}!` // Append baby name if exists
-      : eventDetails.title; // Use only the base title otherwise
+    const pageTitle = eventDetails.babyName
+       ? `${eventDetails.title} ${eventDetails.babyName}!` // Append baby name if exists and not null/empty
+       : eventDetails.title; // Use only the base title otherwise
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
@@ -68,7 +70,8 @@ export default async function Home() {
               fill // Use fill to cover the container
               style={{ objectFit: 'cover' }} // Ensure image covers the area
               priority // Prioritize loading the header image
-              data-ai-hint="baby shower theme picture"
+              sizes="(max-width: 768px) 50vw, 200px" // Provide sizes hint
+              data-ai-hint="baby celebration banner"
             />
           </div>
         ) : (
@@ -77,7 +80,7 @@ export default async function Home() {
 
         {/* Display dynamic title */}
         <h1 className="text-3xl md:text-4xl font-semibold text-primary">{pageTitle}</h1>
-        <p className="text-lg text-muted-foreground">{eventDetails.welcomeMessage}</p>
+        <p className="text-lg text-muted-foreground px-4 md:px-8">{eventDetails.welcomeMessage}</p>
       </header>
 
       <Card className="bg-card shadow-md rounded-lg overflow-hidden">
@@ -109,7 +112,7 @@ export default async function Home() {
 
         <Tabs defaultValue="all" className="w-full">
            {/* Increased bottom margin on tabs list */}
-          <TabsList className="w-full justify-start overflow-x-auto whitespace-nowrap pb-2 mb-4 md:mb-6">
+           <TabsList className="w-full grid grid-cols-2 sm:flex sm:justify-start sm:w-auto overflow-x-auto whitespace-nowrap pb-2 mb-4 md:mb-6">
             <TabsTrigger value="all" className="flex-shrink-0">Todos</TabsTrigger>
             <TabsTrigger value="available" className="flex-shrink-0">Disponíveis</TabsTrigger>
             <TabsTrigger value="selected" className="flex-shrink-0">Selecionados</TabsTrigger>
@@ -118,14 +121,12 @@ export default async function Home() {
 
            {/* Increased top margin on tabs content */}
           <TabsContent value="all" className="mt-6">
-             {/* Pass showSelectedByName based on context (e.g., always false for public view) */}
             <GiftList filterStatus="all" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
             <GiftList filterStatus="available" showSelectedByName={false} />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
-             {/* Pass showSelectedByName based on context */}
             <GiftList filterStatus="selected" showSelectedByName={false} />
           </TabsContent>
            <TabsContent value="not_needed" className="mt-6">
@@ -137,3 +138,4 @@ export default async function Home() {
     </div>
   );
 }
+

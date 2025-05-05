@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -47,6 +48,7 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
        setIsLoading(true);
        try {
          const settings = await getEventSettings();
+         console.log("Initial settings fetched:", settings); // Debug log
          setImagePreview(settings.headerImageUrl || null); // Set initial preview
          return {
              ...settings,
@@ -84,7 +86,7 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
           reader.onloadend = () => {
               const result = reader.result as string;
               setImagePreview(result);
-              setValue('headerImageUrl', result); // Store as data URI string
+              setValue('headerImageUrl', result); // Store as data URI string for saving
           };
            // Basic size validation (e.g., 5MB limit)
           if (headerImageFile.size > 5 * 1024 * 1024) {
@@ -94,20 +96,18 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
                   variant: "destructive"
               });
               setValue('headerImageFile', null); // Clear invalid file
+              setValue('headerImageUrl', watch('headerImageUrl')); // Keep existing URL if file is invalid
+              setImagePreview(watch('headerImageUrl')); // Keep existing preview
               return;
           }
           reader.readAsDataURL(headerImageFile);
-      } else if (headerImageFile === null) { // Handle removal by button click
-          // Check if the form currently holds an image URL (could be initial or previously saved)
-          const currentImageUrl = watch('headerImageUrl');
-          if (currentImageUrl) {
-              setImagePreview(null);
-              setValue('headerImageUrl', null); // Clear the URL in the form state
-          }
+      } else if (headerImageFile === null && imagePreview) { // Handle removal by button click only if there's a preview
+          setImagePreview(null);
+          setValue('headerImageUrl', null); // Clear the URL in the form state
       }
-      // Note: Don't reset preview if headerImageFile is undefined (initial load or no file selected)
+      // Note: Don't reset preview if headerImageFile is undefined (initial load or no file selected yet)
 
-   }, [headerImageFile, setValue, toast, watch]); // Added watch dependency
+   }, [headerImageFile, setValue, toast, watch, imagePreview]); // Added imagePreview to dependencies
 
    const removeImage = () => {
       setValue('headerImageFile', null); // Clear the file input value in RHF state
@@ -118,30 +118,33 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
     try {
       // Prepare data for saving (remove the temporary file object)
       // Ensure babyName is stored as null if empty string
-      const { headerImageFile, babyName, ...settingsToSave } = data;
+      const { headerImageFile, ...settingsToSave } = data; // Destructure headerImageFile out
       const finalSettings: Partial<EventSettings> = {
         ...settingsToSave,
-        babyName: babyName || null, // Store null if empty string
-        headerImageUrl: imagePreview, // Use the preview which holds the data URI or existing URL or null
+        babyName: settingsToSave.babyName || null, // Store null if empty string
+        headerImageUrl: imagePreview, // Use the preview state (which holds data URI or existing URL or null)
       };
+
+      console.log("Submitting data:", finalSettings); // Debug log before saving
 
       await updateEventSettings(finalSettings);
 
       toast({ title: "Sucesso!", description: "Detalhes do evento atualizados." });
 
-      // Re-fetch the latest settings and reset the form to reflect the saved state
+      // Re-fetch the latest settings AFTER successful save and reset the form
       try {
         const latestSettings = await getEventSettings();
+        console.log("Refetched settings after save:", latestSettings); // Debug log
+        // Reset form with fresh data, ensuring correct types
         reset({
-            ...latestSettings,
-            headerImageUrl: latestSettings.headerImageUrl || null, // Reset URL from latest data
-            headerImageFile: null, // Always reset file input
-            babyName: latestSettings.babyName || '', // Reset baby name
+          ...latestSettings,
+          headerImageUrl: latestSettings.headerImageUrl || null,
+          headerImageFile: null, // Always clear the file input field itself
+          babyName: latestSettings.babyName || '',
         });
-        setImagePreview(latestSettings.headerImageUrl || null); // Update preview too
+        setImagePreview(latestSettings.headerImageUrl || null); // Update preview based on the *actual* saved data
       } catch (fetchError) {
           console.error("Error re-fetching settings after save:", fetchError);
-          // Form won't reset to latest, but save was successful
           toast({ title: "Aviso", description: "Configurações salvas, mas houve um erro ao recarregar o formulário.", variant: "default" });
       }
 
@@ -184,6 +187,7 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
             {imagePreview && (
                <div className="relative w-24 h-24 border rounded-md overflow-hidden shadow-inner bg-muted/50">
                    <Image
+                       key={imagePreview} // Add key to force re-render on src change
                        src={imagePreview}
                        alt="Prévia da imagem do cabeçalho"
                        fill // Use fill instead of layout
@@ -192,15 +196,17 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
                        data-ai-hint="baby celebration banner"
                        onError={() => {
                          // Handle potential image loading errors (e.g., invalid data URI)
+                         console.error("Error loading image preview:", imagePreview.substring(0, 50) + "...");
                          toast({ title: "Erro", description: "Não foi possível carregar a prévia da imagem.", variant: "destructive" });
                          setImagePreview(null); // Clear broken preview
+                         setValue('headerImageUrl', null); // Clear URL in form state too
                        }}
                    />
                     <Button
                        type="button"
                        variant="destructive"
                        size="icon"
-                       className="absolute top-1 right-1 h-6 w-6 z-10 rounded-full" // Make round
+                       className="absolute top-1 right-1 h-6 w-6 z-10 rounded-full opacity-70 hover:opacity-100" // Make round and slightly transparent
                        onClick={removeImage}
                        title="Remover Imagem"
                        disabled={isSubmitting}
@@ -210,29 +216,25 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
                </div>
             )}
             <div className="flex-1">
-                <Controller
-                    name="headerImageFile"
-                    control={control}
-                    render={({ field: { onChange, value, ref, ...fieldProps } }) => ( // Destructure onChange etc.
-                        <Input
-                            id="headerImageFile"
-                            type="file"
-                            accept="image/png, image/jpeg, image/gif, image/webp" // Added webp
-                            {...fieldProps} // Spread remaining field props
-                            ref={ref}
-                            onChange={(e) => {
-                                onChange(e.target.files ? e.target.files[0] : null); // Pass file or null to RHF
-                            }}
-                            className={` ${errors.headerImageFile ? 'border-destructive' : ''} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
-                            disabled={isSubmitting}
-                        />
-                    )}
-                />
+                {/* Controller might not be strictly necessary if using register directly for file */}
+                 <Input
+                     id="headerImageFile"
+                     type="file"
+                     accept="image/png, image/jpeg, image/gif, image/webp"
+                     {...register('headerImageFile')} // Use register directly
+                     onChange={(e) => {
+                         const file = e.target.files ? e.target.files[0] : null;
+                         setValue('headerImageFile', file, { shouldValidate: true }); // Trigger validation if needed
+                         // Effect hook will handle preview and URL setting
+                     }}
+                     className={` ${errors.headerImageFile ? 'border-destructive' : ''} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
+                     disabled={isSubmitting}
+                 />
                 <p className="text-xs text-muted-foreground mt-1">Envie uma imagem (PNG, JPG, GIF, WebP). Máx 5MB.</p>
                 {errors.headerImageFile && <p className="text-sm text-destructive mt-1">{errors.headerImageFile.message}</p>}
-                 {/* Display existing URL if no preview and no file selected */}
+                 {/* Display existing URL if no preview and no file selected during this edit session */}
                  {!imagePreview && watch('headerImageUrl') && !watch('headerImageFile') && (
-                    <p className="text-xs text-muted-foreground mt-1 truncate">Imagem atual: {watch('headerImageUrl')?.substring(0, 30)}...</p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">Imagem atual salva. Envie nova para substituir.</p>
                 )}
             </div>
          </div>
@@ -285,5 +287,4 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
     </form>
   );
 }
-
     
