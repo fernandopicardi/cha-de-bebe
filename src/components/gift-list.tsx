@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -14,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import {
   Gift,
   Check,
-  X,
+  X, // Use X for "Not Needed" badge
   Hourglass,
   User,
   Tag,
@@ -23,12 +24,12 @@ import {
 } from "lucide-react";
 import SelectItemDialog from "./select-item-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { selectGift, type GiftItem } from "@/data/gift-store";
+import { selectGift, type GiftItem } from "@/data/gift-store"; // Ensure correct import
 import { useToast } from "@/hooks/use-toast";
 
 interface GiftListProps {
   items: GiftItem[] | null;
-  filterStatus?: "all" | "available" | "selected";
+  filterStatus?: "all" | "available" | "selected" | "not_needed"; // Added not_needed
   filterCategory?: string;
   onItemAction?: () => void;
 }
@@ -58,6 +59,7 @@ export default function GiftList({
         return false;
       }
 
+      // Include 'not_needed' in the status check
       const statusMatch = filterStatus === "all" || item.status === filterStatus;
       const categoryMatch = !filterCategory || item.category?.toLowerCase() === filterCategory.toLowerCase();
 
@@ -85,6 +87,7 @@ export default function GiftList({
     console.log(`GiftList (${filterStatus}): Attempting to select item ${itemId} for ${guestName}...`);
     setLoadingItemId(itemId);
     try {
+      // Revalidation is now handled within selectGift
       const updatedItem = await selectGift(itemId, guestName);
       if (updatedItem) {
         console.log(`GiftList (${filterStatus}): Item ${itemId} selected successfully. Triggering onItemAction.`);
@@ -93,7 +96,7 @@ export default function GiftList({
           description: `Obrigado, ${guestName}! "${updatedItem.name}" foi reservado com sucesso!`,
           variant: "default",
         });
-        onItemAction?.();
+        onItemAction?.(); // Refresh UI from parent
       } else {
         console.warn(
           `GiftList (${filterStatus}): Failed to select item ${itemId}. It might have been selected by someone else or status changed. Triggering onItemAction to refresh list.`,
@@ -103,7 +106,7 @@ export default function GiftList({
           description: "Este item pode não estar mais disponível. A lista será atualizada.",
           variant: "destructive",
         });
-        onItemAction?.();
+        onItemAction?.(); // Refresh UI from parent
       }
     } catch (error) {
       console.error(`GiftList (${filterStatus}): Error during selectGift call for item ${itemId}:`, error);
@@ -137,6 +140,16 @@ export default function GiftList({
             className="bg-secondary text-secondary-foreground"
           >
             <User className="mr-1 h-3 w-3" /> Selecionado
+             {/* Removed selectedBy display for public view */}
+          </Badge>
+        );
+      case "not_needed": // Added case for 'not_needed'
+        return (
+          <Badge
+            variant="destructive"
+            className="bg-destructive/80 text-destructive-foreground"
+          >
+            <X className="mr-1 h-3 w-3" /> Não Precisa
           </Badge>
         );
       default:
@@ -149,15 +162,15 @@ export default function GiftList({
     }
   };
 
-  const isInitialLoad = !items;
-  const hasLoadedItems = Array.isArray(items);
-  const hasNoItemsInDatabase = hasLoadedItems && items.length === 0;
-  const isFilteredListEmpty = hasLoadedItems && filteredItems.length === 0;
+  const isInitialLoad = items === null; // Check if items is strictly null (initial load)
+  const hasLoadedItems = Array.isArray(items); // Check if items is an array (loaded)
+  const hasNoItemsInDatabase = hasLoadedItems && items.length === 0; // Loaded but empty array
+  const isFilteredListEmpty = hasLoadedItems && filteredItems.length === 0 && !hasNoItemsInDatabase; // Loaded, not globally empty, but filter makes it empty
 
   console.log(`GiftList (${filterStatus}): Rendering check - isInitialLoad: ${isInitialLoad}, hasLoadedItems: ${hasLoadedItems}, hasNoItemsInDatabase: ${hasNoItemsInDatabase}, isFilteredListEmpty: ${isFilteredListEmpty}`);
 
   if (isInitialLoad) {
-    console.log(`GiftList (${filterStatus}): Parent is likely loading (items prop is not an array). Rendering loader.`);
+    console.log(`GiftList (${filterStatus}): Parent is likely loading (items prop is null). Rendering loader.`);
     return (
       <div className="text-center pt-16 pb-10 text-muted-foreground">
         <Loader2 className="mx-auto h-12 w-12 animate-spin mb-4" />
@@ -166,7 +179,7 @@ export default function GiftList({
     );
   }
 
-  if (hasNoItemsInDatabase && filterStatus === 'all') {
+  if (hasNoItemsInDatabase) {
     console.log(`GiftList (${filterStatus}): Rendering empty state (database has no items).`);
     return (
       <div className="text-center pt-16 pb-10 text-muted-foreground">
@@ -176,12 +189,14 @@ export default function GiftList({
     );
   }
 
-  if (isFilteredListEmpty && !hasNoItemsInDatabase) {
+  if (isFilteredListEmpty) {
     let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
     if (filterStatus === "available")
       emptyMessage = "Todos os presentes disponíveis já foram escolhidos.";
     if (filterStatus === "selected")
       emptyMessage = "Nenhum presente foi selecionado ainda.";
+    if (filterStatus === "not_needed") // Added message for 'not_needed'
+      emptyMessage = "Nenhum item marcado como 'Não Precisa'.";
 
     console.log(`GiftList (${filterStatus}): Rendering specific empty message for active filter: ${emptyMessage}`);
     return (
@@ -195,9 +210,10 @@ export default function GiftList({
   console.log(`GiftList (${filterStatus}): Rendering ${filteredItems.length} items.`);
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredItems.map((item) => {
-          console.log(`GiftList (${filterStatus}): Rendering item card for:`, item);
+          // Log each item being rendered
+          // console.log(`GiftList (${filterStatus}): Rendering item card for:`, item.id, item.name, item.status);
           return (
             <Card
               key={item.id}
@@ -213,6 +229,7 @@ export default function GiftList({
                 </div>
               </CardHeader>
               <CardContent className="flex-grow">
+                {/* Content can be added here if needed */}
               </CardContent>
               <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
                 {getStatusBadge(item.status, item.selectedBy)}
@@ -233,6 +250,7 @@ export default function GiftList({
                       Escolher
                     </Button>
                   )}
+                  {/* No action button needed for 'selected' or 'not_needed' items in the public view */}
                 </div>
               </CardFooter>
             </Card>

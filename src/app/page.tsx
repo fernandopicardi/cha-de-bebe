@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -13,7 +14,7 @@ import {
   AlertCircle,
   LoaderCircle, // Changed from Loader2
   ListChecks,
-  ListX,
+  ListX, // Icon for "Not Needed"
   PartyPopper,
   UserCheck,
   Ban,
@@ -39,7 +40,7 @@ import {
   getGifts,
   type EventSettings,
   type GiftItem,
-} from "@/data/gift-store";
+} from "@/data/gift-store"; // Corrected import path
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Home() {
@@ -73,14 +74,14 @@ export default function Home() {
       );
       console.log("Home Page: Fetched Gifts Count:", giftsData?.length ?? 0);
       // Log raw gifts data immediately after fetch
-      console.log(
-        "Home Page: Raw Gifts Data from getGifts:",
-        JSON.stringify(giftsData?.slice(0, 5) ?? [], null, 2),
-      );
+      // console.log(
+      //   "Home Page: Raw Gifts Data from getGifts:",
+      //   JSON.stringify(giftsData?.slice(0, 5) ?? [], null, 2),
+      // );
 
 
       // Handle potential null/undefined results
-      setEventDetails(eventData); // Can be null
+      setEventDetails(eventData ?? defaultEventSettings); // Use defaults if null
       setGifts(giftsData || []); // Ensure gifts is always an array
 
 
@@ -90,7 +91,7 @@ export default function Home() {
         `Erro ao carregar os dados: ${err.message || "Erro desconhecido"}`,
       );
       console.log("Home Page: Clearing state due to error.");
-      setEventDetails(null);
+      setEventDetails(defaultEventSettings); // Reset to defaults on error
       setGifts([]); // Set to empty array on error
     } finally {
       setIsLoading(false);
@@ -116,7 +117,13 @@ export default function Home() {
 
   if (eventDetails && eventDetails.date && eventDetails.time) {
     try {
-      const eventDate = new Date(`${eventDetails.date}T${eventDetails.time}:00`);
+      // Attempt to parse with common separators, default to ISO if needed
+      const dateTimeString = eventDetails.date.includes('T')
+        ? eventDetails.date // Assume ISO string like "YYYY-MM-DDTHH:mm:ss"
+        : `${eventDetails.date}T${eventDetails.time}:00`; // Combine separate date/time
+
+      const eventDate = new Date(dateTimeString);
+
       if (!isNaN(eventDate.getTime())) {
         formattedDate = eventDate.toLocaleDateString("pt-BR", {
           year: "numeric",
@@ -143,6 +150,7 @@ export default function Home() {
       "Home Page: Event details or date/time missing for formatting.",
     );
   }
+
 
   // Construct Page Title and Welcome Message
   const pageTitle = eventDetails?.babyName
@@ -188,6 +196,11 @@ export default function Home() {
   console.log(
     `Home Page: Rendering page. Event Title: ${pageTitle}, Gifts count: ${gifts.length}`,
   );
+  // console.log(
+  //   "Home Page: Passing items to GiftList (all):",
+  //   JSON.stringify(gifts.slice(0, 5)),
+  // );
+
 
   // Main Content Render
   return (
@@ -223,7 +236,7 @@ export default function Home() {
               priority // Load header image sooner
               sizes="(max-width: 768px) 128px, 160px"
               data-ai-hint="baby celebration banner"
-              unoptimized={eventDetails.headerImageUrl.startsWith("data:image/")} // Disable optimization for data URIs
+              unoptimized={eventDetails.headerImageUrl.startsWith("data:")} // Disable optimization for data URIs
             />
           </div>
         ) : (
@@ -275,8 +288,8 @@ export default function Home() {
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 gap-1 mb-4 md:mb-6 px-1 py-1.5 h-auto">
-             {/* Removed "Not Needed" tab from public view */}
+           {/* Update grid columns to fit 4 tabs on larger screens */}
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 mb-6 md:mb-8 px-1 py-1.5 h-auto">
             <TabsTrigger value="all" className="flex-shrink-0">
               <ListChecks className="mr-1 h-4 w-4" /> Todos
             </TabsTrigger>
@@ -285,6 +298,10 @@ export default function Home() {
             </TabsTrigger>
             <TabsTrigger value="selected" className="flex-shrink-0">
               <UserCheck className="mr-1 h-4 w-4" /> Selecionados
+            </TabsTrigger>
+             {/* Re-add the "Não Precisa" tab */}
+            <TabsTrigger value="not_needed" className="flex-shrink-0">
+              <ListX className="mr-1 h-4 w-4" /> Não Precisa
             </TabsTrigger>
           </TabsList>
 
@@ -309,10 +326,31 @@ export default function Home() {
               onItemAction={fetchData} // Pass fetchData to refresh list
             />
           </TabsContent>
+           {/* Add content area for the "Não Precisa" tab */}
+          <TabsContent value="not_needed" className="mt-6">
+            <GiftList
+              items={gifts}
+              filterStatus="not_needed"
+              onItemAction={fetchData} // Pass fetchData to refresh list
+            />
+          </TabsContent>
         </Tabs>
       </section>
     </div>
   );
 }
 
-    
+// Define default settings to use if fetch fails or returns null
+const defaultEventSettings: EventSettings = {
+  id: 'main',
+  title: "Chá de Bebê",
+  babyName: null,
+  date: "", // Provide empty strings or sensible defaults
+  time: "",
+  location: "Local a confirmar",
+  address: "Endereço a confirmar",
+  welcomeMessage:
+    "Sua presença é o nosso maior presente! Esta lista é apenas um guia carinhoso para quem desejar nos presentear. Sinta-se totalmente à vontade, o importante é celebrar conosco!",
+  duration: 180,
+  headerImageUrl: null,
+};
