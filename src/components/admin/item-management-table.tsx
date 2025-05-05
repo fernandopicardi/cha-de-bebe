@@ -109,7 +109,6 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
        toast({ title: "Erro!", description: `${message} "${itemName}".`, variant: "destructive" });
   };
 
-
   // Form submission for Add/Edit
   const onSubmit = async (data: GiftFormData) => {
      // Validate that 'selectedBy' is provided if status is 'selected'
@@ -363,7 +362,6 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
                  </div>
                </div>
 
-
              {/* Selected By - Conditionally shown and required */}
             {watchedStatus === 'selected' && (
                 <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
@@ -385,7 +383,6 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
                 </div>
             )}
 
-
           <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isSubmitting}>
@@ -399,7 +396,6 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
           </form>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }
