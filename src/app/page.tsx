@@ -36,8 +36,6 @@ export default function Home() {
     setError(null); // Clear previous errors
 
     try {
-      // Removed Firestore initialization from here, should be done elsewhere or on setup
-
       const eventDataPromise = getEventSettings();
       const giftsDataPromise = getGifts(); // Fetch gifts
 
@@ -60,10 +58,13 @@ export default function Home() {
 
       // Add null/undefined check for giftsData
       if (giftsData) {
-        console.log("Home Page: Setting gifts state with fetched data.");
+        console.log("Home Page: Setting gifts state with fetched data. Count:", giftsData.length);
+        // Log details of the first few gifts to verify data structure
+        console.log("Home Page: Sample gifts being set to state:", giftsData.slice(0, 5));
         setGifts(giftsData);
       } else {
          console.warn("Home Page: Gifts data was null or undefined after fetch.");
+         console.log("Home Page: Setting gifts state to empty array.");
          setGifts([]); // Set to empty array if fetch fails or returns null/undefined
       }
 
@@ -163,7 +164,7 @@ export default function Home() {
   }
 
   // Add log just before render to check final state
-  console.log(`Home Page: Rendering with ${gifts.length} gifts. Event Title: ${pageTitle}`);
+  console.log(`Home Page: Rendering with ${gifts.length} gifts in state. Event Title: ${pageTitle}`);
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
@@ -173,12 +174,12 @@ export default function Home() {
         <Button onClick={handleRefresh} variant="outline" size="icon" title="Recarregar Dados">
            <RefreshCcw className="h-4 w-4" />
          </Button>
-        <Link href="/admin/login"> {/* Link to the admin login page */}
-          <Button variant="outline" size="sm">
-            <LogIn className="mr-2 h-4 w-4" />
-            Admin
-          </Button>
-        </Link>
+         <Link href="/admin/login"> {/* Link to the admin login page */}
+           <Button variant="outline" size="sm">
+             <LogIn className="mr-2 h-4 w-4" />
+             Admin
+           </Button>
+         </Link>
       </div>
 
       {/* Header Text - Adjust padding */}
@@ -244,7 +245,7 @@ export default function Home() {
 
         <Tabs defaultValue="all" className="w-full">
           {/* Use flex-wrap for responsive tabs */}
-          <TabsList className="w-full flex flex-wrap justify-center sm:justify-start h-auto mb-4 md:mb-6 gap-1">
+          <TabsList className="w-full flex flex-wrap justify-center sm:justify-start h-auto mb-4 md:mb-6 gap-1 px-1 py-1.5">
             <TabsTrigger value="all" className="flex-shrink-0">
               Todos
             </TabsTrigger>
@@ -254,10 +255,10 @@ export default function Home() {
             <TabsTrigger value="selected" className="flex-shrink-0">
               Selecionados
             </TabsTrigger>
-             {/* Removed 'not_needed' tab from public view */}
-            {/* <TabsTrigger value="not_needed" className="flex-shrink-0">
-              Não Precisa
-            </TabsTrigger> */}
+            {/* Removed 'not_needed' tab from public view */}
+             <TabsTrigger value="not_needed" className="flex-shrink-0">
+                Não Precisa
+             </TabsTrigger>
           </TabsList>
 
           {/* Increased top margin on tabs content */}
@@ -272,10 +273,10 @@ export default function Home() {
           <TabsContent value="selected" className="mt-6">
             <GiftList items={gifts} filterStatus="selected" onItemAction={fetchData} />
           </TabsContent>
-           {/* Removed 'not_needed' tab content from public view */}
-          {/* <TabsContent value="not_needed" className="mt-6">
-            <GiftList items={gifts} filterStatus="not_needed" onItemAction={fetchData} />
-          </TabsContent> */}
+           {/* Added 'not_needed' tab content back */}
+           <TabsContent value="not_needed" className="mt-6">
+              <GiftList items={gifts} filterStatus="not_needed" onItemAction={fetchData} />
+           </TabsContent>
         </Tabs>
       </section>
     </div>

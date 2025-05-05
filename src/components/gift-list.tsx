@@ -48,7 +48,7 @@ export default function GiftList({
    // Log received items whenever the prop changes
    useEffect(() => {
     console.log(`GiftList (${filterStatus}): Received ${items?.length ?? 0} items.`); // Use optional chaining
-    // console.log(`GiftList (${filterStatus}): Sample items:`, items?.slice(0, 3) ?? []); // Use optional chaining
+    console.log(`GiftList (${filterStatus}): Sample items received:`, items?.slice(0, 5) ?? []); // Use optional chaining
   }, [items, filterStatus]);
 
 
@@ -74,7 +74,7 @@ export default function GiftList({
       return statusMatch && categoryMatch;
     });
     console.log(`GiftList (${filterStatus}): Filtered down to ${result.length} items.`);
-    // console.log(`GiftList (${filterStatus}): Filtered items sample:`, result.slice(0, 3));
+    console.log(`GiftList (${filterStatus}): Filtered items sample:`, result.slice(0, 5));
     return result;
   }, [items, filterStatus, filterCategory]);
 
@@ -186,6 +186,7 @@ export default function GiftList({
     if (filterStatus === "not_needed")
       emptyMessage = "Nenhum item marcado como 'Não precisa'.";
 
+      console.log(`GiftList (${filterStatus}): Rendering empty message: ${emptyMessage}`);
     return (
       <div className="text-center pt-16 pb-10 text-muted-foreground">
         <Gift className="mx-auto h-12 w-12 mb-4" />
@@ -196,6 +197,7 @@ export default function GiftList({
 
   // If filter is 'all' and items is empty, show initial empty state
   if (!items?.length && filterStatus === 'all') { // Check if original items array is empty/null/undefined
+    console.log(`GiftList (${filterStatus}): Rendering initial empty state (no items passed).`);
     return (
         <div className="text-center pt-16 pb-10 text-muted-foreground">
             <Gift className="mx-auto h-12 w-12 mb-4" />
@@ -204,7 +206,7 @@ export default function GiftList({
     );
   }
 
-
+  console.log(`GiftList (${filterStatus}): Rendering ${filteredItems.length} items.`);
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">

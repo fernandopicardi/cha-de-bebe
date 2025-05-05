@@ -31,9 +31,10 @@ export interface GiftItem {
   category: string;
   status: "available" | "selected" | "not_needed";
   selectedBy?: string | null; // Allow null
-  selectionDate?: Timestamp | string | null; // Use Firestore Timestamp for dates, allow null
-  createdAt?: Timestamp | string | null; // Optional: Track creation time, allow null
+  selectionDate?: string | null; // Convert Timestamp to ISO string for client
+  createdAt?: string | null; // Convert Timestamp to ISO string for client
 }
+
 
 export interface SuggestionData {
   itemName: string;
@@ -90,17 +91,17 @@ const giftsCollectionRef = collection(db, "gifts") as CollectionReference<Omit<G
 const settingsCollectionRef = collection(db, "settings"); // Reference to the collection
 const settingsDocRef = doc(settingsCollectionRef, "main") as DocumentReference<EventSettings>; // Explicit reference to the 'main' doc
 
-// --- Firestore Rules Definition (Simplified for Public Read) ---
+// --- Firestore Rules Definition ---
 /*
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // Settings: Allow anyone to read the 'main' document
+    // Allow admin write access
     match /settings/main {
       allow read: if true;
-      // Allow write ONLY if authenticated and isAdmin() - Implement isAdmin in rules
-      allow write: if request.auth != null && isAdmin(); // Placeholder, requires actual admin logic
+      allow write: if isAdmin();
     }
 
     // Gifts: Allow anyone to read.
@@ -110,24 +111,24 @@ service cloud.firestore {
       // Allow creating (suggesting) items as 'selected' by anyone (public write)
       allow create: if request.resource.data.status == 'selected'
                     && request.resource.data.selectedBy is string && request.resource.data.selectedBy != ''
-                    && request.resource.data.createdAt is timestamp; // Ensure createdAt is set
+                    && request.resource.data.createdAt is timestamp; // Ensure createdAt is set server-side
 
       // Allow updating an 'available' item to 'selected' by anyone (public write)
       allow update: if resource.data.status == 'available'
                     && request.resource.data.status == 'selected'
                     && request.resource.data.selectedBy is string && request.resource.data.selectedBy != ''
-                    && request.resource.data.selectionDate is timestamp
+                    && request.resource.data.selectionDate is timestamp // Ensure date is set server-side
                     // Prevent changing other fields during public selection
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'selectedBy', 'selectionDate']);
 
       // Allow admin full write access (update any field, delete, mark not needed, revert)
-      allow write: if request.auth != null && isAdmin(); // Placeholder
+      allow write: if isAdmin(); // Includes create, update, delete for admins
     }
 
     // Simple admin check placeholder (replace with actual admin UIDs/logic in Firebase)
     function isAdmin(){
       // IMPORTANT: Replace with actual admin UIDs from Firebase Authentication
-      return request.auth != null && request.auth.uid in ['ADMIN_UID_1_HERE', 'ADMIN_UID_2_HERE'];
+      return request.auth != null && request.auth.uid in ['JoO9fy5roDY6FTtqajp1UG8aYzS2', 'VnCKbFH5nrYijsUda0fhK3HdwSF2'];
     }
   }
 }
@@ -135,7 +136,7 @@ service cloud.firestore {
 // --- End Firestore Rules Definition ---
 
 
-// Helper function to convert Firestore Timestamps in gift items
+// Helper function to convert Firestore Timestamps in gift items to ISO strings
 const giftFromDoc = (docSnapshot: any): GiftItem => {
     const data = docSnapshot.data();
     // Basic validation for required fields during conversion
@@ -160,24 +161,27 @@ const giftFromDoc = (docSnapshot: any): GiftItem => {
       selectedBy: data.selectedBy ?? null,
       selectionDate: data.selectionDate instanceof Timestamp
           ? data.selectionDate.toDate().toISOString()
-          : data.selectionDate ?? null, // Keep string/null if already so
+          : null, // Convert to ISO string or null
       createdAt: data.createdAt instanceof Timestamp
           ? data.createdAt.toDate().toISOString()
-          : data.createdAt ?? null, // Keep string/null if already so
+          : null, // Convert to ISO string or null
     };
   };
 
 
 // Function to force revalidation of specific paths AFTER a mutation
-const forceRevalidation = () => {
-  console.log("Firestore Revalidate: Revalidating paths: / and /admin");
+const forceRevalidation = (path: string = "/") => {
+  console.log(`Firestore Revalidate: Revalidating path: ${path}`);
   // Use 'layout' to attempt revalidating the entire layout, including data fetches in Server Components
   try {
-    revalidatePath("/", "layout");
-    revalidatePath("/admin", "layout");
-    console.log("Firestore Revalidate: Revalidation calls initiated.");
+    revalidatePath(path, "layout");
+    // Optionally revalidate /admin path specifically if needed
+    if (path !== '/admin') {
+       revalidatePath("/admin", "layout");
+    }
+    console.log(`Firestore Revalidate: Revalidation calls initiated for ${path} and potentially /admin.`);
   } catch (error) {
-     console.error("Firestore Revalidate: Error during revalidatePath:", error);
+     console.error(`Firestore Revalidate: Error during revalidatePath for ${path}:`, error);
      // Log the error but don't let it crash the mutation flow
   }
 };
@@ -196,13 +200,17 @@ export async function initializeFirestoreData(): Promise<void> {
     const settingsSnap = await getDoc(settingsDocRef);
     if (!settingsSnap.exists()) {
       console.log("Firestore Init: Settings document 'settings/main' not found, initializing...");
-      await setDoc(settingsDocRef, defaultEventSettings); // Use the specific doc ref
+      // Use defaultEventSettings which already includes id:'main'
+      await setDoc(settingsDocRef, {
+        ...defaultEventSettings, // Spread defaults
+        // Ensure no conflicting ID is added if present in default (it shouldn't be)
+      });
       console.log("Firestore Init: Default settings added.");
       forceRevalidation(); // Revalidate after potential change
     } else {
         // Merge defaults with existing settings to ensure all fields are present
         const existingSettings = settingsSnap.data();
-        const mergedSettings = { ...defaultEventSettings, ...existingSettings };
+        const mergedSettings = { ...defaultEventSettings, ...existingSettings, id: 'main' }; // Ensure ID remains main
         // Only write if there are missing default fields
         if (JSON.stringify(existingSettings) !== JSON.stringify(mergedSettings)) {
             console.log("Firestore Init: Merging default settings with existing document...");
@@ -221,13 +229,15 @@ export async function initializeFirestoreData(): Promise<void> {
       const batch: WriteBatch = writeBatch(db);
       defaultGiftItems.forEach((item) => {
         const docRef = doc(giftsCollectionRef); // Auto-generate ID
-        batch.set(docRef, {
-          ...item,
-          createdAt: serverTimestamp(), // Ensure createdAt is set
-          description: item.description ?? null, // Ensure null if undefined
-          selectedBy: item.selectedBy ?? null, // Ensure null if undefined
-          selectionDate: item.selectionDate ?? null, // Ensure null if undefined
-        });
+        // Prepare data, ensuring Timestamps are used for date fields where applicable
+        const dataToAdd = {
+            ...item,
+            createdAt: serverTimestamp(), // Use server timestamp for creation
+            description: item.description ?? null,
+            selectedBy: item.selectedBy ?? null,
+            selectionDate: item.selectionDate instanceof Date ? Timestamp.fromDate(item.selectionDate) : null, // Convert Date to Timestamp if needed, otherwise null
+        };
+        batch.set(docRef, dataToAdd);
       });
       await batch.commit();
       console.log("Firestore Init: Default gifts added.");
@@ -267,6 +277,7 @@ export const getEventSettings = async (): Promise<EventSettings | null> => {
             babyName: fetchedData?.babyName ?? null, // Explicit null handling
             headerImageUrl: fetchedData?.headerImageUrl ?? null, // Explicit null handling
           };
+        console.log("Firestore GET: Returning event settings:", completeSettings);
         return completeSettings;
       } else {
         console.warn(`Firestore GET: Settings document '${settingsPath}' does not exist. Cannot return settings.`);
@@ -276,7 +287,7 @@ export const getEventSettings = async (): Promise<EventSettings | null> => {
     } catch (error) {
       console.error(`Firestore GET: Error fetching event settings from ${settingsPath}:`, error);
        if ((error as FirestoreError)?.code === 'permission-denied') {
-          console.error("Firestore GET: PERMISSION DENIED fetching event settings. Check Firestore rules allow read on 'settings/main'.");
+          console.error("Firestore: PERMISSION DENIED fetching event settings. Check Firestore rules.");
        } else {
           console.error("Firestore GET: An unexpected error occurred while fetching settings:", error)
        }
@@ -300,9 +311,9 @@ export const getGifts = async (): Promise<GiftItem[]> => {
             console.log("Firestore GET: Gifts collection is empty.");
             return [];
         } else {
-            const gifts = querySnapshot.docs.map(giftFromDoc);
+            const gifts = querySnapshot.docs.map(giftFromDoc); // Use converter
             console.log(`Firestore GET: Fetched ${gifts.length} gifts.`);
-            // console.log("Firestore GET: Sample Gifts:", gifts.slice(0, 3)); // Log sample for debugging
+            console.log("Firestore GET: Sample Gifts after conversion:", gifts.slice(0, 5)); // Log sample for debugging
             return gifts;
         }
     } catch (error) {
@@ -336,18 +347,26 @@ export async function updateEventSettings(
     (Object.keys(validUpdates) as Array<keyof Omit<EventSettings, 'id'>>).forEach(key => {
         if (key in defaultEventSettings) { // Only update keys that exist in the model
             const value = validUpdates[key];
-            if (value === undefined) return; // Skip undefined
+            // Keep valid values (including null), skip undefined
+             if (value !== undefined) {
+                 dataToUpdate[key] = value;
+             } else {
+                 console.warn(`Firestore UPDATE_SETTINGS: Skipping undefined value for key '${key}'`);
+             }
 
-            if (key === 'babyName' || key === 'headerImageUrl') {
-                dataToUpdate[key] = value || null; // Set to null if falsy/empty
-            } else { // Allow explicit nulls for other fields if needed, otherwise assign value
-                dataToUpdate[key] = value;
-            }
+            // Explicit null handling for specific fields if needed
+            // if ((key === 'babyName' || key === 'headerImageUrl') && !value) {
+            //     dataToUpdate[key] = null; // Set to null if falsy/empty/undefined
+            // } else if (value !== undefined) {
+            //     dataToUpdate[key] = value;
+            // }
+        } else {
+             console.warn(`Firestore UPDATE_SETTINGS: Skipping update for unknown key '${key}'`);
         }
     });
 
-    // Clean out undefined values before sending
-    Object.keys(dataToUpdate).forEach(key => dataToUpdate[key as keyof EventSettings] === undefined && delete dataToUpdate[key as keyof EventSettings]);
+    // Clean out undefined values before sending (shouldn't be necessary with above check)
+    // Object.keys(dataToUpdate).forEach(key => dataToUpdate[key as keyof EventSettings] === undefined && delete dataToUpdate[key as keyof EventSettings]);
 
 
     if (Object.keys(dataToUpdate).length === 0) {
@@ -488,7 +507,8 @@ export async function addSuggestion(
   );
   const effectiveSuggesterName = suggestionData.suggesterName?.trim() || "Convidado(a)";
 
-  const newItemData: Omit<GiftItem, "id"> = {
+  // Prepare data using serverTimestamps for dates
+  const newItemData = {
     name: suggestionData.itemName.trim(), // Trim whitespace
     description: suggestionData.itemDescription?.trim() || null, // Use null for empty optional fields
     category: "Outros", // Suggestions default to 'Outros'
@@ -499,10 +519,12 @@ export async function addSuggestion(
   };
   try {
     // Ensure no 'undefined' values are accidentally sent
-    const cleanItemData = Object.fromEntries(
-      Object.entries(newItemData).filter(([_, v]) => v !== undefined)
-    ) as Omit<GiftItem, "id">; // Type assertion might be needed
-
+    const cleanItemData: { [key: string]: any } = {};
+    for (const key in newItemData) {
+        if (newItemData[key as keyof typeof newItemData] !== undefined) {
+            cleanItemData[key] = newItemData[key as keyof typeof newItemData];
+        }
+    }
 
     const docRef = await addDoc(giftsCollectionRef, cleanItemData);
     console.log(
@@ -590,21 +612,22 @@ export async function addGift(
     }
 
 
-    const giftToAdd: Omit<GiftItem, "id"> = {
+    const giftToAdd = {
       name: newItemData.name.trim(),
       description: newItemData.description?.trim() || null,
       category: newItemData.category.trim(), // Ensure category is required and trimmed
       status: finalStatus,
-      selectedBy: finalSelectedBy,
-      selectionDate: selectionTimestamp,
+      selectedBy: finalSelectedBy, // Use null if not selected
+      selectionDate: selectionTimestamp, // Use null if not selected
       createdAt: serverTimestamp(), // Use server Timestamp
     };
 
      // Ensure no 'undefined' values are sent. Firestore supports 'null'.
      const cleanGiftToAdd: { [key: string]: any } = {};
      for (const key in giftToAdd) {
-       if (giftToAdd[key as keyof typeof giftToAdd] !== undefined) {
-         cleanGiftToAdd[key] = giftToAdd[key as keyof typeof giftToAdd];
+       const value = giftToAdd[key as keyof typeof giftToAdd];
+       if (value !== undefined) {
+         cleanGiftToAdd[key] = value;
        }
      }
 
@@ -659,22 +682,20 @@ export async function updateGift(
         }
 
         if (key === 'selectionDate') {
-             if (value instanceof Date) {
-                 updateData[key] = Timestamp.fromDate(value);
-             } else if (typeof value === 'string') {
-                 try {
+             // Handle potential date strings or null
+              if (value instanceof Date) {
+                  updateData[key] = Timestamp.fromDate(value);
+              } else if (typeof value === 'string') {
+                  try {
                       const parsedDate = new Date(value);
                       updateData[key] = !isNaN(parsedDate.getTime()) ? Timestamp.fromDate(parsedDate) : null;
-                 } catch(e) {
-                     console.warn("Firestore UPDATE_GIFT: Could not parse selection date string, setting to null:", value, e);
-                     updateData[key] = null;
-                 }
-             } else if (value instanceof Timestamp || value === null) {
-                 updateData[key] = value;
-             } else {
-                  console.warn("Firestore UPDATE_GIFT: Invalid type for selectionDate, setting to null:", value);
-                  updateData[key] = null;
-             }
+                  } catch (e) {
+                      console.warn("Firestore UPDATE_GIFT: Could not parse selection date string, setting to null:", value, e);
+                      updateData[key] = null;
+                  }
+              } else {
+                  updateData[key] = null; // Default to null if not a valid date string or Date object
+              }
         } else if ((key === 'description' || key === 'selectedBy') && value === "") {
             // Treat empty strings as null for optional text fields
             updateData[key] = null;
@@ -790,31 +811,22 @@ export async function exportGiftsToCSV(): Promise<string> {
 
         const rows = currentGifts.map((item) => {
             let selectionDateStr = "";
-            if (item.selectionDate) {
+            if (item.selectionDate) { // Now expecting ISO string or null
                 try {
-                    // Handle both Timestamp and ISO string dates from conversion
-                    const date = item.selectionDate instanceof Timestamp
-                        ? item.selectionDate.toDate()
-                        : typeof item.selectionDate === 'string'
-                            ? new Date(item.selectionDate)
-                            : null;
-                     if (date && !isNaN(date.getTime())) {
+                    const date = new Date(item.selectionDate);
+                     if (!isNaN(date.getTime())) {
                        selectionDateStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
                      }
-                } catch (e) { console.warn("Could not parse selection date for CSV:", item.selectionDate); }
+                } catch (e) { console.warn("Could not parse selection date string for CSV:", item.selectionDate); }
             }
             let createdAtStr = "";
-             if (item.createdAt) {
+             if (item.createdAt) { // Now expecting ISO string or null
                 try {
-                     const date = item.createdAt instanceof Timestamp
-                        ? item.createdAt.toDate()
-                        : typeof item.createdAt === 'string'
-                            ? new Date(item.createdAt)
-                            : null;
-                      if (date && !isNaN(date.getTime())) {
+                     const date = new Date(item.createdAt);
+                      if (!isNaN(date.getTime())) {
                         createdAtStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
                      }
-                } catch (e) { console.warn("Could not parse creation date for CSV:", item.createdAt); }
+                } catch (e) { console.warn("Could not parse creation date string for CSV:", item.createdAt); }
             }
 
             const description = item.description ?? "";
@@ -858,5 +870,3 @@ export async function exportGiftsToCSV(): Promise<string> {
 // Consider calling initialization only under specific conditions,
 // e.g., via an admin interface button or a setup script, not on every server start.
 // initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));
-
-    

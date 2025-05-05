@@ -19,7 +19,7 @@ import {
   Loader2,
   LogOut,
   Home,
-  AlertTriangle,
+  AlertTriangle, // Import AlertTriangle
   Frown, // Import Frown icon for 404
 } from "lucide-react";
 import {
@@ -28,7 +28,7 @@ import {
   exportGiftsToCSV,
   type GiftItem,
   type EventSettings,
-} from "@/data/gift-store"; // Corrected import path
+} from "@/data/gift-store"; // Updated import path
 import AdminItemManagementTable from "@/components/admin/item-management-table";
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
 import AdminEventSettingsForm from "@/components/admin/event-settings-form";
@@ -74,6 +74,8 @@ export default function AdminPage() {
           console.log("AdminPage: Fetched Event Settings:", !!settingsData);
 
           // Update state with fetched data, handling potential null/undefined
+          // Log details of the first few gifts to verify data structure
+          console.log("AdminPage: Sample gifts being set to state:", giftsData?.slice(0, 5));
           setGifts(giftsData || []); // Set empty array if null/undefined
           setEventSettings(settingsData); // Set directly (can be null)
 
@@ -221,7 +223,7 @@ export default function AdminPage() {
 
   // Render the admin dashboard if authenticated and data loaded
   // Add log just before render to check final state
-  console.log(`AdminPage: Rendering with ${gifts.length} gifts.`);
+  console.log(`AdminPage: Rendering with ${gifts.length} gifts in state.`);
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 bg-background text-foreground">
