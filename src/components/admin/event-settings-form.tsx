@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -25,7 +26,8 @@ import {
 } from "@/data/gift-store";
 
 interface AdminEventSettingsFormProps {
-  onSave?: () => void; // Callback might still be useful for parent-specific logic, but not revalidation
+  initialSettings: EventSettings | null; // Receive initial settings as prop
+  onSave?: () => void; // Callback to trigger parent refresh
 }
 
 // Constants for file validation (used client-side)
@@ -96,16 +98,25 @@ const settingsFormSchema = z
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 
 export default function AdminEventSettingsForm({
+  initialSettings,
   onSave,
 }: AdminEventSettingsFormProps) {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(true);
+  // isLoading might not be needed if initialSettings are always provided
   const [imagePreview, setImagePreview] = useState<string | null>(null); // State for client-side preview
   const [isClient, setIsClient] = useState(false); // Track if component has mounted
 
   useEffect(() => {
     setIsClient(true); // Set client state after mount
-  }, []);
+    // Set initial preview based on the passed prop
+    if (initialSettings) {
+       console.log("EventSettingsForm: Setting initial preview from prop:", initialSettings.headerImageUrl);
+      setImagePreview(initialSettings.headerImageUrl || null);
+    } else {
+        console.log("EventSettingsForm: No initial settings provided, clearing preview.");
+        setImagePreview(null);
+    }
+  }, [initialSettings]); // Rerun effect when initialSettings prop changes
 
   const {
     control,
@@ -118,26 +129,15 @@ export default function AdminEventSettingsForm({
     getValues,
   } = useForm<SettingsFormData>({
     resolver: zodResolver(settingsFormSchema), // Use the schema without FileList validation
-    defaultValues: async () => {
-      setIsLoading(true);
-      try {
-        const settings = await getEventSettings();
-        setImagePreview(settings.headerImageUrl || null); // Set initial preview
-        return {
-          ...settings,
-          headerImageUrl: settings.headerImageUrl || null, // RHF state holds the initial URL
-          headerImageFile: null, // Initialize file input as null FileList
-          babyName: settings.babyName || "", // Ensure empty string if null/undefined
-        };
-      } catch (error) {
-        console.error("Error fetching event settings:", error);
-        toast({
-          title: "Erro!",
-          description: "Falha ao carregar configurações do evento.",
-          variant: "destructive",
-        });
-        // Provide sensible defaults on error
-        return {
+    // Use initialSettings prop for defaultValues
+    defaultValues: initialSettings
+      ? {
+          ...initialSettings,
+          headerImageUrl: initialSettings.headerImageUrl || null,
+          headerImageFile: null,
+          babyName: initialSettings.babyName || "",
+        }
+      : { // Provide defaults if initialSettings is null
           title: "Chá de Bebê",
           babyName: "",
           date: "",
@@ -147,12 +147,22 @@ export default function AdminEventSettingsForm({
           welcomeMessage: "",
           headerImageUrl: null,
           headerImageFile: null,
-        };
-      } finally {
-        setIsLoading(false);
-      }
-    },
+        },
   });
+
+   // Reset form if initialSettings prop changes after initial mount
+   useEffect(() => {
+    if (initialSettings) {
+        console.log("EventSettingsForm: Resetting form with new initialSettings prop.", initialSettings);
+        reset({
+            ...initialSettings,
+            headerImageUrl: initialSettings.headerImageUrl || null,
+            headerImageFile: null, // Always reset file input
+            babyName: initialSettings.babyName || "",
+        });
+        setImagePreview(initialSettings.headerImageUrl || null); // Update preview as well
+    }
+   }, [initialSettings, reset]);
 
   // Watch the FileList from the input
   const watchedFileList = watch("headerImageFile");
@@ -172,19 +182,11 @@ export default function AdminEventSettingsForm({
           description: `Tamanho máximo do arquivo é ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
           variant: "destructive",
         });
-        // Optionally clear the input here or rely on onSubmit validation
         setValue("headerImageFile", null, { shouldValidate: true }); // Clear invalid file
-        setValue(
-          "headerImageUrl",
-          getValues("headerImageUrl")?.startsWith("http")
-            ? getValues("headerImageUrl")
-            : null,
-        ); // Keep original URL if exists
-        setImagePreview(
-          getValues("headerImageUrl")?.startsWith("http")
-            ? getValues("headerImageUrl")
-            : null,
-        ); // Revert preview
+        // Restore previous URL if available, otherwise null
+         const prevUrl = initialSettings?.headerImageUrl || null;
+         setValue("headerImageUrl", prevUrl);
+         setImagePreview(prevUrl);
         return;
       }
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
@@ -193,18 +195,10 @@ export default function AdminEventSettingsForm({
           description: "Tipo de arquivo inválido. Use JPG, PNG, GIF, WebP.",
           variant: "destructive",
         });
-        setValue("headerImageFile", null, { shouldValidate: true }); // Clear invalid file
-        setValue(
-          "headerImageUrl",
-          getValues("headerImageUrl")?.startsWith("http")
-            ? getValues("headerImageUrl")
-            : null,
-        ); // Keep original URL if exists
-        setImagePreview(
-          getValues("headerImageUrl")?.startsWith("http")
-            ? getValues("headerImageUrl")
-            : null,
-        ); // Revert preview
+         setValue("headerImageFile", null, { shouldValidate: true });
+         const prevUrl = initialSettings?.headerImageUrl || null;
+         setValue("headerImageUrl", prevUrl);
+         setImagePreview(prevUrl);
         return;
       }
 
@@ -212,6 +206,7 @@ export default function AdminEventSettingsForm({
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
+        console.log("EventSettingsForm: Generated data URI preview.");
         setValue("headerImageUrl", result, { shouldValidate: true }); // Store data URI in headerImageUrl
         setImagePreview(result); // Update client-side preview state
       };
@@ -222,19 +217,10 @@ export default function AdminEventSettingsForm({
           description: "Falha ao ler o arquivo de imagem.",
           variant: "destructive",
         });
-        // Clear states if reading fails
         setValue("headerImageFile", null, { shouldValidate: true });
-        setValue(
-          "headerImageUrl",
-          getValues("headerImageUrl")?.startsWith("http")
-            ? getValues("headerImageUrl")
-            : null,
-        );
-        setImagePreview(
-          getValues("headerImageUrl")?.startsWith("http")
-            ? getValues("headerImageUrl")
-            : null,
-        );
+         const prevUrl = initialSettings?.headerImageUrl || null;
+         setValue("headerImageUrl", prevUrl);
+         setImagePreview(prevUrl);
       };
       reader.readAsDataURL(file);
     } else if (
@@ -242,19 +228,24 @@ export default function AdminEventSettingsForm({
       (typeof fileList === "object" && fileList?.length === 0)
     ) {
       // File was explicitly cleared or reset
-      // If headerImageUrl still holds a valid http URL, restore the preview for it
-      const currentUrl = getValues("headerImageUrl");
+      // If headerImageUrl still holds a valid http URL from initialSettings, restore the preview for it
+      const currentUrl = initialSettings?.headerImageUrl;
       if (currentUrl && currentUrl.startsWith("http")) {
+         console.log("EventSettingsForm: File cleared, restoring preview to initial URL:", currentUrl);
         setImagePreview(currentUrl);
+        setValue("headerImageUrl", currentUrl); // Ensure RHF state also reverts
       } else {
-        // Only clear preview if the URL is not a valid http URL (e.g., it was a data URI or null)
+         console.log("EventSettingsForm: File cleared, clearing preview.");
         setImagePreview(null);
+         setValue("headerImageUrl", null); // Ensure RHF state also clears
       }
     }
     // else: Initial load or no file selected - preview is managed by defaultValues/reset
-  }, [watchedFileList, setValue, toast, getValues, isClient]); // Add isClient dependency
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedFileList, isClient, setValue, toast, initialSettings]); // Add initialSettings dependency
 
   const removeImage = useCallback(async () => {
+    console.log("EventSettingsForm: Removing image.");
     setValue("headerImageFile", null, { shouldValidate: true }); // Clear the FileList in RHF state
     setValue("headerImageUrl", null, { shouldValidate: true }); // Clear the URL in RHF state
     setImagePreview(null); // Clear the preview state
@@ -268,11 +259,15 @@ export default function AdminEventSettingsForm({
   }, [setValue]);
 
   const onSubmit = async (data: SettingsFormData) => {
+    console.log("EventSettingsForm: Submitting form data...", data);
     // --- Client-Side File Validation ---
     const fileList = data.headerImageFile as FileList | null | undefined;
     const file = fileList?.[0];
 
+    let finalImageUrl: string | null = data.headerImageUrl; // Start with the value from RHF (could be data URI or original URL)
+
     if (file) {
+      console.log("EventSettingsForm: File detected during submission.");
       if (file.size > MAX_FILE_SIZE) {
         toast({
           title: "Erro de Envio",
@@ -289,7 +284,10 @@ export default function AdminEventSettingsForm({
         });
         return; // Stop submission
       }
-      // If file is valid, headerImageUrl should already contain the data URI from the useEffect hook
+       // If file is valid, the data URI should already be in finalImageUrl via RHF state
+       console.log("EventSettingsForm: Using data URI from RHF for headerImageUrl.");
+    } else {
+        console.log("EventSettingsForm: No new file detected. Using current headerImageUrl value:", finalImageUrl);
     }
     // --- End Client-Side File Validation ---
 
@@ -302,9 +300,11 @@ export default function AdminEventSettingsForm({
       location: data.location,
       address: data.address,
       welcomeMessage: data.welcomeMessage,
-      // Use the headerImageUrl which holds either the data URI, original URL, or null
-      headerImageUrl: data.headerImageUrl,
+      // Use the finalImageUrl determined above
+      headerImageUrl: finalImageUrl,
     };
+
+     console.log("EventSettingsForm: Calling updateEventSettings with:", settingsToSave);
 
     try {
       // updateEventSettings now handles revalidation internally
@@ -315,32 +315,18 @@ export default function AdminEventSettingsForm({
         description: "Detalhes do evento atualizados.",
       });
 
-      // Re-fetch settings to update the form state with saved data
-      try {
-        const latestSettings = await getEventSettings();
-        reset({
-          ...latestSettings,
-          headerImageUrl: latestSettings.headerImageUrl || null,
-          headerImageFile: null, // Clear FileList input after successful save
-          babyName: latestSettings.babyName || "",
-        });
-        setImagePreview(latestSettings.headerImageUrl || null); // Update preview with saved URL
-        // Clear the actual file input element
-        const fileInput = document.getElementById(
-          "headerImageFile",
-        ) as HTMLInputElement | null;
-        if (fileInput) fileInput.value = "";
-      } catch (fetchError) {
-        console.error("Error re-fetching settings after save:", fetchError);
-        toast({
-          title: "Aviso",
-          description:
-            "Configurações salvas, mas houve um erro ao recarregar o formulário.",
-          variant: "default",
-        });
-      }
-
+      // Trigger parent refresh instead of internal fetch/reset
+      console.log("EventSettingsForm: Save successful, calling onSave callback.");
       onSave?.();
+
+      // Clear the file input field visually after successful save
+      const fileInput = document.getElementById(
+        "headerImageFile",
+      ) as HTMLInputElement | null;
+      if (fileInput) fileInput.value = "";
+      // RHF reset will happen when the parent re-fetches and passes new initialSettings
+
+
     } catch (error) {
       console.error("Error saving event settings:", error);
       toast({
@@ -351,8 +337,8 @@ export default function AdminEventSettingsForm({
     }
   };
 
-  if (!isClient || isLoading) {
-    // Show loading state until mounted and data loaded
+  if (!isClient && !initialSettings) { // Show loading only if not client AND no initial data
+     console.log("EventSettingsForm: Initial load state.");
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -362,6 +348,8 @@ export default function AdminEventSettingsForm({
       </div>
     );
   }
+
+   console.log("EventSettingsForm: Rendering form. Image preview:", imagePreview?.substring(0, 50) + "...");
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -403,7 +391,7 @@ export default function AdminEventSettingsForm({
           {imagePreview && (
             <div className="relative w-24 h-24 border rounded-md overflow-hidden shadow-inner bg-muted/50">
               <Image
-                key={imagePreview} // Use preview URL as key
+                key={imagePreview} // Use preview URL as key to force re-render
                 src={imagePreview}
                 alt="Prévia da imagem do cabeçalho"
                 fill
@@ -424,6 +412,7 @@ export default function AdminEventSettingsForm({
                   });
                   setImagePreview(null); // Clear preview on error
                 }}
+                 unoptimized={imagePreview.startsWith('data:image/')} // Disable optimization for data URIs
               />
               <Button
                 type="button"
@@ -555,7 +544,7 @@ export default function AdminEventSettingsForm({
       </div>
 
       <div className="flex justify-end pt-2">
-        <Button type="submit" disabled={isSubmitting || isLoading}>
+        <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...

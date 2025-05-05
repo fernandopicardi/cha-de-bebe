@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react"; // Added useCallback
 import Link from "next/link";
 import Image from "next/image"; // Import next/image
 import { Baby, CalendarDays, Gift, MapPin, LogIn } from "lucide-react";
@@ -26,38 +26,64 @@ export default function Home() {
   const [eventDetails, setEventDetails] = useState<EventSettings | null>(null);
   const [gifts, setGifts] = useState<GiftItem[]>([]); // Use GiftItem[] type
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null); // State for errors
 
-  useEffect(() => {
-    const fetchData = async () => {
-      console.log("Home Page: useEffect triggered, fetching data...");
-      setIsLoading(true);
-      try {
-        // Initialize Firestore data (optional, consider if needed on every load)
-        // await initializeFirestoreData(); // Might not be needed here if done elsewhere reliably
 
-        const eventDataPromise = getEventSettings();
-        const giftsDataPromise = getGifts();
+  // Use useCallback for fetchData to ensure stable reference if needed elsewhere
+  const fetchData = useCallback(async (source?: string) => {
+    console.log(`Home Page: Fetching data (triggered by ${source || 'useEffect'})...`);
+    setIsLoading(true);
+    setError(null); // Clear previous errors
 
-        const [eventData, giftsData] = await Promise.all([eventDataPromise, giftsDataPromise]);
+    try {
+      // Optional: Initialize Firestore data (consider if needed on every load)
+      // await initializeFirestoreData(); // Might not be needed here if done elsewhere reliably
 
-        console.log("Home Page: Fetched Event Settings:", eventData);
-        console.log("Home Page: Fetched Gifts Count:", giftsData.length);
-        // console.log("Home Page: Fetched Gifts Sample:", giftsData.slice(0, 3)); // Log first few gifts for inspection
+      const eventDataPromise = getEventSettings();
+      const giftsDataPromise = getGifts();
 
+      // Fetch in parallel
+      const [eventData, giftsData] = await Promise.all([eventDataPromise, giftsDataPromise]);
+
+      console.log("Home Page: Fetched Event Settings:", !!eventData);
+      console.log("Home Page: Fetched Gifts Count:", giftsData.length);
+      // console.log("Home Page: Fetched Gifts Sample:", giftsData.slice(0, 3)); // Log first few gifts for inspection
+
+      // Add null check before setting state
+      if (eventData) {
         setEventDetails(eventData);
-        setGifts(giftsData);
-      } catch (error) {
-        console.error("Home Page: Error fetching data:", error);
-        // Handle error appropriately, maybe show a message to the user
-      } finally {
-        setIsLoading(false);
-        console.log("Home Page: Fetching complete, loading set to false.");
+      } else {
+         console.warn("Home Page: Event data was null or undefined after fetch.");
+         setEventDetails(null); // Explicitly set to null if fetch returns null
       }
-    };
 
-    fetchData();
-     // Empty dependency array ensures this runs once on mount
+      setGifts(giftsData);
+
+    } catch (err: any) {
+      console.error("Home Page: Error fetching data:", err);
+      setError(`Erro ao carregar os dados: ${err.message || 'Erro desconhecido'}`);
+      setEventDetails(null); // Clear on error
+      setGifts([]); // Clear on error
+    } finally {
+      setIsLoading(false);
+      console.log("Home Page: Fetching complete, loading set to false.");
+    }
+  // No dependencies for useCallback as it doesn't depend on component state/props
   }, []);
+
+
+  // useEffect to fetch data on mount
+  useEffect(() => {
+    fetchData("useEffect[mount]");
+     // Empty dependency array ensures this runs once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
+
+  // Add a manual refresh function for debugging or potential future use
+  const handleRefresh = () => {
+    console.log("Home Page: Manual refresh requested.");
+    fetchData("manual refresh button");
+  };
 
 
   // Formatting Date and Time
@@ -106,12 +132,26 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-        Carregando informações do chá...
+      <div className="flex flex-col items-center justify-center h-screen">
+        <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+        <p className="mt-2">Carregando informações do chá...</p>
       </div>
     );
   }
+
+  if (error) {
+      return (
+          <div className="flex flex-col items-center justify-center h-screen text-center p-4">
+              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+              <h2 className="text-xl font-semibold mb-2">Erro ao Carregar</h2>
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={handleRefresh} variant="outline">
+                  <RefreshCcw className="mr-2 h-4 w-4" /> Tentar Novamente
+              </Button>
+          </div>
+      );
+  }
+
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
@@ -124,6 +164,10 @@ export default function Home() {
             Admin
           </Button>
         </Link>
+         {/* Optional: Add a refresh button for debugging */}
+         {/* <Button onClick={handleRefresh} variant="outline" size="icon" title="Recarregar Dados">
+           <RefreshCcw className="h-4 w-4" />
+         </Button> */}
       </div>
 
       {/* Header Text - Adjust padding */}
@@ -183,8 +227,8 @@ export default function Home() {
           <h2 className="text-2xl font-semibold flex items-center gap-2">
             <Gift className="h-6 w-6 text-primary" /> Lista de Presentes
           </h2>
-          {/* SuggestItemButton now handles its own revalidation internally via data store */}
-          <SuggestItemButton />
+          {/* Pass refresh callback to SuggestItemButton */}
+          <SuggestItemButton onSuggestionAdded={fetchData} />
         </div>
 
         <Tabs defaultValue="all" className="w-full">
@@ -205,23 +249,21 @@ export default function Home() {
           </TabsList>
 
           {/* Increased top margin on tabs content */}
-          {/* Pass fetched gifts to GiftList. Revalidation happens in data store actions */}
+          {/* Pass fetched gifts and stable refresh callback to GiftList */}
           <TabsContent value="all" className="mt-6">
-            <GiftList items={gifts} filterStatus="all" />
+            <GiftList items={gifts} filterStatus="all" onItemAction={fetchData} />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
-            <GiftList items={gifts} filterStatus="available" />
+            <GiftList items={gifts} filterStatus="available" onItemAction={fetchData} />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
-            <GiftList items={gifts} filterStatus="selected" />
+            <GiftList items={gifts} filterStatus="selected" onItemAction={fetchData} />
           </TabsContent>
           <TabsContent value="not_needed" className="mt-6">
-            <GiftList items={gifts} filterStatus="not_needed" />
+            <GiftList items={gifts} filterStatus="not_needed" onItemAction={fetchData} />
           </TabsContent>
         </Tabs>
       </section>
     </div>
   );
 }
-
-    

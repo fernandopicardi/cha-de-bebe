@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -40,10 +41,12 @@ const AddItemSchema = z.object({
 
 type AddItemFormData = z.infer<typeof AddItemSchema>;
 
-// No longer needs onSuggestionAdded prop
-interface SuggestItemButtonProps {}
+// Add prop for callback
+interface SuggestItemButtonProps {
+    onSuggestionAdded?: () => void; // Callback to notify parent
+}
 
-export default function SuggestItemButton({}: SuggestItemButtonProps) {
+export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -85,6 +88,10 @@ export default function SuggestItemButton({}: SuggestItemButtonProps) {
       });
       reset();
       setIsOpen(false);
+
+      // Call the callback function if provided
+      onSuggestionAdded?.();
+
     } catch (error) {
       console.error("Erro ao adicionar item:", error);
       toast({
@@ -213,7 +220,6 @@ export default function SuggestItemButton({}: SuggestItemButtonProps) {
           </DialogFooter>
         </form>
       </DialogContent>
-      {/* Removed potential extra closing tag or ensured proper nesting */}
     </Dialog>
   );
 }

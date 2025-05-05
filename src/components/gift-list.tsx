@@ -31,14 +31,14 @@ interface GiftListProps {
   items: GiftItem[]; // Accept items as prop
   filterStatus?: "all" | "available" | "selected" | "not_needed";
   filterCategory?: string;
-  showSelectedByName?: boolean; // Keep this prop for admin/public differentiation if needed elsewhere
+  onItemAction?: () => void; // Optional callback for parent refresh
 }
 
 export default function GiftList({
   items, // Use passed items
   filterStatus = "all",
   filterCategory,
-  showSelectedByName = false,
+  onItemAction, // Receive the callback
 }: GiftListProps) {
   const [loading, setLoading] = useState(false); // Only for client-side actions like selection
   const [selectedItem, setSelectedItem] = useState<GiftItem | null>(null);
@@ -64,10 +64,6 @@ export default function GiftList({
 
       const statusMatch = filterStatus === "all" || item.status === filterStatus;
       const categoryMatch = !filterCategory || item.category?.toLowerCase() === filterCategory.toLowerCase();
-
-      // Log individual item checks for debugging
-    //   if (!statusMatch) console.log(`GiftList (${filterStatus}): Item ${item.id} (${item.name}) failed status filter (item status: ${item.status})`);
-    //   if (!categoryMatch) console.log(`GiftList (${filterStatus}): Item ${item.id} (${item.name}) failed category filter (item category: ${item.category})`);
 
       return statusMatch && categoryMatch;
     });
@@ -104,8 +100,9 @@ export default function GiftList({
           description: `Obrigado, ${guestName}! "${updatedItem.name}" foi reservado com sucesso!`,
           variant: "default",
         });
+        // Call the parent refresh callback after successful action
+        onItemAction?.();
       } else {
-        // This case might happen if selectGift returns null due to rule constraints or item not found
         console.warn(
           `GiftList (${filterStatus}): Failed to select item ${itemId}. It might have been selected by someone else or status changed.`,
         );
@@ -114,7 +111,8 @@ export default function GiftList({
           description: "Este item pode não estar mais disponível. A lista será atualizada.",
           variant: "destructive",
         });
-        // Revalidation should still happen inside selectGift, even on failure
+        // Optionally call refresh even on failure if the list might be stale
+         onItemAction?.();
       }
     } catch (error) {
       console.error(`GiftList (${filterStatus}): Error during selectGift call for item ${itemId}:`, error);
@@ -170,8 +168,6 @@ export default function GiftList({
     }
   };
 
-  // Parent component (Home page) handles overall loading state.
-  // This component only shows loading for the 'Choose' button interaction.
 
   if (filteredItems.length === 0) {
     let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
@@ -250,5 +246,3 @@ export default function GiftList({
     </>
   );
 }
-
-    
