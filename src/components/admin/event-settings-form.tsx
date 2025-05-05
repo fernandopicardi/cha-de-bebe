@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -21,10 +20,11 @@ interface AdminEventSettingsFormProps {
   onSave?: () => void; // Callback might still be useful for parent-specific logic, but not revalidation
 }
 
-// Refined schema for file handling
+// Constants for file validation (used client-side)
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
 
+// Zod schema WITHOUT FileList validation (this part runs server-side during build)
 const settingsFormSchema = z.object({
   title: z.string().min(5, "Título muito curto.").max(100, "Título muito longo."), // Added max length
   babyName: z.string().optional().nullable().or(z.literal('')), // Allow empty string or null
@@ -34,29 +34,19 @@ const settingsFormSchema = z.object({
   address: z.string().min(10, "Endereço muito curto.").max(200, "Endereço muito longo."), // Added max length
   welcomeMessage: z.string().min(10, "Mensagem de boas-vindas muito curta.").max(500, "Mensagem muito longa."), // Increased max length
   headerImageUrl: z.string().optional().nullable(), // Allow string URL or data URI or null
-  // Validate FileList provided by input type="file"
-  headerImageFile: z
-    .instanceof(FileList)
-    .optional()
-    .nullable()
-    .refine(
-      (fileList) => !fileList || fileList.length === 0 || fileList[0].size <= MAX_FILE_SIZE,
-      `Tamanho máximo do arquivo é 5MB.`
-    )
-    .refine(
-        (fileList) => !fileList || fileList.length === 0 || ACCEPTED_IMAGE_TYPES.includes(fileList[0].type),
-      "Apenas arquivos .jpg, .jpeg, .png, .webp e .gif são aceitos."
-    ),
+  // headerImageFile is handled by react-hook-form but not validated by this schema directly anymore
+  headerImageFile: z.any().optional().nullable(), // Use z.any() for RHF; validation happens in onSubmit
 }).refine(data => {
-    // Skip URL validation if a file is being uploaded (headerImageUrl will be data URI or cleared later)
-    if (data.headerImageFile && data.headerImageFile.length > 0) {
-        return true;
-    }
     // Validate existing URL if no file is being uploaded
+    // Skip this if headerImageFile exists (its validation happens in onSubmit)
+    if (data.headerImageFile && typeof data.headerImageFile === 'object' && data.headerImageFile.length > 0) {
+      return true; // File is present, validation happens later
+    }
+    // Validate existing URL if no file is present
     return !data.headerImageUrl || data.headerImageUrl.startsWith('data:image/') || data.headerImageUrl.startsWith('http');
 }, {
-    message: "URL da imagem inválido. Deve ser um URL http(s) ou uma imagem carregada.", // Custom validation message
-    path: ["headerImageUrl"],
+    message: "URL da imagem inválido. Deve ser um URL http(s) ou uma imagem carregada.",
+    path: ["headerImageUrl"], // Path for the error message
 });
 
 
@@ -67,9 +57,14 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [imagePreview, setImagePreview] = useState<string | null>(null); // State for client-side preview
+  const [isClient, setIsClient] = useState(false); // Track if component has mounted
+
+  useEffect(() => {
+    setIsClient(true); // Set client state after mount
+  }, []);
 
   const { control, register, handleSubmit, formState: { errors, isSubmitting }, reset, watch, setValue, getValues } = useForm<SettingsFormData>({
-    resolver: zodResolver(settingsFormSchema),
+    resolver: zodResolver(settingsFormSchema), // Use the schema without FileList validation
     defaultValues: async () => {
        setIsLoading(true);
        try {
@@ -105,12 +100,31 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
    // Watch the FileList from the input
    const watchedFileList = watch('headerImageFile');
 
-   // Update preview and RHF URL field when file selection changes
+   // Update preview and RHF URL field when file selection changes (Client-side only)
    useEffect(() => {
-     const file = watchedFileList?.[0]; // Get the first file from the FileList
+      if (!isClient) return; // Only run on the client
+
+     const fileList = watchedFileList as FileList | null | undefined; // Explicitly type
+     const file = fileList?.[0]; // Get the first file from the FileList
 
      if (file) {
-       // Validation is now handled by Zod schema
+       // Manual Client-Side Validation (redundant if done in onSubmit, but good for early feedback)
+        if (file.size > MAX_FILE_SIZE) {
+            toast({ title: "Erro de Arquivo", description: `Tamanho máximo do arquivo é ${MAX_FILE_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
+            // Optionally clear the input here or rely on onSubmit validation
+             setValue('headerImageFile', null, { shouldValidate: true }); // Clear invalid file
+             setValue('headerImageUrl', getValues('headerImageUrl')?.startsWith('http') ? getValues('headerImageUrl') : null); // Keep original URL if exists
+             setImagePreview(getValues('headerImageUrl')?.startsWith('http') ? getValues('headerImageUrl') : null); // Revert preview
+            return;
+        }
+        if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+             toast({ title: "Erro de Arquivo", description: "Tipo de arquivo inválido. Use JPG, PNG, GIF, WebP.", variant: "destructive" });
+             setValue('headerImageFile', null, { shouldValidate: true }); // Clear invalid file
+             setValue('headerImageUrl', getValues('headerImageUrl')?.startsWith('http') ? getValues('headerImageUrl') : null); // Keep original URL if exists
+             setImagePreview(getValues('headerImageUrl')?.startsWith('http') ? getValues('headerImageUrl') : null); // Revert preview
+            return;
+        }
+
 
        // Generate data URI for preview and store it in headerImageUrl
        const reader = new FileReader();
@@ -124,26 +138,25 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
          toast({ title: "Erro", description: "Falha ao ler o arquivo de imagem.", variant: "destructive" });
          // Clear states if reading fails
          setValue('headerImageFile', null, { shouldValidate: true });
-         setValue('headerImageUrl', null, { shouldValidate: true });
-         setImagePreview(null);
+         setValue('headerImageUrl', getValues('headerImageUrl')?.startsWith('http') ? getValues('headerImageUrl') : null);
+         setImagePreview(getValues('headerImageUrl')?.startsWith('http') ? getValues('headerImageUrl') : null);
        };
        reader.readAsDataURL(file);
-     } else if (watchedFileList === null) {
-        // File was explicitly cleared (e.g., by removeImage or resetting the form)
-        // `removeImage` handles clearing the URL and preview as well.
-     } else {
-        // No file selected or FileList is undefined (initial state)
-        // Restore preview from potentially existing URL in RHF state if file is cleared implicitly
+
+     } else if (fileList === null || (typeof fileList === 'object' && fileList?.length === 0)) {
+        // File was explicitly cleared or reset
+        // If headerImageUrl still holds a valid http URL, restore the preview for it
         const currentUrl = getValues('headerImageUrl');
         if (currentUrl && currentUrl.startsWith('http')) {
-           setImagePreview(currentUrl);
-        } else if (!currentUrl) {
-           setImagePreview(null); // Ensure preview is clear if no file and no URL
+             setImagePreview(currentUrl);
+        } else {
+             // Only clear preview if the URL is not a valid http URL (e.g., it was a data URI or null)
+             setImagePreview(null);
         }
-        // Don't update preview if currentUrl is a data URI (means previous upload hasn't been saved yet)
      }
+     // else: Initial load or no file selected - preview is managed by defaultValues/reset
 
-   }, [watchedFileList, setValue, toast, getValues]);
+   }, [watchedFileList, setValue, toast, getValues, isClient]); // Add isClient dependency
 
 
    const removeImage = useCallback(async () => {
@@ -160,10 +173,25 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
 
    const onSubmit = async (data: SettingsFormData) => {
 
-     // headerImageUrl already contains data URI if a file was selected and read successfully,
-     // or the initial URL, or null if removed/cleared.
+      // --- Client-Side File Validation ---
+      const fileList = data.headerImageFile as FileList | null | undefined;
+      const file = fileList?.[0];
 
-     // Prepare data for saving (excluding the FileList)
+      if (file) {
+         if (file.size > MAX_FILE_SIZE) {
+              toast({ title: "Erro de Envio", description: `Tamanho máximo do arquivo é ${MAX_FILE_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
+              return; // Stop submission
+         }
+         if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+              toast({ title: "Erro de Envio", description: "Tipo de arquivo inválido. Use JPG, PNG, GIF, WebP.", variant: "destructive" });
+              return; // Stop submission
+         }
+         // If file is valid, headerImageUrl should already contain the data URI from the useEffect hook
+      }
+      // --- End Client-Side File Validation ---
+
+
+     // Prepare data for saving (excluding the FileList reference)
      const settingsToSave: Partial<EventSettings> = {
        title: data.title,
        babyName: data.babyName || null,
@@ -172,11 +200,13 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
        location: data.location,
        address: data.address,
        welcomeMessage: data.welcomeMessage,
-       headerImageUrl: data.headerImageUrl, // This holds the data URI, original URL, or null
+       // Use the headerImageUrl which holds either the data URI, original URL, or null
+       headerImageUrl: data.headerImageUrl,
      };
 
     try {
-      await updateEventSettings(settingsToSave); // This now handles revalidation internally
+      // updateEventSettings now handles revalidation internally
+      await updateEventSettings(settingsToSave);
 
       toast({ title: "Sucesso!", description: "Detalhes do evento atualizados." });
 
@@ -206,7 +236,7 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
   };
 
 
-  if (isLoading) {
+  if (!isClient || isLoading) { // Show loading state until mounted and data loaded
        return (
            <div className="flex items-center justify-center p-8">
                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -274,9 +304,11 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
                      disabled={isSubmitting}
                  />
                  <p className="text-xs text-muted-foreground mt-1">Envie uma imagem (JPG, PNG, GIF, WebP). Máx 5MB.</p>
-                 {/* Display error from RHF validation */}
-                 {errors.headerImageFile && <p className="text-sm text-destructive mt-1">{errors.headerImageFile.message}</p>}
-                 {/* Display error for the URL field (less likely now but keep for robustness) */}
+                 {/* Display error from Zod schema validation (excluding file for now) */}
+                 {errors.headerImageFile && typeof errors.headerImageFile.message === 'string' && (
+                      <p className="text-sm text-destructive mt-1">{errors.headerImageFile.message}</p>
+                  )}
+                 {/* Display error for the URL field */}
                  {errors.headerImageUrl && <p className="text-sm text-destructive mt-1">{errors.headerImageUrl.message}</p>}
                  {/* Display hint about existing image only if no file is staged and there's a non-data URL */}
                  {!watchedFileList?.length && imagePreview && !imagePreview.startsWith('data:') && (
@@ -333,4 +365,5 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
     </form>
   );
 }
+
 
