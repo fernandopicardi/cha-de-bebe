@@ -23,6 +23,7 @@ import {
   AlertCircle,
   RefreshCcw,
   Home,
+  Loader2, // Added Loader2
 } from "lucide-react"; // Added Home icon
 import AdminItemManagementTable from "@/components/admin/item-management-table";
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
@@ -31,6 +32,7 @@ import { getGifts, exportGiftsToCSV, type GiftItem } from "@/data/gift-store"; /
 import { ThemeToggle } from "@/components/theme-toggle"; // Import ThemeToggle
 
 // Hardcoded allowed admin emails and password (INSECURE!)
+// IMPORTANT: Replace this with Firebase Authentication for production!
 const ALLOWED_EMAILS = ["fernandopicardi@gmail.com", "naiaralofgren@gmail.com"];
 const ADMIN_PASSWORD = "Safiras7!"; // Extremely insecure
 
@@ -96,7 +98,9 @@ const AdminLogin: React.FC<AdminLoginProps> = ({
           />
         </div>
         <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Entrando..." : "Entrar"}
+          {loading ? (
+             <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Entrando...</>
+          ) : "Entrar"}
         </Button>
       </form>
       <p className="mt-4 text-xs text-center text-muted-foreground">
@@ -115,27 +119,35 @@ export default function AdminPage() {
   const [gifts, setGifts] = useState<GiftItem[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false); // State for loading gift data
 
-  // Fetch gift data when authenticated
-  const fetchAdminData = useCallback(async () => {
+  // Fetch gift data when authenticated - Removed useCallback, as it's not needed here
+  const fetchAdminData = async () => {
     if (!isAuthenticated) return; // Don't fetch if not logged in
     setIsDataLoading(true);
     setError(null); // Clear previous data errors
+    console.log("AdminPage: Fetching admin data..."); // Log data fetch
     try {
-      const fetchedGifts = await getGifts();
+      const fetchedGifts = await getGifts(); // Using the updated getGifts
       setGifts(fetchedGifts);
+       console.log("AdminPage: Fetched gifts count:", fetchedGifts.length); // Log count
     } catch (err) {
       console.error("Error fetching admin data:", err);
-      setError("Falha ao carregar os dados dos presentes.");
+       if ((err as any)?.code === 'permission-denied') {
+         setError("Permissão negada ao buscar dados. Verifique as regras do Firestore ou o login.");
+       } else {
+         setError("Falha ao carregar os dados dos presentes.");
+       }
     } finally {
       setIsDataLoading(false);
     }
-  }, [isAuthenticated]); // Depend on isAuthenticated
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchAdminData();
     }
-  }, [isAuthenticated, fetchAdminData]); // Fetch data when authenticated or fetchAdminData changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]); // Fetch data only when isAuthenticated changes
+
 
   const handleLogin = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -144,14 +156,18 @@ export default function AdminPage() {
 
     // Simulate network delay
     setTimeout(() => {
+      // Basic client-side check (INSECURE!)
+      // TODO: Replace with Firebase Authentication
       if (
         ALLOWED_EMAILS.includes(email.toLowerCase().trim()) &&
         password === ADMIN_PASSWORD
       ) {
         // Trim and lowercase email for comparison
         setIsAuthenticated(true);
-        // No need to call fetchAdminData here, useEffect will handle it
+        console.log("Admin Login Successful for:", email); // Log success
+        // Fetch data will be triggered by useEffect
       } else {
+        console.warn("Admin Login Failed for:", email); // Log failure
         setError("E-mail ou senha inválidos.");
       }
       setLoading(false);
@@ -165,6 +181,7 @@ export default function AdminPage() {
     setPassword("");
     setError(null);
     setGifts([]); // Clear data on logout
+    console.log("Admin Logged Out"); // Log logout
   };
 
   const handleExport = async () => {
@@ -201,10 +218,11 @@ export default function AdminPage() {
     }
   };
 
-  // Callback to refresh data when child components modify it
-  const refreshData = useCallback(() => {
+  // Callback to refresh data when child components modify it - Removed useCallback
+  const refreshData = () => {
+     console.log("AdminPage: Refreshing data..."); // Log refresh trigger
     fetchAdminData();
-  }, [fetchAdminData]); // Include fetchAdminData in dependencies
+  };
 
   if (!isAuthenticated) {
     return (
@@ -255,17 +273,15 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/*
-        Removed security warning for deployment preparation.
-        NOTE: The login method itself IS STILL INSECURE and should be replaced for production.
-        <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Aviso de Segurança</AlertTitle>
-            <AlertDescription>
-              Este painel está usando um método de login inseguro (senha fixa). Substitua por Firebase Authentication ou outro método seguro antes de usar em produção.
-            </AlertDescription>
-        </Alert>
-        */}
+      {/* Security warning - Important for production */}
+       <Alert variant="destructive">
+           <AlertCircle className="h-4 w-4" />
+           <AlertTitle>Aviso de Segurança Importante</AlertTitle>
+           <AlertDescription>
+             Este painel está usando um método de login INSEGURO (senha fixa no código). É **ESSENCIAL** substituí-lo por Firebase Authentication ou outro método seguro antes de usar em produção para proteger os dados.
+           </AlertDescription>
+       </Alert>
+
 
       {error &&
         !isDataLoading && ( // Show data loading error separately only if not loading
@@ -291,11 +307,14 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {isDataLoading ? (
-              <p>Carregando itens...</p> // Basic loading indicator
+               <div className="flex items-center justify-center p-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <p className="ml-2 text-muted-foreground">Carregando itens...</p>
+                </div>
             ) : (
               <AdminItemManagementTable
                 gifts={gifts}
-                onDataChange={refreshData}
+                onDataChange={refreshData} // Pass refresh callback
               />
             )}
           </CardContent>
@@ -312,11 +331,14 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {isDataLoading ? (
-              <p>Carregando seleções...</p>
+               <div className="flex items-center justify-center p-8">
+                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <p className="ml-2 text-muted-foreground">Carregando seleções...</p>
+               </div>
             ) : (
               <AdminSelectionViewer
                 selectedItems={gifts.filter((g) => g.status === "selected")}
-                onDataChange={refreshData}
+                onDataChange={refreshData} // Pass refresh callback
               />
             )}
           </CardContent>
@@ -332,9 +354,8 @@ export default function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Component now fetches and saves its own data */}
-            <AdminEventSettingsForm onSave={refreshData} />{" "}
-            {/* Pass refreshData if updating settings might affect other admin data */}
+            {/* Component fetches its own data, but might need refreshData if saving settings impacts other parts */}
+            <AdminEventSettingsForm onSave={refreshData} />
           </CardContent>
         </Card>
 

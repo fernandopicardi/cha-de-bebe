@@ -2,7 +2,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cache } from "react";
+// import { cache } from "react"; // Removed cache wrapper
 import {
   collection,
   doc,
@@ -151,8 +151,9 @@ const forceRevalidation = () => {
 
 /**
  * Fetches event settings from Firestore. Initializes with defaults if not found.
+ * Removed React cache wrapper.
  */
-export const getEventSettings = cache(async (): Promise<EventSettings> => {
+export const getEventSettings = (async (): Promise<EventSettings> => {
   console.log("Firestore: Fetching event settings...");
   try {
     const docSnap = await getDoc(settingsDocRef);
@@ -164,21 +165,30 @@ export const getEventSettings = cache(async (): Promise<EventSettings> => {
       return completeSettings;
     } else {
       console.log("Firestore: Event settings not found, initializing defaults.");
-      await setDoc(settingsDocRef, defaultEventSettings);
+      // Check if initialization should happen here or be handled manually/elsewhere
+      // For safety, avoid automatic writes in a read function if possible
+      // await setDoc(settingsDocRef, defaultEventSettings);
+      // return defaultEventSettings;
+      console.warn("Firestore: Settings document 'settings/main' does not exist. Returning defaults without writing.");
       return defaultEventSettings;
     }
   } catch (error) {
     console.error("Firestore: Error fetching event settings:", error);
     // Optionally return defaults or throw error based on desired behavior
+    // Check if error is permissions related
+     if ((error as any)?.code === 'permission-denied') {
+        console.error("Firestore: PERMISSION DENIED fetching event settings. Check Firestore rules.");
+     }
     return defaultEventSettings; // Return defaults on error for resilience
   }
-});
+}); // Removed cache wrapper
 
 /**
  * Fetches all gift items from Firestore, ordered by creation time.
  * Initializes with defaults if the collection is empty.
+ * Removed React cache wrapper.
  */
-export const getGifts = cache(async (): Promise<GiftItem[]> => {
+export const getGifts = (async (): Promise<GiftItem[]> => {
   console.log("Firestore: Fetching gifts...");
   try {
     const q = query(giftsCollection, orderBy("createdAt", "desc")); // Order by creation time
@@ -186,18 +196,22 @@ export const getGifts = cache(async (): Promise<GiftItem[]> => {
 
     if (querySnapshot.empty) {
       console.log("Firestore: Gifts collection empty, initializing defaults.");
-      const batch = writeBatch(db);
-      defaultGiftItems.forEach((item) => {
-        const docRef = doc(giftsCollection); // Auto-generate ID
-        batch.set(docRef, { ...item, createdAt: Timestamp.now() });
-      });
-      await batch.commit();
-      console.log("Firestore: Default gifts added.");
-      // Re-fetch after adding defaults
-      const newSnapshot = await getDocs(q);
-      const gifts = newSnapshot.docs.map(giftFromDoc);
-      console.log(`Firestore: Fetched ${gifts.length} gifts after initialization.`);
-      return gifts;
+       // Check if initialization should happen here or be handled manually/elsewhere
+       // For safety, avoid automatic writes in a read function if possible
+      // const batch = writeBatch(db);
+      // defaultGiftItems.forEach((item) => {
+      //   const docRef = doc(giftsCollection); // Auto-generate ID
+      //   batch.set(docRef, { ...item, createdAt: Timestamp.now() });
+      // });
+      // await batch.commit();
+      // console.log("Firestore: Default gifts added.");
+      // // Re-fetch after adding defaults
+      // const newSnapshot = await getDocs(q);
+      // const gifts = newSnapshot.docs.map(giftFromDoc);
+      // console.log(`Firestore: Fetched ${gifts.length} gifts after initialization.`);
+      // return gifts;
+      console.warn("Firestore: Gifts collection is empty. Returning empty array without initializing defaults.");
+      return [];
     } else {
         const gifts = querySnapshot.docs.map(giftFromDoc);
         console.log(`Firestore: Fetched ${gifts.length} gifts.`);
@@ -205,9 +219,12 @@ export const getGifts = cache(async (): Promise<GiftItem[]> => {
     }
   } catch (error) {
     console.error("Firestore: Error fetching gifts:", error);
+    if ((error as any)?.code === 'permission-denied') {
+        console.error("Firestore: PERMISSION DENIED fetching gifts. Check Firestore rules.");
+     }
     return []; // Return empty array on error
   }
-});
+}); // Removed cache wrapper
 
 /**
  * Updates event settings in Firestore.
@@ -217,17 +234,22 @@ export async function updateEventSettings(
 ): Promise<EventSettings> {
   console.log("Firestore: Updating event settings...");
   try {
-    // Ensure headerImageUrl is handled correctly (null vs undefined)
+    // Ensure headerImageUrl is handled correctly (null vs undefined vs empty string)
     const dataToUpdate = { ...updates };
-    if (dataToUpdate.hasOwnProperty('headerImageUrl') && dataToUpdate.headerImageUrl === undefined) {
-        dataToUpdate.headerImageUrl = null;
+    // Ensure null is saved if headerImageUrl is explicitly set to null, undefined or empty string
+    if (dataToUpdate.hasOwnProperty('headerImageUrl') && !dataToUpdate.headerImageUrl) {
+      dataToUpdate.headerImageUrl = null;
     }
+     // Ensure null is saved if babyName is explicitly set to null, undefined or empty string
+    if (dataToUpdate.hasOwnProperty('babyName') && !dataToUpdate.babyName) {
+      dataToUpdate.babyName = null;
+    }
+
 
     await setDoc(settingsDocRef, dataToUpdate, { merge: true }); // Use setDoc with merge to update or create
     console.log("Firestore: Event settings updated successfully.");
     forceRevalidation();
     // Re-fetch to return the updated data
-    const updatedSettings = await getEventSettings();
     // Manually clear cache if using `cache` function on getEventSettings
     // NOTE: Revalidation should ideally handle this, but direct fetch avoids stale cache issues
     const docSnap = await getDoc(settingsDocRef);

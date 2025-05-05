@@ -16,11 +16,18 @@ import SuggestItemButton from "@/components/suggest-item-button";
 import { getEventSettings, getGifts } from "@/data/gift-store"; // Import getGifts
 import { ThemeToggle } from "@/components/theme-toggle";
 
+// Force dynamic rendering to ensure data is fetched on each request
+// export const dynamic = 'force-dynamic'; // Commented out - may not be necessary if cache is removed from data functions
+
 export default async function Home() {
-  // Fetch the latest event settings directly on the server component
+  // Fetch the latest data directly on the server component on each request
+  // Removed React cache from getEventSettings and getGifts, so they should fetch fresh data
   const eventDetails = await getEventSettings();
-  // Fetch the gift list on the server
   const gifts = await getGifts();
+
+  console.log("Home Page: Fetched gifts count:", gifts.length); // Log fetched gifts count
+  console.log("Home Page: Fetched event settings:", eventDetails); // Log fetched settings
+
 
   // Formatting Date and Time
   let formattedDate = "Data inválida";
