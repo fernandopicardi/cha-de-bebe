@@ -21,12 +21,20 @@ export interface SuggestionData {
   suggesterName: string; // This person is now the 'selector'
 }
 
+// ======================================================================
+// == WARNING: In-Memory Data Store                                    ==
+// ======================================================================
+// The data below (`giftItems` and `eventSettings`) is stored ONLY in the
+// server's memory. This means:
+//   - Data WILL BE LOST when the server restarts (e.g., redeployment, crash).
+//   - It's NOT suitable for production use where data persistence is required.
+//   - Concurrency issues MIGHT occur under heavy load (multiple requests trying
+//     to modify data simultaneously).
+//
+// For production, replace this with a persistent database solution like
+// Firebase Firestore, PostgreSQL, MongoDB, etc.
+// ======================================================================
 
-// *** IMPORTANT: In-memory store ***
-// This array holds all gift items. It's modified by both admin actions (`addGift`, `updateGift`, etc.)
-// and user actions (`selectGift`, `addSuggestion`).
-// Data stored here is *NOT PERSISTENT* and will be lost if the server restarts.
-// This is suitable for development or demos, but a database (like Firestore) is needed for production.
 let giftItems: GiftItem[] = [
   { id: '1', name: 'Body Manga Curta (RN)', category: 'Roupas', status: 'available', description: 'Pacote com 3 unidades, cores neutras.' },
   { id: '2', name: 'Fraldas Pampers (P)', category: 'Higiene', status: 'available', description: 'Pacote grande.' },
@@ -53,78 +61,80 @@ export interface EventSettings {
   headerImageUrl?: string | null; // Optional URL/Data URI for the header image
 }
 
-// *** IMPORTANT: In-memory store for Event Settings ***
-// Similar to giftItems, this holds the event details and is not persistent.
+// In-memory store for Event Settings (see warning above)
 let eventSettings: EventSettings = {
-  title: 'Chá de Bebê', // Default title, admin can change
-  babyName: null, // Default baby name is null, admin can set it
+  title: 'Chá de Bebê',
+  babyName: null,
   date: '2024-12-15',
   time: '14:00',
   location: 'Salão de Festas Felicidade',
   address: 'Rua Exemplo, 123, Bairro Alegre, Cidade Feliz - SP',
-  welcomeMessage: 'Sua presença é o nosso maior presente! Esta lista é um guia carinhoso para quem desejar nos presentear, mas sinta-se totalmente à vontade, o importante é celebrar conosco!', // Updated default welcome message
+  welcomeMessage: 'Sua presença é o nosso maior presente! Esta lista é um guia carinhoso para quem desejar nos presentear, mas sinta-se totalmente à vontade, o importante é celebrar conosco!',
   duration: 180,
-  headerImageUrl: null, // Initialize header image URL as null
+  headerImageUrl: null,
 };
 
 
-// Helper function to revalidate both pages
+/**
+ * Helper function to trigger cache revalidation for relevant pages.
+ * This ensures that Server Components re-fetch the latest data from the store.
+ */
 const triggerRevalidation = () => {
-  console.log("Triggering revalidation for '/' and '/admin'");
-  revalidatePath('/');
-  revalidatePath('/admin');
+  console.log(`[${new Date().toISOString()}] Revalidating paths: '/' and '/admin'`);
+  try {
+    revalidatePath('/');
+    revalidatePath('/admin');
+    console.log(`[${new Date().toISOString()}] Revalidation triggered successfully.`);
+  } catch (error) {
+     console.error(`[${new Date().toISOString()}] Error triggering revalidation:`, error);
+     // Handle error appropriately, maybe log it more formally
+  }
 };
 
 
 /**
  * Retrieves the current event settings.
+ * Returns a deep copy to prevent direct mutation of the store.
  * @returns A promise resolving to the event settings object.
  */
 export async function getEventSettings(): Promise<EventSettings> {
+  // console.log("getEventSettings called."); // Uncomment for debugging fetch calls
   // Simulate async if needed: await new Promise(resolve => setTimeout(resolve, 50));
-  // Return a deep copy to prevent mutation of the original object
   return JSON.parse(JSON.stringify(eventSettings));
 }
 
 /**
  * (Admin) Updates the event settings.
+ * Modifies the in-memory `eventSettings` object.
  * @param updates Partial data containing the updates for event settings.
  * @returns A promise resolving to the updated event settings object.
  */
 export async function updateEventSettings(updates: Partial<EventSettings>): Promise<EventSettings> {
+   console.log(`[${new Date().toISOString()}] updateEventSettings called with updates:`, updates);
    // Simulate async operation
    // await new Promise(resolve => setTimeout(resolve, 100));
 
-   // Ensure that only valid keys from EventSettings are applied
    const validKeys = Object.keys(eventSettings) as (keyof EventSettings)[];
    const filteredUpdates: Partial<EventSettings> = {};
 
    for (const key of validKeys) {
-       if (key in updates) { // Check if the key exists in the updates object
+       if (Object.prototype.hasOwnProperty.call(updates, key)) { // More robust check
             const value = updates[key];
-            // Handle specific cases like babyName and headerImageUrl explicitly
             if (key === 'babyName') {
-                filteredUpdates.babyName = (value === '' || value === undefined) ? null : value;
+                filteredUpdates.babyName = (value === '' || value === undefined || value === null) ? null : value; // Explicitly handle null
             } else if (key === 'headerImageUrl') {
-                // Allow setting to null or a string URL/Data URI
-                 filteredUpdates.headerImageUrl = (value === undefined) ? eventSettings.headerImageUrl : value; // Keep old value if undefined is passed, allow null
+                 filteredUpdates.headerImageUrl = (value === undefined) ? eventSettings.headerImageUrl : value;
             } else if (value !== undefined) {
-                 // Apply other updates only if they are not undefined
-                filteredUpdates[key] = value as any; // Cast needed due to complex types
+                filteredUpdates[key] = value as any;
             }
        }
    }
 
-    // Merge filtered updates into the existing settings
-    eventSettings = {
-        ...eventSettings,
-        ...filteredUpdates,
-    };
+    eventSettings = { ...eventSettings, ...filteredUpdates };
 
-    console.log('Event settings updated in store:', eventSettings);
+    console.log(`[${new Date().toISOString()}] Event settings updated in store:`, eventSettings);
     triggerRevalidation(); // Revalidate after update
 
-    // Return a deep copy of the updated settings
     return JSON.parse(JSON.stringify(eventSettings));
 }
 
@@ -133,13 +143,13 @@ export async function updateEventSettings(updates: Partial<EventSettings>): Prom
 
 /**
  * Retrieves the current list of gift items from the in-memory store.
- * Both admin and user views use this function to get the current state of the list.
+ * Returns a deep copy to prevent direct modification of the store.
  * @returns A promise resolving to the array of gift items.
  */
 export async function getGifts(): Promise<GiftItem[]> {
+  // console.log("getGifts called."); // Uncomment for debugging fetch calls
   // Simulate async if needed: await new Promise(resolve => setTimeout(resolve, 50));
-  console.log("getGifts called. Returning current items:", giftItems.length);
-  return JSON.parse(JSON.stringify(giftItems)); // Return a deep copy to prevent direct modification
+  return JSON.parse(JSON.stringify(giftItems));
 }
 
 /**
@@ -150,19 +160,21 @@ export async function getGifts(): Promise<GiftItem[]> {
  * @returns A promise resolving to the updated item or null if not found/unavailable.
  */
 export async function selectGift(itemId: string, guestName: string): Promise<GiftItem | null> {
+  console.log(`[${new Date().toISOString()}] selectGift called for item ${itemId} by ${guestName}`);
   // Simulate async
   // await new Promise(resolve => setTimeout(resolve, 100));
   const itemIndex = giftItems.findIndex(item => item.id === itemId && item.status === 'available');
   if (itemIndex === -1) {
-    console.warn(`Item ${itemId} not found or not available for selection.`);
-    return null; // Item not found or not available
+    console.warn(`[${new Date().toISOString()}] Item ${itemId} not found or not available for selection.`);
+    triggerRevalidation(); // Revalidate even if selection failed, as list might need update for others
+    return null;
   }
 
-  const updatedItem: GiftItem = { // Ensure the type is correct
+  const updatedItem: GiftItem = {
     ...giftItems[itemIndex],
-    status: 'selected' as const, // Ensure correct type
+    status: 'selected' as const,
     selectedBy: guestName,
-    selectionDate: new Date().toISOString(), // Store as ISO string
+    selectionDate: new Date().toISOString(),
   };
 
   giftItems = [
@@ -171,9 +183,9 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
     ...giftItems.slice(itemIndex + 1),
   ];
 
-  console.log(`Item ${itemId} selected by ${guestName}. Total items: ${giftItems.length}`);
-  triggerRevalidation(); // Revalidate after update
-  return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
+  console.log(`[${new Date().toISOString()}] Item ${itemId} selected by ${guestName}. Total items: ${giftItems.length}`);
+  triggerRevalidation(); // Revalidate after successful update
+  return JSON.parse(JSON.stringify(updatedItem));
 }
 
 /**
@@ -183,18 +195,19 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
  * @returns A promise resolving to the updated item or null if not found/unavailable.
  */
 export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | null> {
+    console.log(`[${new Date().toISOString()}] markGiftAsNotNeeded called for item ${itemId}`);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 100));
     const itemIndex = giftItems.findIndex(item => item.id === itemId && item.status === 'available');
     if (itemIndex === -1) {
-        console.warn(`Admin: Item ${itemId} not found or not available to be marked as not needed.`);
-        return null;
+        console.warn(`[${new Date().toISOString()}] Admin: Item ${itemId} not found or not available to be marked as not needed.`);
+        return null; // Don't revalidate if item wasn't found/valid to change
     }
 
     const updatedItem: GiftItem = {
         ...giftItems[itemIndex],
         status: 'not_needed' as const,
-        selectedBy: undefined, // Clear selection info
+        selectedBy: undefined,
         selectionDate: undefined,
     };
 
@@ -204,9 +217,9 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`Admin marked item ${itemId} as not needed. Total items: ${giftItems.length}`);
-    triggerRevalidation(); // Revalidate after update
-    return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
+    console.log(`[${new Date().toISOString()}] Admin marked item ${itemId} as not needed. Total items: ${giftItems.length}`);
+    triggerRevalidation();
+    return JSON.parse(JSON.stringify(updatedItem));
 }
 
 
@@ -219,23 +232,24 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
  * @returns A promise resolving to the newly added item.
  */
 export async function addSuggestion(suggestionData: SuggestionData): Promise<GiftItem> {
+  console.log(`[${new Date().toISOString()}] addSuggestion called by ${suggestionData.suggesterName} for item "${suggestionData.itemName}"`);
   // Simulate async
   // await new Promise(resolve => setTimeout(resolve, 100));
   const newItem: GiftItem = {
-    id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Generate a unique ID
+    id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     name: suggestionData.itemName,
     description: suggestionData.itemDescription,
-    category: 'Outros', // Default category for user-added items, admin can change later
-    status: 'selected', // Add directly as selected
-    selectedBy: suggestionData.suggesterName, // The suggester is the selector
-    selectionDate: new Date().toISOString(), // Record selection date as ISO string
+    category: 'Outros',
+    status: 'selected',
+    selectedBy: suggestionData.suggesterName,
+    selectionDate: new Date().toISOString(),
   };
 
-  giftItems = [...giftItems, newItem];
+  giftItems = [...giftItems, newItem]; // Appends the new item
 
-  console.log(`Item "${newItem.name}" added and selected by ${newItem.selectedBy}. Total items: ${giftItems.length}`);
-  triggerRevalidation(); // Revalidate after update
-  return JSON.parse(JSON.stringify(newItem)); // Return a copy
+  console.log(`[${new Date().toISOString()}] Item "${newItem.name}" added and selected by ${newItem.selectedBy}. Total items: ${giftItems.length}`);
+  triggerRevalidation();
+  return JSON.parse(JSON.stringify(newItem));
 }
 
 
@@ -248,21 +262,22 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
  * @returns A promise resolving to the updated item or null if not found/not in a revertible status.
  */
 export async function revertSelection(itemId: string): Promise<GiftItem | null> {
+    console.log(`[${new Date().toISOString()}] revertSelection called for item ${itemId}`);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 100));
-    const itemIndex = giftItems.findIndex(item => item.id === itemId && (item.status === 'selected' || item.status === 'not_needed')); // Can revert selected or not_needed
+    const itemIndex = giftItems.findIndex(item => item.id === itemId && (item.status === 'selected' || item.status === 'not_needed'));
     if (itemIndex === -1) {
-        console.warn(`Admin: Item ${itemId} not found or not in a revertible status.`);
-        return null;
+        console.warn(`[${new Date().toISOString()}] Admin: Item ${itemId} not found or not in a revertible status.`);
+        return null; // Don't revalidate if item wasn't found/valid to change
     }
 
-    const { selectedBy, selectionDate, ...rest } = giftItems[itemIndex]; // Remove selection details
+    const { selectedBy, selectionDate, ...rest } = giftItems[itemIndex];
 
     const updatedItem: GiftItem = {
         ...rest,
         status: 'available' as const,
-        selectedBy: undefined, // Explicitly clear
-        selectionDate: undefined, // Explicitly clear
+        selectedBy: undefined,
+        selectionDate: undefined,
     };
 
      giftItems = [
@@ -271,9 +286,9 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`Item ${itemId} reverted to available by admin. Total items: ${giftItems.length}`);
-    triggerRevalidation(); // Revalidate after update
-    return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
+    console.log(`[${new Date().toISOString()}] Item ${itemId} reverted to available by admin. Total items: ${giftItems.length}`);
+    triggerRevalidation();
+    return JSON.parse(JSON.stringify(updatedItem));
 }
 
 /**
@@ -283,28 +298,26 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
  * @returns A promise resolving to the newly added gift item.
  */
 export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'> & { selectionDate?: Date | string }): Promise<GiftItem> {
+    console.log(`[${new Date().toISOString()}] addGift called with data:`, newItemData);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 100));
     const newItem: GiftItem = {
-        id: `gift-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Generate unique ID
+        id: `gift-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         ...newItemData,
-        // Status defaults to 'available' if not provided, otherwise use provided status
         status: newItemData.status || 'available',
-        selectionDate: newItemData.selectionDate instanceof Date ? newItemData.selectionDate.toISOString() : newItemData.selectionDate, // Ensure date is string
+        selectionDate: newItemData.selectionDate instanceof Date ? newItemData.selectionDate.toISOString() : newItemData.selectionDate,
     };
-    // Clear selection details if status is not 'selected'
     if (newItem.status !== 'selected') {
         newItem.selectedBy = undefined;
         newItem.selectionDate = undefined;
     } else if (newItem.status === 'selected' && !newItem.selectionDate) {
-        // If adding directly as selected, set selection date if not provided
         newItem.selectionDate = new Date().toISOString();
     }
 
-    giftItems = [...giftItems, newItem];
-    console.log(`Admin added new gift: ${newItem.name} with status ${newItem.status}. Total items: ${giftItems.length}`);
-    triggerRevalidation(); // Revalidate after update
-    return JSON.parse(JSON.stringify(newItem)); // Return a copy
+    giftItems = [...giftItems, newItem]; // Appends the new item
+    console.log(`[${new Date().toISOString()}] Admin added new gift: ${newItem.name} with status ${newItem.status}. Total items: ${giftItems.length}`);
+    triggerRevalidation();
+    return JSON.parse(JSON.stringify(newItem));
 }
 
 
@@ -316,49 +329,38 @@ export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'
  * @returns A promise resolving to the updated item or null if not found.
  */
 export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem, 'id' | 'selectionDate'> & { selectionDate?: Date | string }>): Promise<GiftItem | null> {
+     console.log(`[${new Date().toISOString()}] updateGift called for item ${itemId} with updates:`, updates);
      // Simulate async
      // await new Promise(resolve => setTimeout(resolve, 100));
      const itemIndex = giftItems.findIndex(item => item.id === itemId);
      if (itemIndex === -1) {
-         console.warn(`Item ${itemId} not found for update by admin.`);
-         return null;
+         console.warn(`[${new Date().toISOString()}] Item ${itemId} not found for update by admin.`);
+         return null; // Don't revalidate if item wasn't found
      }
 
-     // Get the original item
      const originalItem = giftItems[itemIndex];
-
-     // Ensure read-only fields like 'id' are not overwritten
      const { id, ...restUpdates } = updates;
 
-     // Merge updates with the original item
      let updatedItem: GiftItem = {
          ...originalItem,
          ...restUpdates,
-         // Ensure status update is valid, if provided
          ...(updates.status && ['available', 'selected', 'not_needed'].includes(updates.status)
              ? { status: updates.status as GiftItem['status'] }
              : {}),
-        // Ensure date is stored as string
         selectionDate: updates.selectionDate instanceof Date ? updates.selectionDate.toISOString() : updates.selectionDate ?? originalItem.selectionDate,
      };
 
-     // Logic for clearing/setting selection details based on status change
      if (updatedItem.status === 'available' || updatedItem.status === 'not_needed') {
-         // If status becomes available or not_needed, clear selection details
          updatedItem.selectedBy = undefined;
          updatedItem.selectionDate = undefined;
      } else if (updatedItem.status === 'selected') {
-         // If status becomes selected
          if (!originalItem.selectedBy && !updatedItem.selectedBy) {
-             // If it wasn't selected before and no selector is provided in update, check if one exists in the update object
-             updatedItem.selectedBy = updates.selectedBy || 'Admin'; // Use provided name or default to 'Admin' if still none
+             updatedItem.selectedBy = updates.selectedBy || 'Admin';
          }
          if (!originalItem.selectionDate && !updatedItem.selectionDate) {
-             // If it wasn't selected before and no date provided, set current date
              updatedItem.selectionDate = new Date().toISOString();
          } else if (updates.selectedBy && updatedItem.selectedBy !== originalItem.selectedBy) {
-            // If the selector name is explicitly changed, update the date
-             updatedItem.selectionDate = new Date().toISOString();
+            updatedItem.selectionDate = new Date().toISOString();
          }
      }
 
@@ -369,9 +371,9 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
          ...giftItems.slice(itemIndex + 1),
      ];
 
-     console.log(`Item ${itemId} updated by admin. New data:`, updatedItem);
-     triggerRevalidation(); // Revalidate after update
-     return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
+     console.log(`[${new Date().toISOString()}] Item ${itemId} updated by admin. New data:`, updatedItem);
+     triggerRevalidation();
+     return JSON.parse(JSON.stringify(updatedItem));
 }
 
 /**
@@ -381,30 +383,32 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
  * @returns A promise resolving to true if successful, false otherwise.
  */
 export async function deleteGift(itemId: string): Promise<boolean> {
+    console.log(`[${new Date().toISOString()}] deleteGift called for item ${itemId}`);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 100));
     const initialLength = giftItems.length;
     giftItems = giftItems.filter(item => item.id !== itemId);
     const success = giftItems.length < initialLength;
     if (success) {
-        console.log(`Item ${itemId} deleted by admin. Total items: ${giftItems.length}`);
-        triggerRevalidation(); // Revalidate after update
+        console.log(`[${new Date().toISOString()}] Item ${itemId} deleted by admin. Total items: ${giftItems.length}`);
+        triggerRevalidation();
     } else {
-        console.warn(`Item ${itemId} not found for deletion by admin.`);
+        console.warn(`[${new Date().toISOString()}] Item ${itemId} not found for deletion by admin.`);
     }
     return success;
 }
 
 /**
  * (Admin) Exports gift data to CSV format.
+ * Retrieves data using `getGifts`.
  * @returns A promise resolving to the CSV string.
  */
 export async function exportGiftsToCSV(): Promise<string> {
+    console.log(`[${new Date().toISOString()}] exportGiftsToCSV called`);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 50));
-    // Updated headers to remove suggestion columns
     const headers = ['ID', 'Nome', 'Descrição', 'Categoria', 'Status', 'Selecionado Por', 'Data Seleção'];
-    const currentGifts = await getGifts(); // Fetch current data from the in-memory store
+    const currentGifts = await getGifts(); // Fetch current data
     const rows = currentGifts.map(item => [
         item.id,
         item.name,
@@ -414,18 +418,18 @@ export async function exportGiftsToCSV(): Promise<string> {
         item.selectedBy || '',
         item.selectionDate
             ? new Date(item.selectionDate).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short'})
-            : '', // Format date for locale
-    ].map(value => `"${String(value).replace(/"/g, '""')}"`) // Escape quotes
+            : '',
+    ].map(value => `"${String(value).replace(/"/g, '""')}"`)
      .join(','));
 
+    console.log(`[${new Date().toISOString()}] CSV export generated with ${rows.length} rows.`);
     return [headers.join(','), ...rows].join('\n');
 }
 
 // Example: Function to log the current state of the store (for debugging)
 export async function logCurrentStoreState() {
     console.log("--- Current In-Memory Store State ---");
-    console.log("Event Settings:", eventSettings);
-    console.log("Gift Items:", giftItems);
+    console.log("Event Settings:", JSON.stringify(eventSettings, null, 2)); // Pretty print
+    console.log("Gift Items:", JSON.stringify(giftItems, null, 2)); // Pretty print
     console.log("-------------------------------------");
 }
-
