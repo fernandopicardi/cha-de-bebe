@@ -19,6 +19,7 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, PartyPopper, Send } from 'lucide-react';
 import type { GiftItem } from '@/data/gift-store'; // Import type
+import { revalidateAdminPage } from '@/actions/revalidate'; // Import admin page revalidation
 
 // Interface now uses the imported type
 interface SelectItemDialogProps {
@@ -45,15 +46,18 @@ export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: S
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     setIsSubmitting(true);
     try {
-      // Call the success callback passed from the parent (which now handles the async logic)
+      // Call the success callback passed from the parent (which now handles the async logic and home page revalidation)
       await onSuccess(item.id, data.guestName);
+      // Also explicitly revalidate admin page here for consistency
+      await revalidateAdminPage();
 
-      toast({
-        title: ( <div className="flex items-center gap-2"> <PartyPopper className="h-5 w-5 text-success-foreground" /> Sucesso! </div> ),
-        description: `Obrigado, ${data.guestName}! "${item.name}" foi reservado com sucesso!`, // Updated message
-        variant: 'default',
-        className: 'bg-success text-success-foreground border-success',
-      });
+      // Toast is now handled within the onSuccess callback in gift-list.tsx after revalidation
+      // toast({
+      //   title: ( <div className="flex items-center gap-2"> <PartyPopper className="h-5 w-5 text-success-foreground" /> Sucesso! </div> ),
+      //   description: `Obrigado, ${data.guestName}! "${item.name}" foi reservado com sucesso!`,
+      //   variant: 'default',
+      //   className: 'bg-success text-success-foreground border-success',
+      // });
       reset(); // Reset form fields
       onClose(); // Close the dialog
     } catch (error) {

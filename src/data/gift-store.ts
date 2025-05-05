@@ -20,8 +20,11 @@ export interface SuggestionData {
 }
 
 
-// In-memory store for gift items
-// Initialize with some mock data (updated interface)
+// *** IMPORTANT: In-memory store ***
+// This array holds all gift items. It's modified by both admin actions (`addGift`, `updateGift`, etc.)
+// and user actions (`selectGift`, `addSuggestion`).
+// Data stored here is *NOT PERSISTENT* and will be lost if the server restarts.
+// This is suitable for development or demos, but a database (like Firestore) is needed for production.
 let giftItems: GiftItem[] = [
   { id: '1', name: 'Body Manga Curta (RN)', category: 'Roupas', status: 'available', description: 'Pacote com 3 unidades, cores neutras.' },
   { id: '2', name: 'Fraldas Pampers (P)', category: 'Higiene', status: 'available', description: 'Pacote grande.' },
@@ -48,7 +51,8 @@ export interface EventSettings {
   headerImageUrl?: string | null; // Optional URL/Data URI for the header image
 }
 
-// In-memory store for event settings
+// *** IMPORTANT: In-memory store for Event Settings ***
+// Similar to giftItems, this holds the event details and is not persistent.
 let eventSettings: EventSettings = {
   title: 'Chá de Bebê', // Default title, admin can change
   babyName: null, // Default baby name is null, admin can set it
@@ -117,17 +121,19 @@ export async function updateEventSettings(updates: Partial<EventSettings>): Prom
 // --- Gift Item Functions ---
 
 /**
- * Retrieves the current list of gift items.
- * Simulates async operation if needed in future, but currently synchronous.
+ * Retrieves the current list of gift items from the in-memory store.
+ * Both admin and user views use this function to get the current state of the list.
  * @returns A promise resolving to the array of gift items.
  */
 export async function getGifts(): Promise<GiftItem[]> {
   // Simulate async if needed: await new Promise(resolve => setTimeout(resolve, 50));
+  console.log("getGifts called. Returning current items:", giftItems.length);
   return JSON.parse(JSON.stringify(giftItems)); // Return a deep copy to prevent direct modification
 }
 
 /**
  * Selects a gift item by updating its status and recording the selector.
+ * Modifies the `giftItems` array.
  * @param itemId The ID of the item to select.
  * @param guestName The name of the guest selecting the item.
  * @returns A promise resolving to the updated item or null if not found/unavailable.
@@ -154,14 +160,14 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
     ...giftItems.slice(itemIndex + 1),
   ];
 
-  console.log(`Item ${itemId} selected by ${guestName}.`);
+  console.log(`Item ${itemId} selected by ${guestName}. Total items: ${giftItems.length}`);
   // Revalidation removed - should be handled by the caller action
   return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
 /**
  * (Admin Only) Marks an available gift item as 'not_needed'.
- * This function is intended for admin use to manage the list, not for guests.
+ * Modifies the `giftItems` array.
  * @param itemId The ID of the item to mark.
  * @returns A promise resolving to the updated item or null if not found/unavailable.
  */
@@ -187,7 +193,7 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`Admin marked item ${itemId} as not needed.`);
+    console.log(`Admin marked item ${itemId} as not needed. Total items: ${giftItems.length}`);
     // Revalidation removed - should be handled by the caller action
     return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
@@ -197,7 +203,7 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
 
 /**
  * Adds a new item directly to the list with 'selected' status,
- * based on user suggestion.
+ * based on user suggestion. Modifies the `giftItems` array.
  * @param suggestionData The data for the suggested item.
  * @returns A promise resolving to the newly added item.
  */
@@ -216,7 +222,7 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
 
   giftItems = [...giftItems, newItem];
 
-  console.log(`Item "${newItem.name}" added and selected by ${newItem.selectedBy}.`);
+  console.log(`Item "${newItem.name}" added and selected by ${newItem.selectedBy}. Total items: ${giftItems.length}`);
   // Revalidation removed - should be handled by the caller action
   return JSON.parse(JSON.stringify(newItem)); // Return a copy
 }
@@ -226,6 +232,7 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
 
 /**
  * (Admin) Reverts a selected or 'not_needed' item back to 'available'.
+ * Modifies the `giftItems` array.
  * @param itemId The ID of the selected item to revert.
  * @returns A promise resolving to the updated item or null if not found/not in a revertible status.
  */
@@ -253,13 +260,14 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`Item ${itemId} reverted to available by admin.`);
+    console.log(`Item ${itemId} reverted to available by admin. Total items: ${giftItems.length}`);
     // Revalidation removed - should be handled by the caller action
     return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
 /**
  * (Admin) Adds a new gift item directly.
+ * Modifies the `giftItems` array.
  * @param newItemData Data for the new gift (excluding id). Status defaults to available unless specified.
  * @returns A promise resolving to the newly added gift item.
  */
@@ -283,7 +291,7 @@ export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'
     }
 
     giftItems = [...giftItems, newItem];
-    console.log(`Admin added new gift: ${newItem.name} with status ${newItem.status}`);
+    console.log(`Admin added new gift: ${newItem.name} with status ${newItem.status}. Total items: ${giftItems.length}`);
     // Revalidation removed - should be handled by the caller action
     return JSON.parse(JSON.stringify(newItem)); // Return a copy
 }
@@ -291,6 +299,7 @@ export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'
 
 /**
  * (Admin) Updates an existing gift item.
+ * Modifies the `giftItems` array.
  * @param itemId The ID of the item to update.
  * @param updates Partial data containing the updates.
  * @returns A promise resolving to the updated item or null if not found.
@@ -356,6 +365,7 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
 
 /**
  * (Admin) Deletes a gift item.
+ * Modifies the `giftItems` array.
  * @param itemId The ID of the item to delete.
  * @returns A promise resolving to true if successful, false otherwise.
  */
@@ -366,7 +376,7 @@ export async function deleteGift(itemId: string): Promise<boolean> {
     giftItems = giftItems.filter(item => item.id !== itemId);
     const success = giftItems.length < initialLength;
     if (success) {
-        console.log(`Item ${itemId} deleted by admin.`);
+        console.log(`Item ${itemId} deleted by admin. Total items: ${giftItems.length}`);
         // Revalidation removed - should be handled by the caller action
     } else {
         console.warn(`Item ${itemId} not found for deletion by admin.`);
@@ -383,7 +393,7 @@ export async function exportGiftsToCSV(): Promise<string> {
     // await new Promise(resolve => setTimeout(resolve, 50));
     // Updated headers to remove suggestion columns
     const headers = ['ID', 'Nome', 'Descrição', 'Categoria', 'Status', 'Selecionado Por', 'Data Seleção'];
-    const currentGifts = await getGifts(); // Fetch current data
+    const currentGifts = await getGifts(); // Fetch current data from the in-memory store
     const rows = currentGifts.map(item => [
         item.id,
         item.name,
@@ -398,4 +408,12 @@ export async function exportGiftsToCSV(): Promise<string> {
      .join(','));
 
     return [headers.join(','), ...rows].join('\n');
+}
+
+// Example: Function to log the current state of the store (for debugging)
+export async function logCurrentStoreState() {
+    console.log("--- Current In-Memory Store State ---");
+    console.log("Event Settings:", eventSettings);
+    console.log("Gift Items:", giftItems);
+    console.log("-------------------------------------");
 }
