@@ -23,7 +23,8 @@ import {
 import { db } from "@/firebase/config"; // Ensure db is imported correctly
 import { uploadImage, deleteImage } from '@/services/storage'; // Import storage service
 
-// Interface definitions (ensure they are correct)
+// --- INTERFACE DEFINITIONS ---
+
 export interface GiftItem {
   id: string;
   name: string;
@@ -57,7 +58,16 @@ export interface EventSettings {
   headerImageUrl?: string | null; // Store Firebase Storage URL
 }
 
-// Default data (keep imageUrl as null initially)
+// Added interface for Presence Confirmation
+export interface Confirmation {
+    id: string;
+    names: string[];
+    confirmedAt: string; // ISO string date format
+}
+
+
+// --- DEFAULT DATA ---
+
 const defaultGiftItems: Omit<GiftItem, "id" | 'createdAt' | 'selectionDate'>[] = [
     { name: "Body Manga Curta (RN)", category: "Roupas", status: "available", description: "Pacote com 3 unidades, cores neutras.", imageUrl: null },
     { name: "Fraldas Pampers (P)", category: "Higiene", status: "available", description: "Pacote grande.", imageUrl: null },
@@ -85,10 +95,14 @@ const defaultEventSettings: EventSettings = {
   headerImageUrl: null, // Default to no image
 };
 
-// Type definitions for Firestore references
+// --- FIRESTORE REFERENCES ---
+
 const giftsCollectionRef = collection(db, "gifts") as CollectionReference<Omit<GiftItem, 'id'>>;
 const settingsCollectionRef = collection(db, "settings");
-const settingsDocRef = doc(settingsCollectionRef, "main") as DocumentReference<EventSettings>; // Assuming 'main' is the ID for the single settings document
+const settingsDocRef = doc(settingsCollectionRef, "main") as DocumentReference<EventSettings>;
+const confirmationsCollectionRef = collection(db, "confirmations") as CollectionReference<Omit<Confirmation, 'id'>>; // Ref for confirmations
+
+// --- HELPER FUNCTIONS ---
 
 /**
  * Helper function to map Firestore document data to GiftItem interface.
@@ -125,6 +139,27 @@ const giftFromDoc = (docSnapshot: any): GiftItem | null => {
   };
 
 /**
+ * Helper function to map Firestore document data to Confirmation interface.
+ */
+const confirmationFromDoc = (docSnapshot: any): Confirmation | null => {
+    const data = docSnapshot.data();
+    const docId = docSnapshot.id;
+
+    if (!data || !Array.isArray(data.names) || !data.confirmedAt) {
+        console.error(`Firestore Convert: Invalid or missing fields for confirmation document ID ${docId}. Data:`, data);
+        return null;
+    }
+
+    return {
+        id: docId,
+        names: data.names,
+        confirmedAt: data.confirmedAt instanceof Timestamp
+            ? data.confirmedAt.toDate().toISOString()
+            : typeof data.confirmedAt === 'string' ? data.confirmedAt : new Date().toISOString(), // Fallback
+    };
+};
+
+/**
  * Function to trigger revalidation of Next.js cache for specified paths.
  */
 const forceRevalidation = (path: string = "/") => {
@@ -140,6 +175,9 @@ const forceRevalidation = (path: string = "/") => {
       console.error(`Firestore Revalidate: Error during revalidatePath for ${path}:`, error);
     }
   };
+
+
+// --- INITIALIZATION ---
 
 /**
  * Initializes Firestore with default settings and gifts if they don't exist.
@@ -187,6 +225,7 @@ export async function initializeFirestoreData(): Promise<void> {
     }
   }
 
+// --- DATA STORE FUNCTIONS ---
 
 /**
  * Fetches the main event settings from Firestore.
@@ -459,6 +498,7 @@ export async function addGift(
       const dataToAdd = {
           ...itemDetails,
           description: itemDetails.description?.trim() || null,
+          // Ensure selectedBy is handled correctly: null if not selected, or name if selected
           selectedBy: itemDetails.status === 'selected' ? (itemDetails.selectedBy?.trim() || "Admin") : null,
           selectionDate: itemDetails.status === 'selected' ? serverTimestamp() : null,
           createdAt: serverTimestamp(),
@@ -471,10 +511,10 @@ export async function addGift(
            if (uploadedImageUrl) await deleteImage(uploadedImageUrl).catch(e => console.error("Cleanup failed", e));
           return null;
       }
-      if (dataToAdd.status === 'selected' && !dataToAdd.selectedBy) {
-          console.error("Firestore ADD_GIFT: 'selectedBy' is required when status is 'selected'.");
-          if (uploadedImageUrl) await deleteImage(uploadedImageUrl).catch(e => console.error("Cleanup failed", e));
-          return null;
+       // If status is 'selected', selectedBy must not be null or undefined
+       if (dataToAdd.status === 'selected' && !dataToAdd.selectedBy) {
+        console.warn("Firestore ADD_GIFT: Status is 'selected' but 'selectedBy' is missing. Defaulting to 'Admin'.");
+        dataToAdd.selectedBy = "Admin"; // Or handle as error if required
       }
 
       // 3. Add document to Firestore
@@ -495,7 +535,9 @@ export async function addGift(
         if ((error as any)?.code === 'permission-denied') {
             console.error("Firestore: PERMISSION DENIED adding gift. Check Firestore rules.");
         } else if (error instanceof Error && error.message.includes("Unsupported field value")) {
-            console.error("Firestore ADD_GIFT: Invalid data provided.", error);
+             console.error("Firestore ADD_GIFT: Invalid data provided. Potentially undefined field:", error);
+             // You might want to log dataToAdd here for debugging
+             console.log("Data attempted to add:", dataToAdd);
         }
         return null; // Indicate failure
     }
@@ -553,7 +595,10 @@ export async function updateGift(
 
         // Handle status changes and related fields
         if (updates.status === 'selected') {
-            dataToUpdate.selectionDate = updates.selectionDate instanceof Date ? Timestamp.fromDate(new Date(updates.selectionDate)) : serverTimestamp();
+            // Use server timestamp if no date is provided in update, otherwise use provided date
+             dataToUpdate.selectionDate = updates.selectionDate
+                ? (new Date(updates.selectionDate) instanceof Date ? Timestamp.fromDate(new Date(updates.selectionDate)) : serverTimestamp())
+                : serverTimestamp();
             dataToUpdate.selectedBy = updates.selectedBy?.trim() || "Admin";
         } else if (updates.status === 'available' || updates.status === 'not_needed') {
             dataToUpdate.selectedBy = null;
@@ -564,7 +609,7 @@ export async function updateGift(
         if (typeof dataToUpdate.name === 'string') dataToUpdate.name = dataToUpdate.name.trim();
         if (typeof dataToUpdate.description === 'string') dataToUpdate.description = dataToUpdate.description.trim() || null;
 
-        // Remove undefined fields
+        // Remove undefined fields to avoid Firestore errors
         Object.keys(dataToUpdate).forEach(key => dataToUpdate[key] === undefined && delete dataToUpdate[key]);
 
          console.log("Firestore UPDATE_GIFT: Final data being saved:", {
@@ -594,7 +639,8 @@ export async function updateGift(
             // This case is handled above, but kept here for completeness
             console.error(`Firestore UPDATE_GIFT: Gift item with ID ${itemId} not found.`);
         } else if (error instanceof Error && error.message.includes("Unsupported field value")) {
-            console.error("Firestore UPDATE_GIFT: Invalid data provided for update.", error);
+             console.error("Firestore UPDATE_GIFT: Invalid data provided for update. Potentially undefined field:", error);
+              console.log("Data attempted to update:", dataToUpdate);
         }
         throw error; // Re-throw error for the calling component to handle
     }
@@ -811,5 +857,68 @@ export async function exportGiftsToCSV(): Promise<string> {
     }
   }
 
-// Optional: Call initialization if needed, but be cautious about running this on every server start
-// initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));
+// --- Presence Confirmation Functions ---
+
+/**
+ * Adds a new presence confirmation to Firestore.
+ * Accepts an array of names.
+ */
+export async function addConfirmation(names: string[]): Promise<Confirmation | null> {
+    console.log(`Firestore ADD_CONFIRMATION: Adding confirmation for names: ${names.join(', ')}`);
+    if (!names || names.length === 0 || names.some(name => typeof name !== 'string' || name.trim() === '')) {
+        console.error("Firestore ADD_CONFIRMATION: Invalid names array provided.");
+        throw new Error("Por favor, insira nomes válidos.");
+    }
+
+    try {
+        const confirmationData = {
+            names: names.map(name => name.trim()), // Trim whitespace from each name
+            confirmedAt: serverTimestamp(),
+        };
+
+        const docRef = await addFirestoreDoc(confirmationsCollectionRef, confirmationData);
+        console.log(`Firestore ADD_CONFIRMATION: Confirmation added successfully with ID: ${docRef.id}`);
+        forceRevalidation(); // Revalidate home page or admin page if needed
+
+        // Fetch and return the new confirmation
+        const newDocSnap = await getDoc(docRef);
+        return newDocSnap.exists() ? confirmationFromDoc(newDocSnap) : null;
+
+    } catch (error) {
+        console.error("Firestore ADD_CONFIRMATION: Error adding confirmation:", error);
+        if ((error as any)?.code === 'permission-denied') {
+            console.error("Firestore: PERMISSION DENIED adding confirmation. Check Firestore rules.");
+        }
+        throw new Error("Erro ao confirmar presença. Tente novamente."); // Throw generic error for UI
+    }
+}
+
+/**
+ * Fetches all presence confirmations from Firestore, ordered by confirmation date descending.
+ */
+export async function getConfirmations(): Promise<Confirmation[]> {
+    console.log("Firestore GET_CONFIRMATIONS: Fetching confirmations, ordered by confirmedAt desc...");
+    try {
+        const q = query(confirmationsCollectionRef, orderBy("confirmedAt", "desc"));
+        const querySnapshot = await getDocs(q);
+        console.log(`Firestore GET_CONFIRMATIONS: Query executed. Found ${querySnapshot.size} confirmations.`);
+
+        if (querySnapshot.empty) {
+            console.log("Firestore GET_CONFIRMATIONS: Confirmations collection is empty.");
+            return [];
+        } else {
+            const confirmations: Confirmation[] = querySnapshot.docs
+                .map(docSnapshot => confirmationFromDoc(docSnapshot))
+                .filter((item): item is Confirmation => item !== null);
+
+            console.log(`Firestore GET_CONFIRMATIONS: Successfully mapped ${confirmations.length} valid confirmations.`);
+            return confirmations;
+        }
+    } catch (error) {
+        console.error("Firestore GET_CONFIRMATIONS: Error fetching confirmations:", error);
+        if ((error as any)?.code === 'permission-denied') {
+            console.error("Firestore: PERMISSION DENIED fetching confirmations. Check Firestore rules.");
+        }
+        return []; // Return empty array on error
+    }
+}

@@ -16,6 +16,7 @@ import {
   ListX,
   PartyPopper,
   UserCheck,
+  Users, // Icon for Confirmation
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftList from "@/components/gift-list";
 import AddToCalendarButton from "@/components/add-to-calendar-button";
 import SuggestItemButton from "@/components/suggest-item-button";
+import ConfirmationForm from "@/components/confirmation-form"; // Import the new form component
 import {
   getEventSettings,
   getGifts,
@@ -108,6 +110,13 @@ export default function Home() {
     console.log("Home Page: Manual refresh requested.");
     fetchData("manual refresh button");
   }, [fetchData]);
+
+   // Callback for when a confirmation is successfully added
+   const handleConfirmationSuccess = useCallback(() => {
+    console.log("Home Page: Confirmation successful, triggering data refresh (if needed for confirmations display later).");
+    // Currently, confirmations aren't displayed on this page, so no immediate refresh needed.
+    // If confirmations were displayed here, you might call fetchData("confirmation success");
+  }, []);
 
   // Format Date and Time safely
   let formattedDate = "Data a confirmar";
@@ -217,6 +226,20 @@ export default function Home() {
         </CardContent>
       </Card>
 
+       {/* Presence Confirmation Section */}
+      <Card className="bg-card shadow-md rounded-lg overflow-hidden">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Users className="h-6 w-6 text-primary" /> Confirme sua Presença</CardTitle>
+           <CardDescription>
+              Confirme quem irá comparecer ao evento. Digite os nomes separados por vírgula.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ConfirmationForm onSuccess={handleConfirmationSuccess} />
+        </CardContent>
+      </Card>
+
+
       {/* Gift List Section */}
       <section className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -225,11 +248,11 @@ export default function Home() {
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 gap-1 mb-6 md:mb-8 px-1 py-1.5 h-auto"> {/* Adjusted grid-cols */}
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 mb-6 md:mb-8 px-1 py-1.5 h-auto"> {/* Adjusted grid-cols */}
             <TabsTrigger value="all"><ListChecks className="mr-1 h-4 w-4" /> Todos</TabsTrigger>
             <TabsTrigger value="available"><PartyPopper className="mr-1 h-4 w-4" /> Disponíveis</TabsTrigger>
             <TabsTrigger value="selected"><UserCheck className="mr-1 h-4 w-4" /> Selecionados</TabsTrigger>
-            {/* Removed "Não Precisa" tab from public view */}
+             <TabsTrigger value="not_needed"><ListX className="mr-1 h-4 w-4" /> Não Precisa</TabsTrigger> {/* Show "Não Precisa" again */}
           </TabsList>
 
           {/* Pass fetched gifts (which is now guaranteed to be an array or empty array) */}
@@ -242,7 +265,9 @@ export default function Home() {
           <TabsContent value="selected" className="mt-6">
             <GiftList items={gifts} filterStatus="selected" onItemAction={fetchData} />
           </TabsContent>
-           {/* Content for "Não Precisa" removed */}
+          <TabsContent value="not_needed" className="mt-6">
+            <GiftList items={gifts} filterStatus="not_needed" onItemAction={fetchData} />
+          </TabsContent>
         </Tabs>
       </section>
     </div>

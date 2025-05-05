@@ -20,17 +20,21 @@ import {
   Home,
   AlertTriangle, // Import AlertTriangle
   Frown, // Import Frown icon for 404
+  ClipboardList, // Icon for Confirmations list
 } from "lucide-react";
 import {
   getGifts, // Import getGifts
   getEventSettings,
   exportGiftsToCSV,
+  getConfirmations, // Import function to get confirmations
   type GiftItem,
   type EventSettings,
+  type Confirmation, // Import Confirmation type
 } from "@/data/gift-store"; // Updated import path
 import AdminItemManagementTable from "@/components/admin/item-management-table";
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
 import AdminEventSettingsForm from "@/components/admin/event-settings-form";
+import AdminConfirmationsList from "@/components/admin/confirmations-list"; // Import new component
 import useAuth from "@/hooks/useAuth"; // Import useAuth hook
 import { ThemeToggle } from "@/components/theme-toggle"; // Import ThemeToggle
 import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
@@ -38,6 +42,7 @@ import { useRouter } from 'next/navigation'; // Import useRouter
 
 export default function AdminPage() {
   const [gifts, setGifts] = useState<GiftItem[]>([]); // State for gifts
+  const [confirmations, setConfirmations] = useState<Confirmation[]>([]); // State for confirmations
   const [eventSettings, setEventSettings] = useState<EventSettings | null>(
     null,
   );
@@ -60,18 +65,21 @@ export default function AdminPage() {
     try {
       // Only fetch data if the user is authenticated
       if (user) {
-          console.log("AdminPage: User authenticated. Calling getGifts and getEventSettings...");
-          // Fetch gifts AND settings in parallel
+          console.log("AdminPage: User authenticated. Calling getGifts, getEventSettings, and getConfirmations...");
+          // Fetch gifts, settings, AND confirmations in parallel
           const giftsPromise = getGifts();
           const settingsPromise = getEventSettings();
+          const confirmationsPromise = getConfirmations(); // Fetch confirmations
 
-          const [giftsData, settingsData] = await Promise.all([
+          const [giftsData, settingsData, confirmationsData] = await Promise.all([
             giftsPromise,
             settingsPromise,
+            confirmationsPromise, // Await confirmations
           ]);
 
           console.log(`AdminPage: Fetched ${giftsData?.length ?? 0} gifts.`);
           console.log("AdminPage: Fetched Event Settings:", settingsData ? "Data received" : "Null/Undefined");
+          console.log(`AdminPage: Fetched ${confirmationsData?.length ?? 0} confirmations.`); // Log confirmations count
           // Log raw gifts data immediately after fetch
            console.log("AdminPage: Raw Gifts Data from getGifts:", JSON.stringify(giftsData?.slice(0, 5) ?? [], null, 2));
 
@@ -79,12 +87,14 @@ export default function AdminPage() {
           // Log details of the first few gifts to verify data structure before setting state
           console.log("AdminPage: Sample gifts being set to state:", JSON.stringify(giftsData?.slice(0, 5), null, 2));
           setGifts(giftsData || []); // Set empty array if null/undefined
+          setConfirmations(confirmationsData || []); // Set confirmations data
           setEventSettings(settingsData); // Set directly (can be null)
 
       } else {
           console.log("AdminPage: Skipping data fetch, user not authenticated.");
           // Clear data if user becomes unauthenticated during refresh
           setGifts([]);
+          setConfirmations([]); // Clear confirmations
           setEventSettings(null);
       }
     } catch (err: any) {
@@ -92,6 +102,7 @@ export default function AdminPage() {
       setError(`Erro ao carregar dados: ${err.message || "Erro desconhecido"}`);
        // Clear data on error
        setGifts([]);
+       setConfirmations([]); // Clear confirmations on error
        setEventSettings(null);
     } finally {
       setIsDataLoading(false);
@@ -111,6 +122,7 @@ export default function AdminPage() {
       console.log("AdminPage: User not authenticated or auth check complete. Clearing data.");
       // Clear data and loading state if user is not logged in after auth check
       setGifts([]);
+      setConfirmations([]); // Clear confirmations
       setEventSettings(null);
       setIsDataLoading(false); // Ensure data loading stops if user isn't logged in
       setError(null); // Clear any previous data errors
@@ -227,6 +239,7 @@ export default function AdminPage() {
   // Add log just before render to check final state being passed to child components
   console.log(`AdminPage: Rendering dashboard. Passing ${gifts.length} gifts to AdminItemManagementTable.`);
   console.log(`AdminPage: Sample gifts being passed:`, JSON.stringify(gifts.slice(0, 5), null, 2));
+  console.log(`AdminPage: Rendering dashboard. Passing ${confirmations.length} confirmations.`); // Log confirmations count before render
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 bg-background text-foreground">
@@ -250,7 +263,7 @@ export default function AdminPage() {
       {/* Main content grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left Column (Item Management) */}
-        <Card className="md:col-span-2 bg-card">
+        <Card className="md:col-span-1 bg-card"> {/* Adjusted col-span */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gift /> Gerenciar Itens da Lista
@@ -271,12 +284,11 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Right Column (Selections, Settings, Export) */}
-        <div className="space-y-6">
-          <Card className="bg-card">
+         {/* Right Column Top: Selections */}
+         <Card className="md:col-span-1 bg-card"> {/* Adjusted col-span */}
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Users /> Visualizar Seleções
+                <Users /> Visualizar Seleções de Presentes
               </CardTitle>
               <CardDescription>
                 Ver quem selecionou quais itens e reverter seleções se
@@ -294,6 +306,26 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
+         {/* Left Column Bottom: Confirmations */}
+          <Card className="md:col-span-1 bg-card"> {/* Adjusted col-span */}
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList /> Lista de Presença Confirmada
+              </CardTitle>
+              <CardDescription>
+                Veja quem confirmou presença no evento.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AdminConfirmationsList
+                confirmations={confirmations} // Pass the fetched confirmations
+              />
+            </CardContent>
+          </Card>
+
+
+        {/* Right Column Bottom (Settings, Export) */}
+        <div className="space-y-6 md:col-span-1"> {/* Adjusted col-span */}
           <Card className="bg-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -318,7 +350,7 @@ export default function AdminPage() {
           <Card className="bg-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <FileDown /> Exportar Seleções
+                <FileDown /> Exportar Seleções de Presentes
               </CardTitle>
               <CardDescription>
                 Baixar a lista completa de itens e status em formato CSV.
@@ -339,4 +371,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
