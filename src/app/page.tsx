@@ -3,31 +3,56 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Baby, CalendarDays, Gift, MapPin, LogIn, RefreshCcw, AlertCircle } from "lucide-react";
+import {
+  Baby,
+  CalendarDays,
+  Gift,
+  MapPin,
+  LogIn,
+  RefreshCcw,
+  AlertCircle,
+  LoaderCircle, // Changed from Loader2
+  ListChecks,
+  ListX,
+  PartyPopper,
+  UserCheck,
+  Ban,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftList from "@/components/gift-list";
 import AddToCalendarButton from "@/components/add-to-calendar-button";
 import SuggestItemButton from "@/components/suggest-item-button";
-import { getEventSettings, getGifts, type EventSettings, type GiftItem } from "@/data/gift-store";
+import {
+  getEventSettings,
+  getGifts,
+  type EventSettings,
+  type GiftItem,
+} from "@/data/gift-store";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Loader2 } from "lucide-react";
 
 export default function Home() {
   const [eventDetails, setEventDetails] = useState<EventSettings | null>(null);
-  const [gifts, setGifts] = useState<GiftItem[] | null>(null);
+  const [gifts, setGifts] = useState<GiftItem[]>([]); // Initialize as empty array
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetch data function using useCallback for stability
   const fetchData = useCallback(async (source?: string) => {
-    console.log(`Home Page: Fetching data (triggered by ${source || 'initial load'})...`);
+    console.log(
+      `Home Page: Fetching data (triggered by ${source || "initial load"})...`,
+    );
     setIsLoading(true);
     setError(null);
 
@@ -36,57 +61,62 @@ export default function Home() {
       const eventDataPromise = getEventSettings();
       const giftsDataPromise = getGifts();
 
-      const [eventData, giftsData] = await Promise.all([eventDataPromise, giftsDataPromise]);
+      // Wait for both promises to resolve
+      const [eventData, giftsData] = await Promise.all([
+        eventDataPromise,
+        giftsDataPromise,
+      ]);
 
-      console.log("Home Page: Fetched Event Settings:", eventData ? "Data received" : "Null/Undefined");
+      console.log(
+        "Home Page: Fetched Event Settings:",
+        eventData ? "Data received" : "Null/Undefined",
+      );
       console.log("Home Page: Fetched Gifts Count:", giftsData?.length ?? 0);
+      // Log raw gifts data immediately after fetch
+      console.log(
+        "Home Page: Raw Gifts Data from getGifts:",
+        JSON.stringify(giftsData?.slice(0, 5) ?? [], null, 2),
+      );
 
-      if (eventData) {
-        console.log("Home Page: Setting event details state.");
-        setEventDetails(eventData);
-      } else {
-        console.warn("Home Page: Event data was null or undefined after fetch.");
-        setEventDetails(null);
-      }
 
-      if (giftsData) {
-        console.log(`Home Page: Setting gifts state with ${giftsData.length} fetched gifts.`);
-        setGifts(giftsData);
-      } else {
-        console.warn("Home Page: Gifts data was null or undefined after fetch.");
-        console.log("Home Page: Setting gifts state to empty array.");
-        setGifts([]);
-      }
+      // Handle potential null/undefined results
+      setEventDetails(eventData); // Can be null
+      setGifts(giftsData || []); // Ensure gifts is always an array
+
 
     } catch (err: any) {
       console.error("Home Page: Error fetching data:", err);
-      setError(`Erro ao carregar os dados: ${err.message || 'Erro desconhecido'}`);
+      setError(
+        `Erro ao carregar os dados: ${err.message || "Erro desconhecido"}`,
+      );
       console.log("Home Page: Clearing state due to error.");
       setEventDetails(null);
-      setGifts([]);
+      setGifts([]); // Set to empty array on error
     } finally {
       setIsLoading(false);
       console.log("Home Page: Fetching complete, loading set to false.");
     }
   }, []);
 
+
+  // Fetch data on mount
   useEffect(() => {
     fetchData("useEffect[mount]");
-  }, []);
+  }, [fetchData]); // Include fetchData in dependency array
 
+  // Function to manually trigger data refresh
   const handleRefresh = useCallback(() => {
     console.log("Home Page: Manual refresh requested.");
     fetchData("manual refresh button");
   }, [fetchData]);
 
-  let formattedDate = "Data inválida";
-  let formattedTime = "Hora inválida";
+  // Format Date and Time safely
+  let formattedDate = "Data a confirmar";
+  let formattedTime = "Hora a confirmar";
 
-  if (eventDetails) {
+  if (eventDetails && eventDetails.date && eventDetails.time) {
     try {
-      const timeString = eventDetails.time || "00:00";
-      const eventDate = new Date(`${eventDetails.date}T${timeString}:00`);
-
+      const eventDate = new Date(`${eventDetails.date}T${eventDetails.time}:00`);
       if (!isNaN(eventDate.getTime())) {
         formattedDate = eventDate.toLocaleDateString("pt-BR", {
           year: "numeric",
@@ -99,17 +129,22 @@ export default function Home() {
           hour12: false,
         });
       } else {
-        console.error(
-          "Home Page: Failed to parse event date/time:",
+        console.warn(
+          "Home Page: Could not parse event date/time string:",
           eventDetails.date,
-          eventDetails.time
+          eventDetails.time,
         );
       }
     } catch (e) {
       console.error("Home Page: Error formatting date/time:", e);
     }
+  } else {
+    console.log(
+      "Home Page: Event details or date/time missing for formatting.",
+    );
   }
 
+  // Construct Page Title and Welcome Message
   const pageTitle = eventDetails?.babyName
     ? `${eventDetails.title} ${eventDetails.babyName}!`
     : eventDetails?.title || "Chá de Bebê";
@@ -117,16 +152,25 @@ export default function Home() {
   const welcomeMsg = eventDetails?.welcomeMessage ||
     "Sua presença é o nosso maior presente! Esta lista é apenas um guia carinhoso para quem desejar nos presentear. Sinta-se totalmente à vontade, o importante é celebrar conosco!";
 
+  // Loading State
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">Carregando informações do chá...</p>
-        <p className="text-sm text-muted-foreground mt-2">(Isso pode levar alguns segundos)</p>
+      <div
+        className="flex flex-col items-center justify-center min-h-screen p-4 text-center"
+        suppressHydrationWarning={true} // Add suppression here
+      >
+        <LoaderCircle className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">
+          Carregando informações do chá...
+        </p>
+        <p className="text-sm text-muted-foreground mt-2">
+          (Isso pode levar alguns segundos)
+        </p>
       </div>
     );
   }
 
+  // Error State
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-center p-4">
@@ -140,13 +184,23 @@ export default function Home() {
     );
   }
 
-  console.log(`Home Page: Rendering page. Passing ${gifts?.length ?? 'null'} gifts to GiftList component.`);
+  // Log before rendering the main content
+  console.log(
+    `Home Page: Rendering page. Event Title: ${pageTitle}, Gifts count: ${gifts.length}`,
+  );
 
+  // Main Content Render
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
+      {/* Header Buttons */}
       <div className="absolute top-4 right-4 md:top-8 md:right-8 z-10 flex items-center gap-2">
         <ThemeToggle />
-        <Button onClick={handleRefresh} variant="outline" size="icon" title="Recarregar Dados">
+        <Button
+          onClick={handleRefresh}
+          variant="outline"
+          size="icon"
+          title="Recarregar Dados"
+        >
           <RefreshCcw className="h-4 w-4" />
         </Button>
         <Link href="/admin/login">
@@ -157,6 +211,7 @@ export default function Home() {
         </Link>
       </div>
 
+      {/* Page Header */}
       <header className="text-center space-y-4 pt-16">
         {eventDetails?.headerImageUrl ? (
           <div className="relative mx-auto w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden shadow-lg mb-6 border-4 border-secondary">
@@ -165,10 +220,10 @@ export default function Home() {
               alt="Foto Cabeçalho Chá de Bebê"
               fill
               style={{ objectFit: "cover" }}
-              priority
+              priority // Load header image sooner
               sizes="(max-width: 768px) 128px, 160px"
               data-ai-hint="baby celebration banner"
-              unoptimized={eventDetails.headerImageUrl.startsWith('data:image/')}
+              unoptimized={eventDetails.headerImageUrl.startsWith("data:image/")} // Disable optimization for data URIs
             />
           </div>
         ) : (
@@ -183,10 +238,12 @@ export default function Home() {
         </p>
       </header>
 
+      {/* Event Details Card */}
       <Card className="bg-card shadow-md rounded-lg overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-card-foreground">
-            <CalendarDays className="h-6 w-6 text-primary" /> Detalhes do Evento
+            <CalendarDays className="h-6 w-6 text-primary" /> Detalhes do
+            Evento
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -199,45 +256,63 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-accent-foreground" />
             <span>
-              {eventDetails?.location || "Local a definir"} - {eventDetails?.address || "Endereço a definir"}
+              {eventDetails?.location || "Local a definir"} -{" "}
+              {eventDetails?.address || "Endereço a definir"}
             </span>
           </div>
           {eventDetails && <AddToCalendarButton eventDetails={eventDetails} />}
         </CardContent>
       </Card>
 
+      {/* Gift List Section */}
       <section className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <h2 className="text-2xl font-semibold flex items-center gap-2">
             <Gift className="h-6 w-6 text-primary" /> Lista de Presentes
           </h2>
-          <SuggestItemButton onSuggestionAdded={fetchData} />
+          <SuggestItemButton onSuggestionAdded={fetchData} />{" "}
+          {/* Pass fetchData to refresh on suggestion */}
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="w-full flex flex-wrap justify-center sm:justify-start h-auto mb-4 md:mb-6 gap-1 px-1 py-1.5">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 gap-1 mb-4 md:mb-6 px-1 py-1.5 h-auto">
+             {/* Removed "Not Needed" tab from public view */}
             <TabsTrigger value="all" className="flex-shrink-0">
-              Todos
+              <ListChecks className="mr-1 h-4 w-4" /> Todos
             </TabsTrigger>
             <TabsTrigger value="available" className="flex-shrink-0">
-              Disponíveis
+              <PartyPopper className="mr-1 h-4 w-4" /> Disponíveis
             </TabsTrigger>
             <TabsTrigger value="selected" className="flex-shrink-0">
-              Selecionados
+              <UserCheck className="mr-1 h-4 w-4" /> Selecionados
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-6">
-            <GiftList items={gifts ?? []} filterStatus="all" onItemAction={fetchData} />
+            <GiftList
+              items={gifts}
+              filterStatus="all"
+              onItemAction={fetchData} // Pass fetchData to refresh list
+            />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
-            <GiftList items={gifts ?? []} filterStatus="available" onItemAction={fetchData} />
+            <GiftList
+              items={gifts}
+              filterStatus="available"
+              onItemAction={fetchData} // Pass fetchData to refresh list
+            />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
-            <GiftList items={gifts ?? []} filterStatus="selected" onItemAction={fetchData} />
+            <GiftList
+              items={gifts}
+              filterStatus="selected"
+              onItemAction={fetchData} // Pass fetchData to refresh list
+            />
           </TabsContent>
         </Tabs>
       </section>
     </div>
   );
 }
+
+    
