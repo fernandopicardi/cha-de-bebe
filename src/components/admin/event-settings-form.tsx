@@ -22,13 +22,13 @@ interface AdminEventSettingsFormProps {
 
 // Extend schema for header image URL (optional string, can be data URI)
 const settingsFormSchema = z.object({
-  title: z.string().min(5, "Título muito curto."),
-  babyName: z.string().optional(), // Make baby name optional or add validation
+  title: z.string().min(5, "Título muito curto.").max(100, "Título muito longo."), // Added max length
+  babyName: z.string().optional().nullable().or(z.literal('')), // Allow empty string or null
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de data inválido (AAAA-MM-DD)."),
   time: z.string().regex(/^\d{2}:\d{2}$/, "Formato de hora inválido (HH:MM)."),
-  location: z.string().min(3, "Local muito curto."),
-  address: z.string().min(10, "Endereço muito curto."),
-  welcomeMessage: z.string().min(10, "Mensagem de boas-vindas muito curta.").max(200, "Mensagem muito longa."),
+  location: z.string().min(3, "Local muito curto.").max(100, "Local muito longo."), // Added max length
+  address: z.string().min(10, "Endereço muito curto.").max(200, "Endereço muito longo."), // Added max length
+  welcomeMessage: z.string().min(10, "Mensagem de boas-vindas muito curta.").max(500, "Mensagem muito longa."), // Increased max length
   headerImageUrl: z.string().optional().nullable(), // Allow string (URL/Data URI) or null
   headerImageFile: z.instanceof(File).optional().nullable(), // For file input handling
 });
@@ -50,12 +50,25 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
          setImagePreview(settings.headerImageUrl || null); // Set initial preview
          return {
              ...settings,
+             headerImageUrl: settings.headerImageUrl || null, // Ensure null if undefined
              headerImageFile: null, // Initialize file input as null
+             babyName: settings.babyName || '', // Ensure empty string if null/undefined
          };
        } catch (error) {
          console.error("Error fetching event settings:", error);
          toast({ title: "Erro!", description: "Falha ao carregar configurações do evento.", variant: "destructive" });
-         return {};
+         // Provide sensible defaults on error
+         return {
+            title: 'Chá de Bebê',
+            babyName: '',
+            date: '',
+            time: '',
+            location: '',
+            address: '',
+            welcomeMessage: '',
+            headerImageUrl: null,
+            headerImageFile: null,
+         };
        } finally {
          setIsLoading(false);
        }
@@ -69,39 +82,77 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
       if (headerImageFile instanceof File) {
           const reader = new FileReader();
           reader.onloadend = () => {
-              setImagePreview(reader.result as string);
-              setValue('headerImageUrl', reader.result as string); // Store as data URI string
+              const result = reader.result as string;
+              setImagePreview(result);
+              setValue('headerImageUrl', result); // Store as data URI string
           };
+           // Basic size validation (e.g., 5MB limit)
+          if (headerImageFile.size > 5 * 1024 * 1024) {
+              toast({
+                  title: "Erro!",
+                  description: "Arquivo de imagem muito grande. O limite é 5MB.",
+                  variant: "destructive"
+              });
+              setValue('headerImageFile', null); // Clear invalid file
+              return;
+          }
           reader.readAsDataURL(headerImageFile);
-      } else if (headerImageFile === null) { // Handle removal
-           // If file is explicitly set to null (e.g., by remove button), clear preview and URL
-          // But only if the initial value wasn't already null
-          if (imagePreview !== null) {
-             setImagePreview(null);
-             setValue('headerImageUrl', null);
+      } else if (headerImageFile === null) { // Handle removal by button click
+          // Check if the form currently holds an image URL (could be initial or previously saved)
+          const currentImageUrl = watch('headerImageUrl');
+          if (currentImageUrl) {
+              setImagePreview(null);
+              setValue('headerImageUrl', null); // Clear the URL in the form state
           }
       }
-      // Don't reset preview if headerImageFile is undefined (initial load)
+      // Note: Don't reset preview if headerImageFile is undefined (initial load or no file selected)
 
-   }, [headerImageFile, setValue, imagePreview]); // Add imagePreview to dependencies
+   }, [headerImageFile, setValue, toast, watch]); // Added watch dependency
 
    const removeImage = () => {
       setValue('headerImageFile', null); // Clear the file input value in RHF state
-      // The useEffect will handle clearing the preview and URL
+      // The useEffect above will handle clearing the preview and URL
    };
 
-  const onSubmit = async (data: SettingsFormData) => {
+   const onSubmit = async (data: SettingsFormData) => {
     try {
-       // Prepare data for saving (remove the temporary file object)
-       const { headerImageFile, ...settingsToSave } = data;
-       await updateEventSettings(settingsToSave);
-       toast({ title: "Sucesso!", description: "Detalhes do evento atualizados." });
-       onSave?.();
+      // Prepare data for saving (remove the temporary file object)
+      // Ensure babyName is stored as null if empty string
+      const { headerImageFile, babyName, ...settingsToSave } = data;
+      const finalSettings: Partial<EventSettings> = {
+        ...settingsToSave,
+        babyName: babyName || null, // Store null if empty string
+        headerImageUrl: imagePreview, // Use the preview which holds the data URI or existing URL or null
+      };
+
+      await updateEventSettings(finalSettings);
+
+      toast({ title: "Sucesso!", description: "Detalhes do evento atualizados." });
+
+      // Re-fetch the latest settings and reset the form to reflect the saved state
+      try {
+        const latestSettings = await getEventSettings();
+        reset({
+            ...latestSettings,
+            headerImageUrl: latestSettings.headerImageUrl || null, // Reset URL from latest data
+            headerImageFile: null, // Always reset file input
+            babyName: latestSettings.babyName || '', // Reset baby name
+        });
+        setImagePreview(latestSettings.headerImageUrl || null); // Update preview too
+      } catch (fetchError) {
+          console.error("Error re-fetching settings after save:", fetchError);
+          // Form won't reset to latest, but save was successful
+          toast({ title: "Aviso", description: "Configurações salvas, mas houve um erro ao recarregar o formulário.", variant: "default" });
+      }
+
+
+      onSave?.(); // Call parent callback if provided
     } catch (error) {
       console.error("Error saving event settings:", error);
       toast({ title: "Erro!", description: "Falha ao salvar os detalhes do evento.", variant: "destructive" });
     }
   };
+
 
   if (isLoading) {
        return (
@@ -113,16 +164,16 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
    }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
        <div className="grid gap-2">
          <Label htmlFor="title">Título do Evento*</Label>
-         <Input id="title" {...register('title')} className={errors.title ? 'border-destructive' : ''} />
+         <Input id="title" {...register('title')} className={errors.title ? 'border-destructive' : ''} maxLength={100} />
          {errors.title && <p className="text-sm text-destructive mt-1">{errors.title.message}</p>}
        </div>
 
        <div className="grid gap-2">
          <Label htmlFor="babyName">Nome do Bebê (Opcional)</Label>
-         <Input id="babyName" {...register('babyName')} className={errors.babyName ? 'border-destructive' : ''} />
+         <Input id="babyName" {...register('babyName')} placeholder="Ex: da Maria, do João..." className={errors.babyName ? 'border-destructive' : ''} />
          {errors.babyName && <p className="text-sm text-destructive mt-1">{errors.babyName.message}</p>}
        </div>
 
@@ -131,19 +182,25 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
          <Label htmlFor="headerImageFile">Foto do Cabeçalho (Opcional)</Label>
          <div className="flex items-center gap-4">
             {imagePreview && (
-               <div className="relative w-24 h-24 border rounded-md overflow-hidden">
+               <div className="relative w-24 h-24 border rounded-md overflow-hidden shadow-inner bg-muted/50">
                    <Image
                        src={imagePreview}
                        alt="Prévia da imagem do cabeçalho"
-                       layout="fill"
-                       objectFit="cover"
+                       fill // Use fill instead of layout
+                       style={{ objectFit: 'cover' }} // Ensure image covers the area
+                       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Provide sizes hint
                        data-ai-hint="baby celebration banner"
+                       onError={() => {
+                         // Handle potential image loading errors (e.g., invalid data URI)
+                         toast({ title: "Erro", description: "Não foi possível carregar a prévia da imagem.", variant: "destructive" });
+                         setImagePreview(null); // Clear broken preview
+                       }}
                    />
                     <Button
                        type="button"
                        variant="destructive"
                        size="icon"
-                       className="absolute top-1 right-1 h-6 w-6 z-10"
+                       className="absolute top-1 right-1 h-6 w-6 z-10 rounded-full" // Make round
                        onClick={removeImage}
                        title="Remover Imagem"
                        disabled={isSubmitting}
@@ -160,25 +217,29 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
                         <Input
                             id="headerImageFile"
                             type="file"
-                            accept="image/png, image/jpeg, image/gif"
+                            accept="image/png, image/jpeg, image/gif, image/webp" // Added webp
                             {...fieldProps} // Spread remaining field props
                             ref={ref}
                             onChange={(e) => {
                                 onChange(e.target.files ? e.target.files[0] : null); // Pass file or null to RHF
                             }}
-                            className={` ${errors.headerImageFile ? 'border-destructive' : ''} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90`}
+                            className={` ${errors.headerImageFile ? 'border-destructive' : ''} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
                             disabled={isSubmitting}
                         />
                     )}
                 />
-                <p className="text-xs text-muted-foreground mt-1">Envie uma imagem (PNG, JPG, GIF). Recomendado: 1200x400px.</p>
+                <p className="text-xs text-muted-foreground mt-1">Envie uma imagem (PNG, JPG, GIF, WebP). Máx 5MB.</p>
                 {errors.headerImageFile && <p className="text-sm text-destructive mt-1">{errors.headerImageFile.message}</p>}
+                 {/* Display existing URL if no preview and no file selected */}
+                 {!imagePreview && watch('headerImageUrl') && !watch('headerImageFile') && (
+                    <p className="text-xs text-muted-foreground mt-1 truncate">Imagem atual: {watch('headerImageUrl')?.substring(0, 30)}...</p>
+                )}
             </div>
          </div>
        </div>
 
 
-       <div className="grid grid-cols-2 gap-4">
+       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
            <div className="grid gap-2">
              <Label htmlFor="date">Data* (AAAA-MM-DD)</Label>
              <Input id="date" type="date" {...register('date')} className={errors.date ? 'border-destructive' : ''} />
@@ -194,19 +255,25 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
 
        <div className="grid gap-2">
          <Label htmlFor="location">Local*</Label>
-         <Input id="location" {...register('location')} className={errors.location ? 'border-destructive' : ''} />
+         <Input id="location" {...register('location')} className={errors.location ? 'border-destructive' : ''} maxLength={100}/>
          {errors.location && <p className="text-sm text-destructive mt-1">{errors.location.message}</p>}
        </div>
 
        <div className="grid gap-2">
          <Label htmlFor="address">Endereço Completo*</Label>
-         <Input id="address" {...register('address')} className={errors.address ? 'border-destructive' : ''} />
+         <Input id="address" {...register('address')} className={errors.address ? 'border-destructive' : ''} maxLength={200}/>
          {errors.address && <p className="text-sm text-destructive mt-1">{errors.address.message}</p>}
        </div>
 
        <div className="grid gap-2">
          <Label htmlFor="welcomeMessage">Mensagem de Boas-Vindas*</Label>
-         <Textarea id="welcomeMessage" {...register('welcomeMessage')} className={errors.welcomeMessage ? 'border-destructive' : ''} />
+         <Textarea
+            id="welcomeMessage"
+            {...register('welcomeMessage')}
+            className={errors.welcomeMessage ? 'border-destructive' : ''}
+            rows={4} // Set default rows
+            maxLength={500}
+         />
          {errors.welcomeMessage && <p className="text-sm text-destructive mt-1">{errors.welcomeMessage.message}</p>}
        </div>
 
@@ -218,3 +285,5 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
     </form>
   );
 }
+
+    

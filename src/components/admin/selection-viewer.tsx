@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -63,8 +64,10 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
                   <TableCell>{item.selectedBy || 'Desconhecido'}</TableCell>
                   <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
                      {item.selectionDate
-                        ? new Date(item.selectionDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                        : '-'}
+                         ? new Date(item.selectionDate).toLocaleDateString('pt-BR', {
+                            year: 'numeric', month: '2-digit', day: '2-digit'
+                           })
+                         : '-'}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -86,3 +89,5 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
     </div>
   );
 }
+
+    

@@ -21,7 +21,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { addGift, updateGift, deleteGift, revertSelection, type GiftItem } from '@/data/gift-store';
+import { addGift, updateGift, deleteGift, revertSelection, markGiftAsNotNeeded, type GiftItem } from '@/data/gift-store'; // Added markGiftAsNotNeeded
 
 interface AdminItemManagementTableProps {
   gifts: GiftItem[];
@@ -30,10 +30,11 @@ interface AdminItemManagementTableProps {
 
 // Validation Schema for the Add/Edit Form
 const giftFormSchema = z.object({
-  name: z.string().min(3, "Nome precisa ter pelo menos 3 caracteres."),
-  description: z.string().optional(),
+  name: z.string().min(3, "Nome precisa ter pelo menos 3 caracteres.").max(100, "Nome muito longo"), // Added max length
+  description: z.string().max(200, "Descrição muito longa").optional().or(z.literal('')), // Allow empty string
   category: z.string().min(1, "Categoria é obrigatória."),
   status: z.enum(['available', 'selected', 'not_needed']).optional(), // Status is optional in form, required for item
+  selectedBy: z.string().max(50, "Nome do selecionador muito longo").optional().or(z.literal('')), // Allow selectedBy editing
 });
 
 type GiftFormData = z.infer<typeof giftFormSchema>;
@@ -50,18 +51,28 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
   const [actionLoading, setActionLoading] = useState<string | null>(null); // Track loading state for row actions (delete, revert, mark)
   const { toast } = useToast();
 
-  const { control, register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<GiftFormData>({
+  const { control, register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<GiftFormData>({
     resolver: zodResolver(giftFormSchema),
     defaultValues: {
       name: '',
       description: '',
       category: '',
       status: 'available', // Default for new items
+      selectedBy: '', // Default empty
     }
   });
 
+   // Watch status to conditionally show/require selectedBy
+   const watchedStatus = watch('status');
+
    const handleOpenAddDialog = () => {
-    reset({ name: '', description: '', category: '', status: 'available' }); // Reset for add
+    reset({ // Reset for add with correct defaults
+        name: '',
+        description: '',
+        category: '',
+        status: 'available',
+        selectedBy: ''
+    });
     setEditingItem(null);
     setIsAddEditDialogOpen(true);
   };
@@ -72,7 +83,8 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
            name: item.name,
            description: item.description || '',
            category: item.category,
-           status: item.status // Allow editing status for existing items
+           status: item.status, // Allow editing status for existing items
+           selectedBy: item.selectedBy || '', // Populate selector name
        });
        setIsAddEditDialogOpen(true);
    };
@@ -85,14 +97,26 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
 
   // Form submission for Add/Edit
   const onSubmit = async (data: GiftFormData) => {
+     // Validate that 'selectedBy' is provided if status is 'selected'
+     if (data.status === 'selected' && (!data.selectedBy || data.selectedBy.trim() === '')) {
+        toast({
+            title: "Erro de Validação",
+            description: "Por favor, informe quem selecionou o item.",
+            variant: "destructive",
+        });
+        return; // Prevent submission
+     }
+
     try {
       if (editingItem) {
-        // Update existing item - including status if changed
+        // Update existing item - including status and selectedBy if changed
         await updateGift(editingItem.id, {
              name: data.name,
              description: data.description,
              category: data.category,
-             status: data.status ?? editingItem.status, // Use new status or keep old if not provided/editable
+             status: data.status ?? editingItem.status, // Use new status or keep old
+             selectedBy: data.status === 'selected' ? data.selectedBy : undefined, // Set or clear selectedBy based on status
+             // selectionDate will be handled by updateGift if status becomes 'selected'
         });
         toast({ title: "Sucesso!", description: `Item "${data.name}" atualizado.` });
       } else {
@@ -101,7 +125,9 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
              name: data.name,
              description: data.description,
              category: data.category,
-             // Status defaults to 'available' via addGift function
+             status: data.status ?? 'available', // Use selected status or default to available
+             selectedBy: data.status === 'selected' ? data.selectedBy : undefined, // Set selector if added as selected
+             // selectionDate will be handled by addGift if status is 'selected'
         });
         toast({ title: "Sucesso!", description: `Item "${data.name}" adicionado.` });
       }
@@ -152,15 +178,14 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
        }
    };
 
-   // Row Action: Mark as Not Needed
+   // Row Action: Mark as Not Needed (Uses dedicated function now)
     const handleMarkNotNeeded = async (item: GiftItem) => {
         if (actionLoading) return;
         if (item.status !== 'available') return; // Only mark available items
         if (confirm(`Tem certeza que deseja marcar o item "${item.name}" como "Não Precisa"?`)) {
              setActionLoading(`mark-${item.id}`);
             try {
-                // Use updateGift for consistency, ensuring selection info is cleared
-                await updateGift(item.id, { status: 'not_needed', selectedBy: undefined, selectionDate: undefined });
+                await markGiftAsNotNeeded(item.id); // Use the dedicated function
                 toast({ title: "Sucesso!", description: `Item "${item.name}" marcado como "Não Precisa".` });
                 onDataChange();
             } catch (error) {
@@ -197,13 +222,14 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
               <TableHead className="hidden md:table-cell">Descrição</TableHead>
               <TableHead className="hidden sm:table-cell">Categoria</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="hidden lg:table-cell">Selecionado Por</TableHead> {/* Added Selected By Column */}
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {gifts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center">
+                <TableCell colSpan={6} className="h-24 text-center"> {/* Updated colSpan */}
                   Nenhum item na lista ainda.
                 </TableCell>
               </TableRow>
@@ -214,6 +240,12 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
                   <TableCell className="hidden md:table-cell text-muted-foreground">{item.description || '-'}</TableCell>
                   <TableCell className="hidden sm:table-cell">{item.category}</TableCell>
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
+                  <TableCell className="hidden lg:table-cell text-xs text-muted-foreground"> {/* Added Selected By Cell */}
+                    {item.selectedBy || '-'}
+                    {item.selectionDate && (
+                         <div className="text-[10px]">({new Date(item.selectionDate).toLocaleDateString('pt-BR')})</div>
+                    )}
+                   </TableCell>
                   <TableCell className="text-right space-x-1">
                      {actionLoading?.endsWith(item.id) ? (
                         <Loader2 className="h-4 w-4 animate-spin inline-block text-muted-foreground" />
@@ -251,34 +283,35 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
           <DialogHeader>
             <DialogTitle>{editingItem ? 'Editar Item' : 'Adicionar Novo Item'}</DialogTitle>
             <DialogDescription>
-              {editingItem ? 'Modifique os detalhes do item, incluindo seu status.' : 'Preencha os detalhes do novo item para a lista.'}
+              {editingItem ? 'Modifique os detalhes do item, incluindo seu status e quem o selecionou.' : 'Preencha os detalhes do novo item para a lista.'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
              {/* Name */}
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="name" className="text-right text-sm font-medium">Nome*</label>
+              <Label htmlFor="name" className="text-right text-sm font-medium">Nome*</Label>
               <div className="col-span-3">
-                <Input id="name" {...register('name')} className={errors.name ? 'border-destructive' : ''} />
+                <Input id="name" {...register('name')} className={errors.name ? 'border-destructive' : ''} maxLength={100}/>
                 {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
               </div>
             </div>
              {/* Description */}
             <div className="grid grid-cols-4 items-start gap-4">
-              <label htmlFor="description" className="text-right text-sm font-medium pt-2">Descrição</label>
+              <Label htmlFor="description" className="text-right text-sm font-medium pt-2">Descrição</Label>
               <div className="col-span-3">
-                 <Textarea id="description" {...register('description')} />
+                 <Textarea id="description" {...register('description')} rows={3} maxLength={200} />
+                 {errors.description && <p className="text-sm text-destructive mt-1">{errors.description.message}</p>}
               </div>
             </div>
              {/* Category */}
             <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="category" className="text-right text-sm font-medium">Categoria*</label>
+              <Label htmlFor="category" className="text-right text-sm font-medium">Categoria*</Label>
               <div className="col-span-3">
                  <Controller
                      name="category"
                      control={control}
                      render={({ field }) => (
-                         <Select onValueChange={field.onChange} value={field.value}>
+                         <Select onValueChange={field.onChange} value={field.value} defaultValue="">
                             <SelectTrigger className={errors.category ? 'border-destructive' : ''}>
                                 <SelectValue placeholder="Selecione uma categoria" />
                             </SelectTrigger>
@@ -294,38 +327,59 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
               </div>
             </div>
 
-            {/* Status - Allow editing status for existing items */}
-            {editingItem && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <label htmlFor="status" className="text-right text-sm font-medium">Status</label>
+            {/* Status */}
+             <div className="grid grid-cols-4 items-center gap-4">
+                 <Label htmlFor="status" className="text-right text-sm font-medium">Status</Label>
+                 <div className="col-span-3">
+                    <Controller
+                        name="status"
+                        control={control}
+                        defaultValue={editingItem?.status || 'available'} // Set default based on editing or 'available'
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value} >
+                               <SelectTrigger className={errors.status ? 'border-destructive' : ''}>
+                                   <SelectValue placeholder="Selecione um status" />
+                               </SelectTrigger>
+                               <SelectContent>
+                                   {statuses.map(stat => (
+                                       <SelectItem key={stat} value={stat}>
+                                         {stat === 'available' && 'Disponível'}
+                                         {stat === 'selected' && 'Selecionado'}
+                                         {stat === 'not_needed' && 'Não Precisa'}
+                                       </SelectItem>
+                                   ))}
+                               </SelectContent>
+                            </Select>
+                        )}
+                    />
+                   {errors.status && <p className="text-sm text-destructive mt-1">{errors.status.message}</p>}
+                 </div>
+               </div>
+
+
+             {/* Selected By - Conditionally shown and required */}
+            {watchedStatus === 'selected' && (
+                <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
+                  <Label htmlFor="selectedBy" className="text-right text-sm font-medium">Selecionado Por*</Label>
                   <div className="col-span-3">
-                     <Controller
-                         name="status"
-                         control={control}
-                         render={({ field }) => (
-                             <Select onValueChange={field.onChange} value={field.value} >
-                                <SelectTrigger className={errors.status ? 'border-destructive' : ''}>
-                                    <SelectValue placeholder="Selecione um status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {statuses.map(stat => (
-                                        <SelectItem key={stat} value={stat}>
-                                          {stat === 'available' && 'Disponível'}
-                                          {stat === 'selected' && 'Selecionado'}
-                                          {stat === 'not_needed' && 'Não Precisa'}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                             </Select>
-                         )}
-                     />
-                    {errors.status && <p className="text-sm text-destructive mt-1">{errors.status.message}</p>}
+                    <Input
+                        id="selectedBy"
+                        {...register('selectedBy')}
+                        className={errors.selectedBy ? 'border-destructive' : ''}
+                        placeholder="Nome de quem selecionou"
+                        maxLength={50}
+                    />
+                    {errors.selectedBy && <p className="text-sm text-destructive mt-1">{errors.selectedBy.message}</p>}
+                    {/* Add a specific error message if status is selected but name is missing */}
+                    {!errors.selectedBy && watchedStatus === 'selected' && !watch('selectedBy') && (
+                        <p className="text-sm text-destructive mt-1">Nome é obrigatório quando o status é "Selecionado".</p>
+                    )}
                   </div>
                 </div>
             )}
 
 
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isSubmitting}>
                 Cancelar
@@ -342,3 +396,5 @@ export default function AdminItemManagementTable({ gifts, onDataChange }: AdminI
     </div>
   );
 }
+
+    

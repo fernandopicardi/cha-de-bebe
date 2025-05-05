@@ -1,6 +1,8 @@
 
 'use server'; // Mark module for server-side execution if potentially used in Server Actions
 
+import { revalidatePath } from 'next/cache'; // Import revalidatePath
+
 // Define interfaces for better type safety
 export interface GiftItem {
   id: string;
@@ -9,7 +11,7 @@ export interface GiftItem {
   category: string;
   status: 'available' | 'selected' | 'not_needed'; // Removed 'pending_suggestion'
   selectedBy?: string; // Name of the guest who selected the item (or suggested and self-selected)
-  selectionDate?: Date; // Optional: Track when item was selected/added
+  selectionDate?: Date | string; // Optional: Track when item was selected/added (allow string for serialization)
   // Removed suggestedBy and suggestionDate as they are redundant now
 }
 
@@ -26,20 +28,20 @@ export interface SuggestionData {
 let giftItems: GiftItem[] = [
   { id: '1', name: 'Body Manga Curta (RN)', category: 'Roupas', status: 'available', description: 'Pacote com 3 unidades, cores neutras.' },
   { id: '2', name: 'Fraldas Pampers (P)', category: 'Higiene', status: 'available', description: 'Pacote grande.' },
-  { id: '3', name: 'Mamadeira Anti-cólica', category: 'Alimentação', status: 'selected', selectedBy: 'Maria Silva', selectionDate: new Date(2024, 6, 10) },
+  { id: '3', name: 'Mamadeira Anti-cólica', category: 'Alimentação', status: 'selected', selectedBy: 'Maria Silva', selectionDate: new Date(2024, 6, 10).toISOString() },
   { id: '4', name: 'Móbile Musical', category: 'Brinquedos', status: 'available' },
-  { id: '5', name: 'Lenços Umedecidos', category: 'Higiene', status: 'selected', selectedBy: 'João Pereira', selectionDate: new Date(2024, 6, 11) },
+  { id: '5', name: 'Lenços Umedecidos', category: 'Higiene', status: 'selected', selectedBy: 'João Pereira', selectionDate: new Date(2024, 6, 11).toISOString() },
   { id: '6', name: 'Termômetro Digital', category: 'Higiene', status: 'not_needed' }, // Example of not_needed status
   { id: '7', name: 'Macacão Pijama (M)', category: 'Roupas', status: 'available', description: 'Algodão macio.' },
   { id: '8', name: 'Chupeta Calmante', category: 'Outros', status: 'available'},
-  { id: '9', name: 'Cadeirinha de Descanso', category: 'Outros', status: 'selected', selectedBy: 'Ana Costa', selectionDate: new Date(2024, 6, 12)},
+  { id: '9', name: 'Cadeirinha de Descanso', category: 'Outros', status: 'selected', selectedBy: 'Ana Costa', selectionDate: new Date(2024, 6, 12).toISOString()},
   { id: '10', name: 'Pomada para Assaduras', category: 'Higiene', status: 'available', description: 'Marca Bepantol Baby ou similar.'},
 ];
 
 // --- Event Settings ---
 export interface EventSettings {
   title: string;
-  babyName?: string; // Added baby name
+  babyName?: string | null; // Allow null
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
   location: string;
@@ -68,7 +70,7 @@ let eventSettings: EventSettings = {
  */
 export async function getEventSettings(): Promise<EventSettings> {
   // Simulate async if needed: await new Promise(resolve => setTimeout(resolve, 0));
-  return { ...eventSettings }; // Return a copy
+  return JSON.parse(JSON.stringify(eventSettings)); // Return a deep copy
 }
 
 /**
@@ -77,12 +79,37 @@ export async function getEventSettings(): Promise<EventSettings> {
  * @returns A promise resolving to the updated event settings object.
  */
 export async function updateEventSettings(updates: Partial<EventSettings>): Promise<EventSettings> {
+   // Ensure that only valid keys from EventSettings are applied
+   const validKeys = Object.keys(eventSettings) as (keyof EventSettings)[];
+   const filteredUpdates: Partial<EventSettings> = {};
+
+   for (const key of validKeys) {
+       if (key in updates && updates[key] !== undefined) {
+           // Ensure babyName is null if empty string is passed
+           if (key === 'babyName' && updates.babyName === '') {
+               filteredUpdates.babyName = null;
+           } else if (key === 'headerImageUrl' && updates.headerImageUrl === undefined) {
+               // Allow explicit setting to null (removing image)
+               filteredUpdates.headerImageUrl = null;
+           }
+            else {
+               filteredUpdates[key] = updates[key] as any; // Cast needed due to complex types
+           }
+       } else if (key === 'headerImageUrl' && updates.headerImageUrl === null) {
+           // Explicitly allow setting headerImageUrl to null
+           filteredUpdates.headerImageUrl = null;
+       }
+   }
+
+
   eventSettings = {
     ...eventSettings,
-    ...updates,
+    ...filteredUpdates, // Apply only valid, non-undefined updates
   };
-  console.log('Event settings updated by admin.', updates);
-  return { ...eventSettings }; // Return a copy of the updated settings
+  console.log('Event settings updated by admin.', filteredUpdates);
+  revalidatePath('/'); // Revalidate home page
+  revalidatePath('/admin'); // Revalidate admin page
+  return JSON.parse(JSON.stringify(eventSettings)); // Return a deep copy of the updated settings
 }
 
 
@@ -95,7 +122,7 @@ export async function updateEventSettings(updates: Partial<EventSettings>): Prom
  */
 export async function getGifts(): Promise<GiftItem[]> {
   // Simulate async if needed: await new Promise(resolve => setTimeout(resolve, 0));
-  return [...giftItems]; // Return a copy to prevent direct modification
+  return JSON.parse(JSON.stringify(giftItems)); // Return a deep copy to prevent direct modification
 }
 
 /**
@@ -111,11 +138,11 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
     return null; // Item not found or not available
   }
 
-  const updatedItem = {
+  const updatedItem: GiftItem = { // Ensure the type is correct
     ...giftItems[itemIndex],
     status: 'selected' as const, // Ensure correct type
     selectedBy: guestName,
-    selectionDate: new Date(),
+    selectionDate: new Date().toISOString(), // Store as ISO string
   };
 
   giftItems = [
@@ -125,7 +152,9 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
   ];
 
   console.log(`Item ${itemId} selected by ${guestName}.`);
-  return updatedItem;
+  revalidatePath('/'); // Revalidate home page when selection changes
+  revalidatePath('/admin'); // Revalidate admin page
+  return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
 /**
@@ -137,14 +166,14 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
 export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | null> {
     const itemIndex = giftItems.findIndex(item => item.id === itemId && item.status === 'available');
     if (itemIndex === -1) {
-        console.warn(`Item ${itemId} not found or not available to be marked as not needed.`);
+        console.warn(`Admin: Item ${itemId} not found or not available to be marked as not needed.`);
         return null;
     }
 
-    const updatedItem = {
+    const updatedItem: GiftItem = {
         ...giftItems[itemIndex],
         status: 'not_needed' as const,
-        selectedBy: undefined, // Clear potential selection info if any inconsistency occurred
+        selectedBy: undefined, // Clear selection info
         selectionDate: undefined,
     };
 
@@ -155,7 +184,9 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
     ];
 
     console.log(`Admin marked item ${itemId} as not needed.`);
-    return updatedItem;
+    revalidatePath('/'); // Revalidate home page
+    revalidatePath('/admin'); // Revalidate admin page
+    return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
 
@@ -175,13 +206,15 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
     category: 'Outros', // Default category for user-added items, admin can change later
     status: 'selected', // Add directly as selected
     selectedBy: suggestionData.suggesterName, // The suggester is the selector
-    selectionDate: new Date(), // Record selection date
+    selectionDate: new Date().toISOString(), // Record selection date as ISO string
   };
 
   giftItems = [...giftItems, newItem];
 
   console.log(`Item "${newItem.name}" added and selected by ${newItem.selectedBy}.`);
-  return newItem;
+  revalidatePath('/'); // Revalidate home page
+  revalidatePath('/admin'); // Revalidate admin page
+  return JSON.parse(JSON.stringify(newItem)); // Return a copy
 }
 
 
@@ -195,15 +228,17 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
 export async function revertSelection(itemId: string): Promise<GiftItem | null> {
     const itemIndex = giftItems.findIndex(item => item.id === itemId && (item.status === 'selected' || item.status === 'not_needed')); // Can revert selected or not_needed
     if (itemIndex === -1) {
-        console.warn(`Item ${itemId} not found or not in a revertible status.`);
+        console.warn(`Admin: Item ${itemId} not found or not in a revertible status.`);
         return null;
     }
 
     const { selectedBy, selectionDate, ...rest } = giftItems[itemIndex]; // Remove selection details
 
-    const updatedItem = {
+    const updatedItem: GiftItem = {
         ...rest,
         status: 'available' as const,
+        selectedBy: undefined, // Explicitly clear
+        selectionDate: undefined, // Explicitly clear
     };
 
      giftItems = [
@@ -213,7 +248,9 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
     ];
 
     console.log(`Item ${itemId} reverted to available by admin.`);
-    return updatedItem;
+    revalidatePath('/'); // Revalidate home page
+    revalidatePath('/admin'); // Revalidate admin page
+    return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
 /**
@@ -221,21 +258,28 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
  * @param newItemData Data for the new gift (excluding id). Status defaults to available unless specified.
  * @returns A promise resolving to the newly added gift item.
  */
-export async function addGift(newItemData: Omit<GiftItem, 'id'>): Promise<GiftItem> {
+export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'> & { selectionDate?: Date | string }): Promise<GiftItem> {
     const newItem: GiftItem = {
         id: `gift-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Generate unique ID
         ...newItemData,
         // Status defaults to 'available' if not provided, otherwise use provided status
         status: newItemData.status || 'available',
+        selectionDate: newItemData.selectionDate instanceof Date ? newItemData.selectionDate.toISOString() : newItemData.selectionDate, // Ensure date is string
     };
     // Clear selection details if status is not 'selected'
     if (newItem.status !== 'selected') {
         newItem.selectedBy = undefined;
         newItem.selectionDate = undefined;
+    } else if (newItem.status === 'selected' && !newItem.selectionDate) {
+        // If adding directly as selected, set selection date if not provided
+        newItem.selectionDate = new Date().toISOString();
     }
+
     giftItems = [...giftItems, newItem];
     console.log(`Admin added new gift: ${newItem.name} with status ${newItem.status}`);
-    return newItem;
+    revalidatePath('/'); // Revalidate home page
+    revalidatePath('/admin'); // Revalidate admin page
+    return JSON.parse(JSON.stringify(newItem)); // Return a copy
 }
 
 
@@ -245,33 +289,47 @@ export async function addGift(newItemData: Omit<GiftItem, 'id'>): Promise<GiftIt
  * @param updates Partial data containing the updates.
  * @returns A promise resolving to the updated item or null if not found.
  */
-export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem, 'id'>>): Promise<GiftItem | null> {
+export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem, 'id' | 'selectionDate'> & { selectionDate?: Date | string }>): Promise<GiftItem | null> {
      const itemIndex = giftItems.findIndex(item => item.id === itemId);
      if (itemIndex === -1) {
          console.warn(`Item ${itemId} not found for update by admin.`);
          return null;
      }
 
+     // Get the original item
+     const originalItem = giftItems[itemIndex];
+
      // Ensure read-only fields like 'id' are not overwritten
      const { id, ...restUpdates } = updates;
 
-     const updatedItem: GiftItem = {
-         ...giftItems[itemIndex],
+     // Merge updates with the original item
+     let updatedItem: GiftItem = {
+         ...originalItem,
          ...restUpdates,
          // Ensure status update is valid, if provided
-         ...(updates.status && ['available', 'selected', 'not_needed'].includes(updates.status) && { status: updates.status as GiftItem['status'] }),
+         ...(updates.status && ['available', 'selected', 'not_needed'].includes(updates.status)
+             ? { status: updates.status as GiftItem['status'] }
+             : {}),
+        // Ensure date is stored as string
+        selectionDate: updates.selectionDate instanceof Date ? updates.selectionDate.toISOString() : updates.selectionDate ?? originalItem.selectionDate,
      };
 
-      // Clear selection details if status changes FROM 'selected' TO something else
-      if (giftItems[itemIndex].status === 'selected' && updatedItem.status !== 'selected') {
-          updatedItem.selectedBy = undefined;
-          updatedItem.selectionDate = undefined;
-      }
-      // Clear selection details if status is explicitly set to 'available' or 'not_needed'
-      if (updatedItem.status === 'available' || updatedItem.status === 'not_needed') {
-          updatedItem.selectedBy = undefined;
-          updatedItem.selectionDate = undefined;
-      }
+     // Logic for clearing/setting selection details based on status change
+     if (updatedItem.status === 'available' || updatedItem.status === 'not_needed') {
+         // If status becomes available or not_needed, clear selection details
+         updatedItem.selectedBy = undefined;
+         updatedItem.selectionDate = undefined;
+     } else if (updatedItem.status === 'selected') {
+         // If status becomes selected
+         if (!originalItem.selectedBy && !updatedItem.selectedBy) {
+             // If it wasn't selected before and no selector is provided in update, set selector to 'Admin' (or similar placeholder)
+             updatedItem.selectedBy = updatedItem.selectedBy || 'Admin'; // Use provided name or default
+         }
+         if (!originalItem.selectionDate && !updatedItem.selectionDate) {
+             // If it wasn't selected before and no date provided, set current date
+             updatedItem.selectionDate = new Date().toISOString();
+         }
+     }
 
 
       giftItems = [
@@ -280,8 +338,10 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
          ...giftItems.slice(itemIndex + 1),
      ];
 
-     console.log(`Item ${itemId} updated by admin.`);
-     return updatedItem;
+     console.log(`Item ${itemId} updated by admin. New data:`, updatedItem);
+     revalidatePath('/'); // Revalidate home page
+     revalidatePath('/admin'); // Revalidate admin page
+     return JSON.parse(JSON.stringify(updatedItem)); // Return a copy
 }
 
 /**
@@ -295,6 +355,8 @@ export async function deleteGift(itemId: string): Promise<boolean> {
     const success = giftItems.length < initialLength;
     if (success) {
         console.log(`Item ${itemId} deleted by admin.`);
+        revalidatePath('/'); // Revalidate home page
+        revalidatePath('/admin'); // Revalidate admin page
     } else {
         console.warn(`Item ${itemId} not found for deletion by admin.`);
     }
@@ -308,16 +370,21 @@ export async function deleteGift(itemId: string): Promise<boolean> {
 export async function exportGiftsToCSV(): Promise<string> {
     // Updated headers to remove suggestion columns
     const headers = ['ID', 'Nome', 'Descrição', 'Categoria', 'Status', 'Selecionado Por', 'Data Seleção'];
-    const rows = giftItems.map(item => [
+    const currentGifts = await getGifts(); // Fetch current data
+    const rows = currentGifts.map(item => [
         item.id,
         item.name,
         item.description || '',
         item.category,
         item.status,
         item.selectedBy || '',
-        item.selectionDate ? item.selectionDate.toLocaleString('pt-BR') : '', // Format date for locale
+        item.selectionDate
+            ? new Date(item.selectionDate).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short'})
+            : '', // Format date for locale
     ].map(value => `"${String(value).replace(/"/g, '""')}"`) // Escape quotes
      .join(','));
 
     return [headers.join(','), ...rows].join('\n');
 }
+
+    
