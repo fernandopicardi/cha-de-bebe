@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftList from "@/components/gift-list";
 import AddToCalendarButton from "@/components/add-to-calendar-button";
 import SuggestItemButton from "@/components/suggest-item-button";
-import { getEventSettings, getGifts, type EventSettings, type GiftItem, initializeFirestoreData } from "@/data/gift-store"; // Import getGifts and GiftItem type
+import { getEventSettings, getGifts, type EventSettings, type GiftItem } from "@/data/gift-store"; // Import getGifts and GiftItem type
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Loader2 } from "lucide-react";
 
@@ -36,8 +36,7 @@ export default function Home() {
     setError(null); // Clear previous errors
 
     try {
-      // Optional: Initialize Firestore data (consider if needed on every load)
-      // await initializeFirestoreData(); // Might not be needed here if done elsewhere reliably
+      // Removed Firestore initialization from here, should be done elsewhere or on setup
 
       const eventDataPromise = getEventSettings();
       const giftsDataPromise = getGifts();
@@ -83,7 +82,7 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
 
-  // Manual refresh function
+  // Manual refresh function - use the useCallback version of fetchData
   const handleRefresh = useCallback(() => {
     console.log("Home Page: Manual refresh requested.");
     fetchData("manual refresh button");
@@ -273,5 +272,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
