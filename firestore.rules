@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Allow public read access to settings
+    match /settings/main {
+      allow read: if true;
+      // WARNING: Allowing any write for now, secure this later with admin auth
+      // This allows the admin panel (without Firebase Auth) and potentially other
+      // functions to modify settings.
+      allow write: if true; // TODO: Secure this rule (e.g., if request.auth.uid in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.roles)
+    }
+
+    // Allow public read access to gifts
+    match /gifts/{giftId} {
+      allow read: if true;
+
+      // Allow anyone to create a new gift (for suggestions)
+      // Basic validation: Ensure name exists, status is 'selected', and selectedBy is set.
+      allow create: if request.resource.data.name != null &&
+                       request.resource.data.status == 'selected' &&
+                       request.resource.data.selectedBy != null &&
+                       request.resource.data.category == 'Outros'; // Ensure suggestions are categorized correctly
+
+      // WARNING: Allowing most updates for now, secure this later with admin auth
+      // This allows selecting items, suggesting items (implicitly via create),
+      // reverting selections/not_needed status by anyone, and admin updates.
+      allow update: if true; // TODO: Secure this rule (allow specific state transitions publicly, restrict others to admins)
+                       // Example of more secure public update rule:
+                       // allow update: if (resource.data.status == 'available' && request.resource.data.status == 'selected' && request.resource.data.selectedBy != null) || // Selecting available
+                       //                 (resource.data.status == 'selected' && request.resource.data.status == 'available' && request.auth != null) || // Admin Reverting selection
+                       //                 (resource.data.status == 'not_needed' && request.resource.data.status == 'available' && request.auth != null) || // Admin Reverting not_needed
+                       //                 (resource.data.status == 'available' && request.resource.data.status == 'not_needed' && request.auth != null); // Admin Marking as not needed
+
+      // WARNING: Allowing deletion for now, secure this later with admin auth
+      // This allows anyone to delete gift items.
+      allow delete: if true; // TODO: Secure this rule (e.g., if request.auth.uid in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.roles)
+    }
+  }
+}
