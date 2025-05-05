@@ -28,3 +28,4 @@ db = getFirestore(app);
 // storage = getStorage(app); // Add if storage is needed later
 
 export { db /*, storage */ }; // Export db (and storage if needed)
+
