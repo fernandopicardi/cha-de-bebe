@@ -61,6 +61,7 @@ export default function AdminPage() {
     try {
       // Only fetch data if the user is authenticated
       if (user) {
+          console.log("AdminPage: User authenticated. Calling getGifts and getEventSettings...");
           // Fetch gifts AND settings in parallel
           const giftsPromise = getGifts();
           const settingsPromise = getEventSettings();
@@ -70,11 +71,13 @@ export default function AdminPage() {
             settingsPromise,
           ]);
 
-          console.log(`AdminPage: Fetched ${giftsData?.length ?? 0} gifts.`); // Use optional chaining
-          console.log("AdminPage: Fetched Event Settings:", !!settingsData);
+          console.log(`AdminPage: Fetched ${giftsData?.length ?? 0} gifts.`);
+          console.log("AdminPage: Fetched Event Settings:", settingsData ? "Data received" : "Null/Undefined");
+          // Log raw gifts data immediately after fetch
+           console.log("AdminPage: Raw Gifts Data from getGifts:", giftsData?.slice(0, 5) ?? []);
 
           // Update state with fetched data, handling potential null/undefined
-          // Log details of the first few gifts to verify data structure
+          // Log details of the first few gifts to verify data structure before setting state
           console.log("AdminPage: Sample gifts being set to state:", giftsData?.slice(0, 5));
           setGifts(giftsData || []); // Set empty array if null/undefined
           setEventSettings(settingsData); // Set directly (can be null)
@@ -93,7 +96,7 @@ export default function AdminPage() {
        setEventSettings(null);
     } finally {
       setIsDataLoading(false);
-        console.log("AdminPage: Data fetching complete.");
+        console.log("AdminPage: Data fetching complete, loading set to false.");
     }
   // Dependency: user object. Refetch if user changes.
   }, [user]);
@@ -222,8 +225,9 @@ export default function AdminPage() {
   }
 
   // Render the admin dashboard if authenticated and data loaded
-  // Add log just before render to check final state
-  console.log(`AdminPage: Rendering with ${gifts.length} gifts in state.`);
+  // Add log just before render to check final state being passed to child components
+  console.log(`AdminPage: Rendering dashboard. Passing ${gifts.length} gifts to AdminItemManagementTable.`);
+  console.log(`AdminPage: Sample gifts being passed:`, gifts.slice(0, 5));
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 bg-background text-foreground">
@@ -258,7 +262,8 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
              {/* Pass gifts and refresh callback */}
-            <AdminItemManagementTable
+             {/* Ensure gifts are passed correctly */}
+             <AdminItemManagementTable
               gifts={gifts} // Pass the fetched gifts
               onDataChange={refreshData} // Pass stable refresh callback
             />

@@ -31,20 +31,22 @@ export default function Home() {
 
   // Use useCallback for fetchData to ensure stable reference if needed elsewhere
   const fetchData = useCallback(async (source?: string) => {
-    console.log(`Home Page: Fetching data (triggered by ${source || 'useEffect'})...`);
+    console.log(`Home Page: Fetching data (triggered by ${source || 'initial load'})...`);
     setIsLoading(true); // Set loading true at the start of fetch
     setError(null); // Clear previous errors
 
     try {
+      console.log("Home Page: Calling getEventSettings and getGifts...");
       const eventDataPromise = getEventSettings();
       const giftsDataPromise = getGifts(); // Fetch gifts
 
       // Fetch in parallel
       const [eventData, giftsData] = await Promise.all([eventDataPromise, giftsDataPromise]);
 
-      console.log("Home Page: Fetched Event Settings:", !!eventData);
+      console.log("Home Page: Fetched Event Settings:", eventData ? "Data received" : "Null/Undefined");
       console.log("Home Page: Fetched Gifts Count:", giftsData?.length ?? 0);
-      // console.log("Home Page: Fetched Gifts Sample:", giftsData?.slice(0, 3) ?? []); // Log first few gifts for inspection
+      // Log raw gifts data immediately after fetch
+      console.log("Home Page: Raw Gifts Data from getGifts:", giftsData?.slice(0, 5) ?? []);
 
       // Add null check before setting state
       if (eventData) {
@@ -58,8 +60,8 @@ export default function Home() {
 
       // Add null/undefined check for giftsData
       if (giftsData) {
-        console.log("Home Page: Setting gifts state with fetched data. Count:", giftsData.length);
-        // Log details of the first few gifts to verify data structure
+        console.log(`Home Page: Setting gifts state with ${giftsData.length} fetched gifts.`);
+        // Log details of the first few gifts to verify data structure before setting state
         console.log("Home Page: Sample gifts being set to state:", giftsData.slice(0, 5));
         setGifts(giftsData);
       } else {
@@ -163,8 +165,9 @@ export default function Home() {
       );
   }
 
-  // Add log just before render to check final state
-  console.log(`Home Page: Rendering with ${gifts.length} gifts in state. Event Title: ${pageTitle}`);
+  // Add log just before render to check final state being passed to GiftList
+  console.log(`Home Page: Rendering page. Passing ${gifts.length} gifts to GiftList component.`);
+  console.log(`Home Page: Sample gifts being passed as prop:`, gifts.slice(0, 5));
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">

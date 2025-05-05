@@ -47,8 +47,8 @@ export default function GiftList({
 
    // Log received items whenever the prop changes
    useEffect(() => {
-    console.log(`GiftList (${filterStatus}): Received ${items?.length ?? 0} items.`); // Use optional chaining
-    console.log(`GiftList (${filterStatus}): Sample items received:`, items?.slice(0, 5) ?? []); // Use optional chaining
+    console.log(`GiftList (${filterStatus}): Received items prop update. Count: ${items?.length ?? 0}`);
+    // console.log(`GiftList (${filterStatus}): Sample items received in prop:`, items?.slice(0, 5) ?? []);
   }, [items, filterStatus]);
 
 
@@ -56,12 +56,13 @@ export default function GiftList({
   const filteredItems = useMemo(() => {
      // Ensure items is an array before filtering
     const safeItems = Array.isArray(items) ? items : [];
-    console.log(`GiftList (${filterStatus}): Filtering ${safeItems.length} items...`);
+    console.log(`GiftList (${filterStatus}): Filtering ${safeItems.length} items based on prop...`);
+    // console.log(`GiftList (${filterStatus}): Items before filtering:`, safeItems);
 
     const result = safeItems.filter((item) => {
       // Basic validation: Ensure item and item.status exist and item has an ID
       if (!item || typeof item.status === 'undefined' || !item.id) {
-          console.warn(`GiftList (${filterStatus}): Skipping invalid item:`, item);
+          console.warn(`GiftList (${filterStatus}): Skipping invalid item during filtering:`, item);
           return false;
       }
 
@@ -74,7 +75,7 @@ export default function GiftList({
       return statusMatch && categoryMatch;
     });
     console.log(`GiftList (${filterStatus}): Filtered down to ${result.length} items.`);
-    console.log(`GiftList (${filterStatus}): Filtered items sample:`, result.slice(0, 5));
+    console.log(`GiftList (${filterStatus}): Filtered items result:`, result.slice(0, 5));
     return result;
   }, [items, filterStatus, filterCategory]);
 
@@ -175,8 +176,29 @@ export default function GiftList({
     }
   };
 
+   // Determine if the component is in a loading state (items prop might still be empty/null initially)
+   // We rely on the parent component (page.tsx) to handle the primary loading state.
+   // Here, we just check if items are available for rendering.
+   const isListEmpty = !items || items.length === 0;
+   const isFilteredListEmpty = filteredItems.length === 0;
 
-  if (filteredItems.length === 0 && filterStatus !== "all") { // Only show specific empty message if a filter is active
+   console.log(`GiftList (${filterStatus}): Rendering check - isListEmpty: ${isListEmpty}, isFilteredListEmpty: ${isFilteredListEmpty}`);
+
+
+   if (isListEmpty && filterStatus === 'all') { // Check if original items array is empty/null/undefined
+     // This state occurs typically before data is loaded or if fetch returns nothing.
+     // Parent page.tsx handles the main Loading... spinner.
+     // Here, we show a message if the parent isn't loading but items are still empty.
+     console.log(`GiftList (${filterStatus}): Rendering initial empty state (no items passed or fetched yet).`);
+     return (
+         <div className="text-center pt-16 pb-10 text-muted-foreground">
+             <Gift className="mx-auto h-12 w-12 mb-4" />
+             <p>A lista de presentes ainda está vazia ou carregando...</p>
+         </div>
+     );
+   }
+
+  if (isFilteredListEmpty && filterStatus !== "all") { // Only show specific empty message if a filter is active AND items have loaded
     let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
     if (filterStatus === "available")
       emptyMessage =
@@ -186,7 +208,7 @@ export default function GiftList({
     if (filterStatus === "not_needed")
       emptyMessage = "Nenhum item marcado como 'Não precisa'.";
 
-      console.log(`GiftList (${filterStatus}): Rendering empty message: ${emptyMessage}`);
+      console.log(`GiftList (${filterStatus}): Rendering specific empty message for active filter: ${emptyMessage}`);
     return (
       <div className="text-center pt-16 pb-10 text-muted-foreground">
         <Gift className="mx-auto h-12 w-12 mb-4" />
@@ -195,63 +217,58 @@ export default function GiftList({
     );
   }
 
-  // If filter is 'all' and items is empty, show initial empty state
-  if (!items?.length && filterStatus === 'all') { // Check if original items array is empty/null/undefined
-    console.log(`GiftList (${filterStatus}): Rendering initial empty state (no items passed).`);
-    return (
-        <div className="text-center pt-16 pb-10 text-muted-foreground">
-            <Gift className="mx-auto h-12 w-12 mb-4" />
-            <p>A lista de presentes ainda está vazia.</p>
-        </div>
-    );
-  }
+
 
   console.log(`GiftList (${filterStatus}): Rendering ${filteredItems.length} items.`);
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-        {filteredItems.map((item) => (
-          <Card
-            key={item.id} // Use item.id as key
-            className="flex flex-col justify-between shadow-md rounded-lg overflow-hidden animate-fade-in bg-card"
-          >
-            <CardHeader>
-              <CardTitle className="text-lg">{item.name}</CardTitle>
-              {item.description && (
-                <CardDescription>{item.description}</CardDescription>
-              )}
-              <div className="flex items-center text-sm text-muted-foreground pt-1">
-                <Tag className="mr-1 h-4 w-4" /> {item.category}
-              </div>
-            </CardHeader>
-            <CardContent className="flex-grow">
-              {/* Content area can be used for images or more details later */}
-            </CardContent>
-            <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
-              {getStatusBadge(item.status, item.selectedBy)}
-              <div className="flex gap-2 flex-wrap justify-end">
-                {item.status === "available" && (
-                  <Button
-                    size="sm"
-                    className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
-                    onClick={() => handleSelectItemClick(item)}
-                    aria-label={`Selecionar ${item.name}`}
-                    disabled={!!loadingItemId} // Disable button if any item is being processed
-                  >
-                    {/* Show loader only if *this specific* item is being processed */}
-                    {loadingItemId === item.id ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Gift className="mr-2 h-4 w-4" />
-                    )}
-                    Escolher
-                  </Button>
+        {filteredItems.map((item) => {
+           // Add a log for each item being rendered
+           // console.log(`GiftList (${filterStatus}): Rendering item card for:`, item);
+           return (
+            <Card
+              key={item.id} // Use item.id as key
+              className="flex flex-col justify-between shadow-md rounded-lg overflow-hidden animate-fade-in bg-card"
+            >
+              <CardHeader>
+                <CardTitle className="text-lg">{item.name}</CardTitle>
+                {item.description && (
+                  <CardDescription>{item.description}</CardDescription>
                 )}
-                {/* No buttons for 'selected' or 'not_needed' on public page */}
-              </div>
-            </CardFooter>
-          </Card>
-        ))}
+                <div className="flex items-center text-sm text-muted-foreground pt-1">
+                  <Tag className="mr-1 h-4 w-4" /> {item.category}
+                </div>
+              </CardHeader>
+              <CardContent className="flex-grow">
+                {/* Content area can be used for images or more details later */}
+              </CardContent>
+              <CardFooter className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-4 border-t">
+                {getStatusBadge(item.status, item.selectedBy)}
+                <div className="flex gap-2 flex-wrap justify-end">
+                  {item.status === "available" && (
+                    <Button
+                      size="sm"
+                      className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
+                      onClick={() => handleSelectItemClick(item)}
+                      aria-label={`Selecionar ${item.name}`}
+                      disabled={!!loadingItemId} // Disable button if any item is being processed
+                    >
+                      {/* Show loader only if *this specific* item is being processed */}
+                      {loadingItemId === item.id ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Gift className="mr-2 h-4 w-4" />
+                      )}
+                      Escolher
+                    </Button>
+                  )}
+                  {/* No buttons for 'selected' or 'not_needed' on public page */}
+                </div>
+              </CardFooter>
+            </Card>
+           );
+           })}
       </div>
 
       {/* Dialog remains the same, but uses the new handleItemSelectionSuccess */}

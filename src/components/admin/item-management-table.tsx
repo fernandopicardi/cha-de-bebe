@@ -97,12 +97,17 @@ export default function AdminItemManagementTable({
 
   // Log received gifts when the prop changes
   useEffect(() => {
-    console.log(`AdminItemManagementTable: Received ${gifts?.length ?? 0} gifts.`); // Use optional chaining
-    // console.log("AdminItemManagementTable: Sample gifts:", gifts?.slice(0, 3)); // Use optional chaining
+    console.log(`AdminItemManagementTable: Received gifts prop update. Count: ${gifts?.length ?? 0}`);
+    // console.log("AdminItemManagementTable: Sample gifts received in prop:", gifts?.slice(0, 3));
   }, [gifts]);
 
   // Ensure gifts is always an array before using it
-  const safeGifts = useMemo(() => (Array.isArray(gifts) ? gifts : []), [gifts]);
+  const safeGifts = useMemo(() => {
+      const result = Array.isArray(gifts) ? gifts : [];
+      console.log(`AdminItemManagementTable: Memoized safeGifts. Count: ${result.length}`);
+      // console.log("AdminItemManagementTable: safeGifts content:", result.slice(0, 3));
+      return result;
+  }, [gifts]);
 
 
   const {
@@ -140,7 +145,7 @@ export default function AdminItemManagementTable({
   };
 
   const handleOpenEditDialog = (item: GiftItem) => {
-    console.log(`AdminItemManagementTable: Opening EDIT dialog for item ID: ${item.id}`);
+    console.log(`AdminItemManagementTable: Opening EDIT dialog for item ID: ${item.id}`, item);
     setEditingItem(item);
     reset({ // Populate form with the selected item's data
       name: item.name,
@@ -382,6 +387,8 @@ export default function AdminItemManagementTable({
     }
   };
 
+  console.log(`AdminItemManagementTable: Rendering table. Number of safeGifts: ${safeGifts.length}`);
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -415,7 +422,10 @@ export default function AdminItemManagementTable({
                 </TableCell>
               </TableRow>
             ) : (
-              safeGifts.map((item) => ( // Use safeGifts
+              safeGifts.map((item) => {
+                // Add log for each item being rendered in the table
+                // console.log("AdminItemManagementTable: Rendering table row for item:", item);
+                return (
                 <TableRow
                   key={item.id}
                   className={
@@ -499,7 +509,8 @@ export default function AdminItemManagementTable({
                     )}
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>
