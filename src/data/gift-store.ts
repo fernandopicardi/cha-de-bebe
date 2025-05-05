@@ -10,7 +10,9 @@ service cloud.firestore {
 
     // Settings document: Anyone can read, only admin can write
     match /settings/main {
+      // *** ENSURE THIS RULE IS DEPLOYED IN FIREBASE CONSOLE ***
       allow read: if true;
+      // Admin write access (relies on isAdmin() function and Firebase Auth)
       allow write: if isAdmin();
     }
 
@@ -20,12 +22,16 @@ service cloud.firestore {
       allow read: if true;
 
       // Anyone can suggest a gift (create a new one marked as selected)
+      // Assumes no authentication required for suggestions based on previous implementation
+      // Firestore rules might need adjustment if suggestions require logged-in users
       allow create: if request.resource.data.status == 'selected' && request.resource.data.selectedBy != null && request.resource.data.name != null && request.resource.data.category != null;
 
       // Anyone can select an available gift (update status)
+      // Assumes no authentication required for selection based on previous implementation
+      // Firestore rules might need adjustment if selection requires logged-in users
       allow update: if request.resource.data.status == 'selected' && request.resource.data.selectedBy != null && resource.data.status == 'available';
 
-      // Admins can perform any update or delete
+      // Admins can perform any update or delete (relies on isAdmin() function and Firebase Auth)
       allow update, delete: if isAdmin();
     }
 
@@ -34,13 +40,13 @@ service cloud.firestore {
       allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
     }
 
-    // Admin check function
+    // Admin check function (Requires Firebase Authentication)
+    // Make sure the UIDs here are correct and correspond to authenticated admin users.
     function isAdmin() {
       return request.auth != null && request.auth.uid in ['ADMIN_UID_1', 'ADMIN_UID_2']; // Replace with actual Admin UIDs
     }
   }
 }
-
 */
 
 
@@ -59,6 +65,8 @@ import {
   Timestamp,
   writeBatch,
   serverTimestamp, // Use serverTimestamp for createdAt consistency
+  DocumentReference, // Import type
+  FirestoreError, // Import type
 } from "firebase/firestore";
 import { db } from "@/firebase/config"; // Import Firestore instance
 
@@ -71,7 +79,7 @@ export interface GiftItem {
   status: "available" | "selected" | "not_needed";
   selectedBy?: string;
   selectionDate?: Timestamp | string | undefined; // Use Firestore Timestamp for dates
-  createdAt?: Timestamp; // Optional: Track creation time
+  createdAt?: Timestamp | string | undefined; // Optional: Track creation time
 }
 
 export interface SuggestionData {
@@ -166,7 +174,8 @@ const defaultEventSettings: EventSettings = {
 
 // Firestore Collection References
 const giftsCollection = collection(db, "gifts");
-const settingsDocRef = doc(db, "settings", "main"); // Use a single document for settings
+const settingsDocRef: DocumentReference<EventSettings> = doc(db, "settings", "main") as DocumentReference<EventSettings>; // Explicit type assertion
+
 
 // Helper function to convert Firestore Timestamps in gift items
 const giftFromDoc = (docSnapshot: any): GiftItem => {
@@ -197,32 +206,32 @@ const forceRevalidation = () => {
  * Removed React cache wrapper.
  */
 export const getEventSettings = (async (): Promise<EventSettings> => {
-  console.log("Firestore: Fetching event settings...");
+  const settingsPath = settingsDocRef.path; // Get the path for logging
+  console.log(`Firestore: Attempting to fetch event settings from path: ${settingsPath}`);
   try {
     const docSnap = await getDoc(settingsDocRef);
     if (docSnap.exists()) {
-      console.log("Firestore: Event settings found.");
+      console.log(`Firestore: Event settings found at ${settingsPath}.`);
       // Ensure all default fields exist in the fetched data
-      const fetchedData = docSnap.data() as EventSettings;
+      const fetchedData = docSnap.data();
       const completeSettings = { ...defaultEventSettings, ...fetchedData };
       return completeSettings;
     } else {
-      console.log("Firestore: Event settings not found, initializing defaults.");
-      // Check if initialization should happen here or be handled manually/elsewhere
-      // For safety, avoid automatic writes in a read function if possible
-      // await setDoc(settingsDocRef, defaultEventSettings);
-      // return defaultEventSettings;
-      console.warn("Firestore: Settings document 'settings/main' does not exist. Returning defaults without writing.");
+      console.warn(`Firestore: Settings document '${settingsPath}' does not exist. Returning defaults. Consider initializing it manually or via admin panel if needed.`);
+      // Avoid automatic writes in a read function for safety.
+      // Initialization should ideally be a separate process or handled by an admin.
+      // await setDoc(settingsDocRef, defaultEventSettings); // Removed initialization from read function
       return defaultEventSettings;
     }
   } catch (error) {
-    console.error("Firestore: Error fetching event settings:", error);
-    // Optionally return defaults or throw error based on desired behavior
-    // Check if error is permissions related
-     if ((error as any)?.code === 'permission-denied') {
-        console.error("Firestore: PERMISSION DENIED fetching event settings. Check Firestore rules.");
+    console.error(`Firestore: Error fetching event settings from ${settingsPath}:`, error);
+    // Check if error is permissions related and provide more specific feedback
+     if ((error as FirestoreError)?.code === 'permission-denied') {
+        console.error(`Firestore: PERMISSION DENIED fetching event settings from ${settingsPath}.`);
+        console.error("Firestore Rules Check: Ensure the rule 'allow read: if true;' is correctly deployed for the path 'settings/main' in your Firebase Console.");
      }
-    return defaultEventSettings; // Return defaults on error for resilience
+    // Return defaults on error for resilience, but the permission issue needs fixing in Firebase.
+    return defaultEventSettings;
   }
 }); // Removed cache wrapper
 
@@ -258,6 +267,9 @@ export const getGifts = (async (): Promise<GiftItem[]> => {
           return gifts;
        } catch (initError) {
           console.error("Firestore: Error initializing default gifts:", initError);
+           if ((initError as FirestoreError)?.code === 'permission-denied') {
+               console.error("Firestore: PERMISSION DENIED initializing default gifts. Check Firestore rules allow create/write (likely admin only).");
+           }
           // If initialization fails, return empty array
           return [];
        }
@@ -268,8 +280,8 @@ export const getGifts = (async (): Promise<GiftItem[]> => {
     }
   } catch (error) {
     console.error("Firestore: Error fetching gifts:", error);
-    if ((error as any)?.code === 'permission-denied') {
-        console.error("Firestore: PERMISSION DENIED fetching gifts. Check Firestore rules.");
+    if ((error as FirestoreError)?.code === 'permission-denied') {
+        console.error("Firestore: PERMISSION DENIED fetching gifts. Check Firestore rules allow read on the 'gifts' collection.");
      }
     return []; // Return empty array on error
   }
@@ -281,7 +293,8 @@ export const getGifts = (async (): Promise<GiftItem[]> => {
 export async function updateEventSettings(
   updates: Partial<EventSettings>,
 ): Promise<EventSettings> {
-  console.log("Firestore: Updating event settings...");
+   const settingsPath = settingsDocRef.path;
+  console.log(`Firestore: Updating event settings at ${settingsPath}...`);
   try {
     // Ensure headerImageUrl is handled correctly (null vs undefined vs empty string)
     const dataToUpdate = { ...updates };
@@ -299,15 +312,14 @@ export async function updateEventSettings(
     console.log("Firestore: Event settings updated successfully.");
     forceRevalidation();
     // Re-fetch to return the updated data
-    // Manually clear cache if using `cache` function on getEventSettings
     // NOTE: Revalidation should ideally handle this, but direct fetch avoids stale cache issues
     const docSnap = await getDoc(settingsDocRef);
-    return docSnap.exists() ? { ...defaultEventSettings, ...(docSnap.data() as EventSettings) } : defaultEventSettings;
+    return docSnap.exists() ? { ...defaultEventSettings, ...(docSnap.data()) } : defaultEventSettings;
 
   } catch (error) {
-    console.error("Firestore: Error updating event settings:", error);
-    if ((error as any)?.code === 'permission-denied') {
-        console.error("Firestore: PERMISSION DENIED updating event settings. Check Firestore rules.");
+    console.error(`Firestore: Error updating event settings at ${settingsPath}:`, error);
+    if ((error as FirestoreError)?.code === 'permission-denied') {
+        console.error(`Firestore: PERMISSION DENIED updating event settings at ${settingsPath}. Check Firestore rules allow admin write.`);
      }
     throw error; // Re-throw error to be handled by the caller
   }
@@ -334,7 +346,7 @@ export async function selectGift(
     }
 
     const updateData = {
-      status: "selected",
+      status: "selected" as const,
       selectedBy: guestName,
       selectionDate: serverTimestamp(), // Use Firestore server Timestamp
     };
@@ -346,8 +358,8 @@ export async function selectGift(
     return updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
   } catch (error) {
     console.error(`Firestore: Error selecting gift ${itemId}:`, error);
-     if ((error as any)?.code === 'permission-denied') {
-        console.error(`Firestore: PERMISSION DENIED selecting gift ${itemId}. Check Firestore rules allow update.`);
+     if ((error as FirestoreError)?.code === 'permission-denied') {
+        console.error(`Firestore: PERMISSION DENIED selecting gift ${itemId}. Check Firestore rules allow update for unauthenticated users or adjust logic.`);
      }
     throw error;
   }
@@ -372,7 +384,7 @@ export async function markGiftAsNotNeeded(
     }
 
     const updateData = {
-      status: "not_needed",
+      status: "not_needed" as const,
       selectedBy: undefined, // Remove selector info
       selectionDate: undefined, // Remove selection date
     };
@@ -383,7 +395,7 @@ export async function markGiftAsNotNeeded(
     return updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
   } catch (error) {
     console.error(`Firestore: Error marking gift ${itemId} as not needed:`, error);
-    if ((error as any)?.code === 'permission-denied') {
+    if ((error as FirestoreError)?.code === 'permission-denied') {
         console.error(`Firestore: PERMISSION DENIED marking gift ${itemId} as not needed. Check Firestore rules allow admin update.`);
      }
     throw error;
@@ -416,11 +428,14 @@ export async function addSuggestion(
     forceRevalidation();
      // Fetch the newly created doc to get server-generated timestamps
     const newDocSnap = await getDoc(docRef);
+    if (!newDocSnap.exists()) {
+        throw new Error("Failed to fetch newly created suggestion document.");
+    }
     return giftFromDoc(newDocSnap);
   } catch (error) {
     console.error("Firestore: Error adding suggestion:", error);
-    if ((error as any)?.code === 'permission-denied') {
-        console.error(`Firestore: PERMISSION DENIED adding suggestion. Check Firestore rules allow create.`);
+    if ((error as FirestoreError)?.code === 'permission-denied') {
+        console.error(`Firestore: PERMISSION DENIED adding suggestion. Check Firestore rules allow create for unauthenticated users or adjust logic.`);
      }
     throw error;
   }
@@ -448,7 +463,7 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
     }
 
     const updateData = {
-      status: "available",
+      status: "available" as const,
       selectedBy: undefined, // Remove selector info
       selectionDate: undefined, // Remove selection date
     };
@@ -459,7 +474,7 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
     return updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
   } catch (error) {
     console.error(`Firestore: Error reverting gift ${itemId}:`, error);
-    if ((error as any)?.code === 'permission-denied') {
+    if ((error as FirestoreError)?.code === 'permission-denied') {
         console.error(`Firestore: PERMISSION DENIED reverting gift ${itemId}. Check Firestore rules allow admin update.`);
      }
     throw error;
@@ -475,21 +490,36 @@ export async function addGift(
   }, // Allow various date inputs
 ): Promise<GiftItem> {
   console.log(`Firestore: Adding new gift "${newItemData.name}"...`);
-  let selectionTimestamp: Timestamp | undefined = undefined;
-  if (newItemData.status === "selected" && newItemData.selectionDate) {
-    if (newItemData.selectionDate instanceof Timestamp) {
-      selectionTimestamp = newItemData.selectionDate;
-    } else if (newItemData.selectionDate instanceof Date) {
-      selectionTimestamp = Timestamp.fromDate(newItemData.selectionDate);
-    } else if (typeof newItemData.selectionDate === 'string') {
-       try {
-         selectionTimestamp = Timestamp.fromDate(new Date(newItemData.selectionDate));
-       } catch (e) { console.warn("Invalid date string for selectionDate", newItemData.selectionDate)}
+  let selectionTimestamp: Timestamp | undefined | null = null; // Use null to remove field if needed
+
+  if (newItemData.status === "selected") {
+    if (newItemData.selectionDate) {
+      if (newItemData.selectionDate instanceof Timestamp) {
+        selectionTimestamp = newItemData.selectionDate;
+      } else if (newItemData.selectionDate instanceof Date) {
+        selectionTimestamp = Timestamp.fromDate(newItemData.selectionDate);
+      } else if (typeof newItemData.selectionDate === 'string') {
+         try {
+           const parsedDate = new Date(newItemData.selectionDate);
+           if (!isNaN(parsedDate.getTime())) {
+             selectionTimestamp = Timestamp.fromDate(parsedDate);
+           } else {
+              console.warn("Invalid date string provided for selectionDate, setting to current time.", newItemData.selectionDate);
+              selectionTimestamp = Timestamp.now();
+           }
+         } catch (e) {
+             console.warn("Error parsing date string for selectionDate, setting to current time.", newItemData.selectionDate, e);
+             selectionTimestamp = Timestamp.now();
+         }
+      }
+    } else {
+        // If status is selected but no date provided, set to now
+        selectionTimestamp = Timestamp.now(); // Or serverTimestamp()
     }
-  } else if (newItemData.status === "selected" && !newItemData.selectedBy) {
-      // If status is selected but no selector provided, default to Admin
-      newItemData.selectedBy = "Admin";
-      selectionTimestamp = Timestamp.now(); // Use client time for this default case, or consider serverTimestamp
+    // Ensure selectedBy exists if status is selected
+    if (!newItemData.selectedBy) {
+        newItemData.selectedBy = "Admin"; // Default to Admin if not provided
+    }
   }
 
 
@@ -498,12 +528,12 @@ export async function addGift(
     description: newItemData.description || "",
     category: newItemData.category,
     status: newItemData.status || "available",
-    selectedBy: newItemData.status === "selected" ? newItemData.selectedBy : undefined,
-    selectionDate: newItemData.status === "selected" ? selectionTimestamp : undefined,
+    selectedBy: newItemData.status === "selected" ? newItemData.selectedBy : undefined, // Use undefined to remove field
+    selectionDate: newItemData.status === "selected" ? selectionTimestamp : undefined, // Use undefined to remove field
     createdAt: serverTimestamp(), // Use server Timestamp
   };
 
-   // Clear fields if status is not 'selected'
+   // Ensure fields are explicitly removed if status is not 'selected'
    if (giftToAdd.status !== "selected") {
       giftToAdd.selectedBy = undefined;
       giftToAdd.selectionDate = undefined;
@@ -516,10 +546,13 @@ export async function addGift(
     forceRevalidation();
     // Fetch the newly created doc to get server-generated timestamps
     const newDocSnap = await getDoc(docRef);
+     if (!newDocSnap.exists()) {
+        throw new Error("Failed to fetch newly created gift document.");
+    }
     return giftFromDoc(newDocSnap);
   } catch (error) {
     console.error(`Firestore: Error adding gift "${newItemData.name}":`, error);
-    if ((error as any)?.code === 'permission-denied') {
+    if ((error as FirestoreError)?.code === 'permission-denied') {
         console.error(`Firestore: PERMISSION DENIED adding gift ${newItemData.name}. Check Firestore rules allow admin create.`);
      }
     throw error;
@@ -538,18 +571,28 @@ export async function updateGift(
 
   // Prepare update data, converting date string/Date to Timestamp if necessary
   const updateData: { [key: string]: any } = { ...updates };
+  let selectionTimestampSet = false; // Flag to track if selectionDate was explicitly provided
 
   // Convert selectionDate if present
-  if (updateData.hasOwnProperty('selectionDate') && updateData.selectionDate) {
+  if (updateData.hasOwnProperty('selectionDate')) {
+      selectionTimestampSet = true;
       if (updateData.selectionDate instanceof Date) {
           updateData.selectionDate = Timestamp.fromDate(updateData.selectionDate);
       } else if (typeof updateData.selectionDate === 'string') {
           try {
-              updateData.selectionDate = Timestamp.fromDate(new Date(updateData.selectionDate));
+               const parsedDate = new Date(updateData.selectionDate);
+               if (!isNaN(parsedDate.getTime())) {
+                 updateData.selectionDate = Timestamp.fromDate(parsedDate);
+               } else {
+                  console.warn("Invalid date string in update, removing selectionDate", updateData.selectionDate);
+                  updateData.selectionDate = undefined; // Explicitly remove invalid date
+               }
           } catch(e) {
-              console.warn("Invalid date string in update, removing selectionDate", updateData.selectionDate);
-              delete updateData.selectionDate; // Remove invalid date
+              console.warn("Could not parse selection date for update, removing field:", updateData.selectionDate, e);
+              updateData.selectionDate = undefined; // Explicitly remove field on error
           }
+      } else if (updateData.selectionDate === null || updateData.selectionDate === undefined) {
+          updateData.selectionDate = undefined; // Map null/undefined to undefined for removal
       }
       // If it's already a Timestamp, do nothing
   }
@@ -563,14 +606,14 @@ export async function updateGift(
           updateData.selectionDate = undefined;
       } else {
            // If changing *to* selected, ensure selectedBy exists
-           if (!updateData.selectedBy) {
-               // Get current doc to preserve existing selector if available, else default
+           if (!updateData.hasOwnProperty('selectedBy') || !updateData.selectedBy) {
+               // Only default if selectedBy wasn't provided in the update
                const currentDoc = await getDoc(itemDocRef);
                updateData.selectedBy = currentDoc.data()?.selectedBy || "Admin"; // Keep existing or default
            }
-           // Ensure selectionDate exists if setting to selected
-           if (!updateData.selectionDate) {
-                // Use client time for this default case, or consider serverTimestamp
+           // Ensure selectionDate exists if setting to selected and wasn't provided
+           if (!selectionTimestampSet) {
+                // Only set to now if selectionDate wasn't part of the update payload
                 updateData.selectionDate = Timestamp.now();
            }
       }
@@ -578,6 +621,9 @@ export async function updateGift(
 
 
   try {
+    // Clean up undefined values before updating
+    Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
     await updateDoc(itemDocRef, updateData);
     console.log(`Firestore: Gift ${itemId} updated successfully.`);
     forceRevalidation();
@@ -585,7 +631,7 @@ export async function updateGift(
     return updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
   } catch (error) {
     console.error(`Firestore: Error updating gift ${itemId}:`, error);
-    if ((error as any)?.code === 'permission-denied') {
+    if ((error as FirestoreError)?.code === 'permission-denied') {
         console.error(`Firestore: PERMISSION DENIED updating gift ${itemId}. Check Firestore rules allow admin update.`);
      }
     throw error;
@@ -605,7 +651,7 @@ export async function deleteGift(itemId: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error(`Firestore: Error deleting gift ${itemId}:`, error);
-    if ((error as any)?.code === 'permission-denied') {
+    if ((error as FirestoreError)?.code === 'permission-denied') {
         console.error(`Firestore: PERMISSION DENIED deleting gift ${itemId}. Check Firestore rules allow admin delete.`);
      }
     return false;
