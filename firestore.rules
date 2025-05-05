@@ -2,43 +2,48 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Allow public read access to settings, restrict write to admin
-    match /settings/{settingId} {
+    // Settings document: Anyone can read, only admin can write
+    match /settings/main {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Allow public read access to gifts, restrict write to admin
-    // Note: selecting a gift (user action) is handled by updating status, which needs specific rules if done directly.
-    // Currently, selectGift runs server-side, implicitly using admin privileges if not secured.
-    // Suggestion/Add item actions also likely need rules if triggered directly by users.
+    // Gifts collection
     match /gifts/{giftId} {
+      // Anyone can read gifts
       allow read: if true;
-      // Allow creating/updating/deleting gifts only for admins
-      allow write: if isAdmin();
-      // Allow users to 'select' a gift (specific fields) - More complex rule if needed client-side
-      // allow update: if request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'selectedBy', 'selectionDate']) && request.resource.data.status == 'selected';
-      // Allow users to 'suggest' an item (create) - More complex rule if needed client-side
-      // allow create: if request.auth != null && request.resource.data.status == 'selected';
+
+      // Anyone can suggest a gift (create a new one marked as selected)
+      // Need name, category, status='selected', selectedBy
+      allow create: if request.resource.data.status == 'selected'
+                       && request.resource.data.selectedBy != null
+                       && request.resource.data.name != null
+                       && request.resource.data.category != null;
+
+      // Anyone can select an available gift (update status)
+      // Need status='selected', selectedBy. Check incoming data only.
+      allow update: if request.resource.data.status == 'selected'
+                       && request.resource.data.selectedBy != null
+                       // Check *current* status is available
+                       && resource.data.status == 'available';
+
+      // Admins can perform any update or delete
+      // This needs to be broad enough for all admin actions (revert, mark as not needed, edit)
+      // Note: Allowing general update for admins might override the specific 'select' rule logic,
+      // but it's necessary for admin edits. Ensure client-side logic is robust.
+      allow update, delete: if isAdmin();
     }
 
-    // Allow read access to all selections and allow authenticated users to write on it.
-    // This collection doesn't seem to be used in the current code (gift items store selection status directly).
-    // If used, review permissions.
-    match /selections/{selectionId} {
-      allow read: if true;
-      allow write: if request.auth != null; // Or check if user owns the selection?
-    }
-
-    // Restrict access to users collection, only allow the correct user and the admin to read and write
+    // User profiles (if used - placeholder)
     match /users/{userId} {
       allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
     }
 
-    // Function to check if user is admin based on their UID
+    // Admin check function
     function isAdmin() {
-      // Replace with actual Admin User UIDs from Firebase Authentication
+      // Check if the user is authenticated and their UID is in the admin list
       return request.auth != null && request.auth.uid in ['JoO9fy5roDY6FTtqajp1UG8aYzS2', 'VnCKbFH5nrYijsUda0fhK3HdwSF2'];
+      // IMPORTANT: Replace with actual Admin User IDs from Firebase Authentication
     }
   }
 }
