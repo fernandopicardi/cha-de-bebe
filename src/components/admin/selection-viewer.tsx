@@ -1,7 +1,6 @@
+"use client";
 
-'use client';
-
-import React, { useState } from 'react'; // Import useState for loading state
+import React, { useState } from "react"; // Import useState for loading state
 import {
   Table,
   TableBody,
@@ -12,17 +11,19 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RotateCcw, User, CalendarDays, Loader2 } from 'lucide-react'; // Added Loader2
-import { revertSelection, type GiftItem } from '@/data/gift-store'; // Import store function
-import { useToast } from '@/hooks/use-toast';
-
+import { RotateCcw, User, CalendarDays, Loader2 } from "lucide-react"; // Added Loader2
+import { revertSelection, type GiftItem } from "@/data/gift-store"; // Import store function
+import { useToast } from "@/hooks/use-toast";
 
 interface AdminSelectionViewerProps {
   selectedItems: GiftItem[]; // Items with 'selected' status
   onDataChange?: () => void; // Optional: Keep if parent needs immediate UI feedback before revalidation finishes
 }
 
-export default function AdminSelectionViewer({ selectedItems, onDataChange }: AdminSelectionViewerProps) {
+export default function AdminSelectionViewer({
+  selectedItems,
+  onDataChange,
+}: AdminSelectionViewerProps) {
   const { toast } = useToast();
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null); // State to track loading item
 
@@ -30,17 +31,28 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
     if (loadingItemId) return; // Prevent multiple actions
     if (!item.selectedBy) return; // Should always have selectedBy, but check anyway
 
-    if (confirm(`Tem certeza que deseja reverter a seleção de "${item.name}" por ${item.selectedBy}? O item voltará a ficar disponível.`)) {
+    if (
+      confirm(
+        `Tem certeza que deseja reverter a seleção de "${item.name}" por ${item.selectedBy}? O item voltará a ficar disponível.`,
+      )
+    ) {
       setLoadingItemId(item.id); // Set loading state for this item
       try {
         // revertSelection now handles revalidation internally
         await revertSelection(item.id);
 
-        toast({ title: "Sucesso!", description: `Seleção do item "${item.name}" revertida.` });
+        toast({
+          title: "Sucesso!",
+          description: `Seleção do item "${item.name}" revertida.`,
+        });
         onDataChange?.(); // Call optional callback
       } catch (error) {
         console.error("Error reverting selection:", error);
-        toast({ title: "Erro!", description: `Falha ao reverter a seleção do item "${item.name}".`, variant: "destructive" });
+        toast({
+          title: "Erro!",
+          description: `Falha ao reverter a seleção do item "${item.name}".`,
+          variant: "destructive",
+        });
       } finally {
         setLoadingItemId(null); // Clear loading state
       }
@@ -54,8 +66,14 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
           <TableHeader>
             <TableRow>
               <TableHead>Item</TableHead>
-              <TableHead><User className="inline-block mr-1 h-4 w-4" />Selecionado Por</TableHead>
-              <TableHead className="hidden sm:table-cell"><CalendarDays className="inline-block mr-1 h-4 w-4" />Data</TableHead>
+              <TableHead>
+                <User className="inline-block mr-1 h-4 w-4" />
+                Selecionado Por
+              </TableHead>
+              <TableHead className="hidden sm:table-cell">
+                <CalendarDays className="inline-block mr-1 h-4 w-4" />
+                Data
+              </TableHead>
               <TableHead className="text-right">Ação</TableHead>
             </TableRow>
           </TableHeader>
@@ -68,15 +86,23 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
               </TableRow>
             ) : (
               selectedItems.map((item) => (
-                <TableRow key={item.id} className={loadingItemId === item.id ? 'opacity-50' : ''}>
+                <TableRow
+                  key={item.id}
+                  className={loadingItemId === item.id ? "opacity-50" : ""}
+                >
                   <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>{item.selectedBy || 'Desconhecido'}</TableCell>
+                  <TableCell>{item.selectedBy || "Desconhecido"}</TableCell>
                   <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
-                     {item.selectionDate
-                         ? new Date(item.selectionDate).toLocaleDateString('pt-BR', {
-                            year: 'numeric', month: '2-digit', day: '2-digit'
-                           })
-                         : '-'}
+                    {item.selectionDate
+                      ? new Date(item.selectionDate).toLocaleDateString(
+                          "pt-BR",
+                          {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                          },
+                        )
+                      : "-"}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -87,12 +113,12 @@ export default function AdminSelectionViewer({ selectedItems, onDataChange }: Ad
                       className="border-orange-500 text-orange-600 hover:bg-orange-500/10"
                       disabled={loadingItemId === item.id} // Disable button while loading this item
                     >
-                       {loadingItemId === item.id ? (
-                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                       ) : (
-                          <RotateCcw className="mr-1 h-4 w-4" />
-                       )}
-                       Reverter
+                      {loadingItemId === item.id ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="mr-1 h-4 w-4" />
+                      )}
+                      Reverter
                     </Button>
                   </TableCell>
                 </TableRow>

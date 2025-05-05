@@ -12,8 +12,6 @@ export default function AdminLayout({
 }) {
   return (
     // Basic layout, can be enhanced with admin-specific navigation if needed
-    <div>
-      {children}
-    </div>
+    <div>{children}</div>
   );
 }

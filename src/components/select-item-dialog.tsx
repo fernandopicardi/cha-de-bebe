@@ -1,7 +1,6 @@
+"use client";
 
-'use client';
-
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,17 +9,16 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useForm, SubmitHandler } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useToast } from '@/hooks/use-toast';
-import { Loader2, PartyPopper, Send } from 'lucide-react';
-import type { GiftItem } from '@/data/gift-store'; // Import type
-
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useForm, SubmitHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, PartyPopper, Send } from "lucide-react";
+import type { GiftItem } from "@/data/gift-store"; // Import type
 
 // Interface now uses the imported type
 interface SelectItemDialogProps {
@@ -32,15 +30,28 @@ interface SelectItemDialogProps {
 
 // Define validation schema
 const FormSchema = z.object({
-  guestName: z.string().min(2, { message: 'Por favor, insira seu nome (mínimo 2 caracteres).' }).max(50, { message: 'Nome muito longo (máximo 50 caracteres).' }),
+  guestName: z
+    .string()
+    .min(2, { message: "Por favor, insira seu nome (mínimo 2 caracteres)." })
+    .max(50, { message: "Nome muito longo (máximo 50 caracteres)." }),
 });
 
 type FormData = z.infer<typeof FormSchema>;
 
-export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: SelectItemDialogProps) {
+export default function SelectItemDialog({
+  item,
+  isOpen,
+  onClose,
+  onSuccess,
+}: SelectItemDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<FormData>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+  } = useForm<FormData>({
     resolver: zodResolver(FormSchema),
   });
 
@@ -57,9 +68,10 @@ export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: S
     } catch (error) {
       console.error("Erro ao selecionar item:", error);
       toast({
-        title: 'Ops! Algo deu errado.',
-        description: 'Não foi possível registrar sua seleção. Pode ser que alguém já tenha escolhido. Tente atualizar a página ou escolher outro item.', // More informative error
-        variant: 'destructive',
+        title: "Ops! Algo deu errado.",
+        description:
+          "Não foi possível registrar sua seleção. Pode ser que alguém já tenha escolhido. Tente atualizar a página ou escolher outro item.", // More informative error
+        variant: "destructive",
       });
       // Keep dialog open on error? Optional. onClose(); could be removed from finally.
     } finally {
@@ -70,10 +82,9 @@ export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: S
   // Reset form when dialog closes or item changes
   React.useEffect(() => {
     if (!isOpen) {
-        reset({ guestName: '' }); // Ensure reset clears the field
+      reset({ guestName: "" }); // Ensure reset clears the field
     }
   }, [isOpen, reset]);
-
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -81,7 +92,8 @@ export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: S
         <DialogHeader>
           <DialogTitle>Confirmar Seleção</DialogTitle>
           <DialogDescription>
-            Você escolheu o presente: <strong>{item.name}</strong>. Por favor, insira seu nome para confirmar.
+            Você escolheu o presente: <strong>{item.name}</strong>. Por favor,
+            insira seu nome para confirmar.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
@@ -92,24 +104,33 @@ export default function SelectItemDialog({ item, isOpen, onClose, onSuccess }: S
             <div className="col-span-3">
               <Input
                 id="guestName"
-                {...register('guestName')}
-                className={`col-span-3 ${errors.guestName ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                {...register("guestName")}
+                className={`col-span-3 ${errors.guestName ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 disabled={isSubmitting}
                 aria-invalid={errors.guestName ? "true" : "false"}
                 aria-describedby="guestName-error"
               />
               {errors.guestName && (
-                <p id="guestName-error" className="text-sm text-destructive mt-1">{errors.guestName.message}</p>
+                <p
+                  id="guestName-error"
+                  className="text-sm text-destructive mt-1"
+                >
+                  {errors.guestName.message}
+                </p>
               )}
             </div>
           </div>
           <DialogFooter>
-             <DialogClose asChild>
-               <Button type="button" variant="outline" disabled={isSubmitting}>
-                 Cancelar
-               </Button>
-             </DialogClose>
-            <Button type="submit" disabled={isSubmitting} className="bg-accent text-accent-foreground hover:bg-accent/90">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={isSubmitting}>
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
