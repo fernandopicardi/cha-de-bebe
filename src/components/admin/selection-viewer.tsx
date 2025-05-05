@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react"; // Import useState for loading state
@@ -31,6 +32,7 @@ export default function AdminSelectionViewer({
     if (loadingItemId) return; // Prevent multiple actions
     if (!item.selectedBy) return; // Should always have selectedBy, but check anyway
 
+    console.log(`SelectionViewer: Attempting to revert item ID: ${item.id}`);
     if (
       confirm(
         `Tem certeza que deseja reverter a seleção de "${item.name}" por ${item.selectedBy}? O item voltará a ficar disponível.`,
@@ -40,12 +42,14 @@ export default function AdminSelectionViewer({
       try {
         // revertSelection now handles revalidation internally
         await revertSelection(item.id);
+        console.log(`SelectionViewer: Revert successful for item ID: ${item.id}. Triggering onDataChange.`);
 
         toast({
           title: "Sucesso!",
           description: `Seleção do item "${item.name}" revertida.`,
         });
-        onDataChange?.(); // Call optional callback
+        // Call parent refresh AFTER successful operation
+        onDataChange?.();
       } catch (error) {
         console.error("Error reverting selection:", error);
         toast({
@@ -56,6 +60,8 @@ export default function AdminSelectionViewer({
       } finally {
         setLoadingItemId(null); // Clear loading state
       }
+    } else {
+        console.log(`SelectionViewer: Revert cancelled for item ID: ${item.id}`);
     }
   };
 
@@ -130,3 +136,5 @@ export default function AdminSelectionViewer({
     </div>
   );
 }
+
+    

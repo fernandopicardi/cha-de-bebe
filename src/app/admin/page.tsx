@@ -140,7 +140,9 @@ export default function AdminPage() {
       console.log("Admin Page: Fetched settings:", !!fetchedSettings);
       // console.log("Admin Page: Fetched gifts sample:", fetchedGifts.slice(0, 3)); // Log sample data
 
+      console.log("Admin Page: Setting gifts state...");
       setGifts(fetchedGifts);
+      console.log("Admin Page: Setting event settings state...");
       setEventSettings(fetchedSettings); // Store settings
     } catch (err: any) { // Catch specific error types if possible
       console.error("Admin Page: Error fetching admin data:", err);
@@ -149,6 +151,7 @@ export default function AdminPage() {
       } else {
         setError(`Falha ao carregar os dados: ${err.message || 'Erro desconhecido'}`);
       }
+      console.log("Admin Page: Clearing state due to fetch error.");
       setGifts([]); // Clear gifts on error
       setEventSettings(null); // Clear settings on error
     } finally {
@@ -383,12 +386,14 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {/* Pass key prop to force re-render if isAuthenticated changes, ensuring settings load correctly */}
-            {/* Pass settings if available and stable refresh callback */}
-            <AdminEventSettingsForm
-              key={isAuthenticated ? 'admin-settings' : 'no-settings'}
-              initialSettings={eventSettings} // Pass fetched settings
-              onSave={refreshData}
-            />
+             {/* Pass settings if available and stable refresh callback */}
+             {/* Also pass isDataLoading to show a loader within the form itself */}
+             <AdminEventSettingsForm
+               key={isAuthenticated ? 'admin-settings' : 'no-settings'}
+               initialSettings={eventSettings} // Pass fetched settings
+               onSave={refreshData}
+               isLoading={isDataLoading} // Pass loading state
+             />
           </CardContent>
         </Card>
 
@@ -411,3 +416,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    

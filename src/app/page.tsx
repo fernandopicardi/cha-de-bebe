@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from "react"; // Added useCallback
 import Link from "next/link";
 import Image from "next/image"; // Import next/image
-import { Baby, CalendarDays, Gift, MapPin, LogIn } from "lucide-react";
+import { Baby, CalendarDays, Gift, MapPin, LogIn, RefreshCcw, AlertCircle } from "lucide-react"; // Added RefreshCcw, AlertCircle
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,7 +32,7 @@ export default function Home() {
   // Use useCallback for fetchData to ensure stable reference if needed elsewhere
   const fetchData = useCallback(async (source?: string) => {
     console.log(`Home Page: Fetching data (triggered by ${source || 'useEffect'})...`);
-    setIsLoading(true);
+    setIsLoading(true); // Set loading true at the start of fetch
     setError(null); // Clear previous errors
 
     try {
@@ -51,17 +51,21 @@ export default function Home() {
 
       // Add null check before setting state
       if (eventData) {
+         console.log("Home Page: Setting event details state.");
         setEventDetails(eventData);
       } else {
          console.warn("Home Page: Event data was null or undefined after fetch.");
+         console.log("Home Page: Setting event details state to null.");
          setEventDetails(null); // Explicitly set to null if fetch returns null
       }
 
+      console.log("Home Page: Setting gifts state with fetched data.");
       setGifts(giftsData);
 
     } catch (err: any) {
       console.error("Home Page: Error fetching data:", err);
       setError(`Erro ao carregar os dados: ${err.message || 'Erro desconhecido'}`);
+      console.log("Home Page: Clearing state due to error.");
       setEventDetails(null); // Clear on error
       setGifts([]); // Clear on error
     } finally {
@@ -79,11 +83,11 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
 
-  // Add a manual refresh function for debugging or potential future use
-  const handleRefresh = () => {
+  // Manual refresh function
+  const handleRefresh = useCallback(() => {
     console.log("Home Page: Manual refresh requested.");
     fetchData("manual refresh button");
-  };
+  }, [fetchData]);
 
 
   // Formatting Date and Time
@@ -127,21 +131,22 @@ export default function Home() {
     : eventDetails?.title || "Chá de Bebê";
 
   const welcomeMsg = eventDetails?.welcomeMessage ||
-  "Sua presença é o nosso maior presente! Esta lista é um guia carinhoso para quem desejar nos presentear, mas sinta-se totalmente à vontade, o importante é celebrar conosco!";
+  "Sua presença é o nosso maior presente! Esta lista é apenas um guia carinhoso para quem desejar nos presentear. Sinta-se totalmente à vontade, o importante é celebrar conosco!";
 
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <Loader2 className="mr-2 h-8 w-8 animate-spin" />
-        <p className="mt-2">Carregando informações do chá...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Carregando informações do chá...</p>
+        <p className="text-sm text-muted-foreground mt-2">(Isso pode levar alguns segundos)</p>
       </div>
     );
   }
 
   if (error) {
       return (
-          <div className="flex flex-col items-center justify-center h-screen text-center p-4">
+          <div className="flex flex-col items-center justify-center min-h-screen text-center p-4">
               <AlertCircle className="h-12 w-12 text-destructive mb-4" />
               <h2 className="text-xl font-semibold mb-2">Erro ao Carregar</h2>
               <p className="text-muted-foreground mb-4">{error}</p>
@@ -152,22 +157,23 @@ export default function Home() {
       );
   }
 
+  // Add log just before render to check final state
+  console.log(`Home Page: Rendering with ${gifts.length} gifts. Event Title: ${pageTitle}`);
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
       {/* Top Right Controls */}
       <div className="absolute top-4 right-4 md:top-8 md:right-8 z-10 flex items-center gap-2">
         <ThemeToggle />
+        <Button onClick={handleRefresh} variant="outline" size="icon" title="Recarregar Dados">
+           <RefreshCcw className="h-4 w-4" />
+         </Button>
         <Link href="/admin">
           <Button variant="outline" size="sm">
             <LogIn className="mr-2 h-4 w-4" />
             Admin
           </Button>
         </Link>
-         {/* Optional: Add a refresh button for debugging */}
-         {/* <Button onClick={handleRefresh} variant="outline" size="icon" title="Recarregar Dados">
-           <RefreshCcw className="h-4 w-4" />
-         </Button> */}
       </div>
 
       {/* Header Text - Adjust padding */}
@@ -227,7 +233,7 @@ export default function Home() {
           <h2 className="text-2xl font-semibold flex items-center gap-2">
             <Gift className="h-6 w-6 text-primary" /> Lista de Presentes
           </h2>
-          {/* Pass refresh callback to SuggestItemButton */}
+           {/* Pass the stable fetchData callback to SuggestItemButton */}
           <SuggestItemButton onSuggestionAdded={fetchData} />
         </div>
 
@@ -249,7 +255,7 @@ export default function Home() {
           </TabsList>
 
           {/* Increased top margin on tabs content */}
-          {/* Pass fetched gifts and stable refresh callback to GiftList */}
+           {/* Pass fetched gifts and stable refresh callback to GiftList */}
           <TabsContent value="all" className="mt-6">
             <GiftList items={gifts} filterStatus="all" onItemAction={fetchData} />
           </TabsContent>
@@ -267,3 +273,5 @@ export default function Home() {
     </div>
   );
 }
+
+    

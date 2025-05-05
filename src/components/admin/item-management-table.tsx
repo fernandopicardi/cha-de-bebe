@@ -71,7 +71,7 @@ const giftFormSchema = z.object({
     .optional()
     .or(z.literal("")), // Allow empty string, map to null later
   category: z.string().min(1, "Categoria é obrigatória."),
-  status: z.enum(["available", "selected", "not_needed"]).optional(), // Status is optional in form
+  status: z.enum(["available", "selected", "not_needed"]), // Status is now required
   selectedBy: z
     .string()
     .max(50, "Nome do selecionador muito longo")
@@ -125,12 +125,11 @@ export default function AdminItemManagementTable({
 
   const handleOpenAddDialog = () => {
     console.log("AdminItemManagementTable: Opening ADD dialog.");
-    reset({
-      // Reset for add with correct defaults
+    reset({ // Reset form for adding a new item
       name: "",
       description: "",
       category: "",
-      status: "available",
+      status: "available", // Ensure default status is 'available'
       selectedBy: "",
     });
     setEditingItem(null);
@@ -140,13 +139,12 @@ export default function AdminItemManagementTable({
   const handleOpenEditDialog = (item: GiftItem) => {
     console.log(`AdminItemManagementTable: Opening EDIT dialog for item ID: ${item.id}`);
     setEditingItem(item);
-    reset({
-      // Populate form with item data
+    reset({ // Populate form with the selected item's data
       name: item.name,
       description: item.description || "",
       category: item.category,
-      status: item.status, // Allow editing status for existing items
-      selectedBy: item.selectedBy || "", // Populate selector name
+      status: item.status, // Use the item's current status
+      selectedBy: item.selectedBy || "",
     });
     setIsAddEditDialogOpen(true);
   };
@@ -155,17 +153,22 @@ export default function AdminItemManagementTable({
     console.log("AdminItemManagementTable: Closing dialog.");
     setIsAddEditDialogOpen(false);
     setEditingItem(null);
-    reset(); // Clear form on close
+    reset({ // Reset form to defaults when closing
+        name: "",
+        description: "",
+        category: "",
+        status: "available",
+        selectedBy: "",
+      });
   };
 
-  // Show toast after data store mutation completes (which includes revalidation)
+  // Show toast and trigger parent refresh after data store mutation completes
   const handleSuccess = (message: string) => {
-     console.log(`AdminItemManagementTable: Operation successful - ${message}`);
-    // onDataChange is now primarily handled by revalidatePath in the store
-    // but call it if parent needs immediate optimistic update (though less reliable)
-    // onDataChange?.();
-    toast({ title: "Sucesso!", description: message });
-    handleDialogClose(); // Close dialog on success
+     console.log(`AdminItemManagementTable: Operation successful - ${message}. Triggering onDataChange.`);
+     toast({ title: "Sucesso!", description: message });
+     // Call parent refresh AFTER toast/logging
+     onDataChange?.();
+     handleDialogClose(); // Close dialog on success
   };
 
   const handleError = (
@@ -206,29 +209,45 @@ export default function AdminItemManagementTable({
     }
 
     // Prepare data for the store functions, ensuring nulls for empty strings
-    const storeData: Partial<Omit<GiftItem, "id" | "createdAt">> = {
+    // Note: The structure passed to addGift/updateGift should match their expected types
+    const storeData: Partial<Omit<GiftItem, "id" | "createdAt" | "selectionDate">> & { selectionDate?: any } = {
         name: data.name.trim(),
         description: data.description?.trim() || null,
         category: data.category, // Already required by schema
-        status: data.status ?? (editingItem ? editingItem.status : "available"), // Use existing or default if form status is undefined
+        status: data.status, // Status is now required by schema
         selectedBy: data.status === "selected" ? (data.selectedBy?.trim() || "Admin") : null, // Set null if not selected, default if selected but empty
-        // selectionDate is handled by the store functions (serverTimestamp)
+        // selectionDate is handled by the store functions (serverTimestamp) or passed if status is selected
     };
+     // Pass selectionDate only if status is 'selected' and potentially null (handled by store)
+     if (storeData.status === 'selected') {
+        // Let the store handle the timestamp creation if not explicitly provided
+        // storeData.selectionDate = serverTimestamp(); // Or pass a date if needed
+     } else {
+         delete storeData.selectionDate; // Don't pass selectionDate if status is not 'selected'
+     }
+
 
     try {
       if (editingItem) {
-        console.log(`AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id}`);
-        await updateGift(editingItem.id, storeData); // updateGift handles revalidation
-        handleSuccess(`Item "${storeData.name}" atualizado.`); // Show toast
+        console.log(`AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id} with data:`, storeData);
+        // Pass only the necessary fields for update
+        await updateGift(editingItem.id, storeData);
+        handleSuccess(`Item "${storeData.name}" atualizado.`);
       } else {
-        console.log("AdminItemManagementTable: Calling addGift.");
-         // Ensure required fields for addGift are present (adjust if addGift expects slightly different structure)
-        if (!storeData.name || !storeData.category || !storeData.status) {
-            throw new Error("Dados insuficientes para adicionar o item.");
-        }
-        // Casting to the expected type for addGift (may need adjustment based on addGift's exact signature)
-        await addGift(storeData as Omit<GiftItem, "id" | "createdAt" | "selectionDate">); // addGift handles revalidation
-        handleSuccess(`Item "${storeData.name}" adicionado.`); // Show toast
+        console.log("AdminItemManagementTable: Calling addGift with data:", storeData);
+        // Cast to the expected type for addGift, removing potentially undefined fields
+        const giftToAdd = {
+           name: storeData.name!, // name is required
+           category: storeData.category!, // category is required
+           status: storeData.status!, // status is required
+           description: storeData.description, // Optional
+           selectedBy: storeData.selectedBy, // Optional, handled based on status
+           // selectionDate is handled by addGift based on status
+         } as Omit<GiftItem, "id" | "createdAt" | "selectionDate">; // Ensure type matches addGift expectation
+
+         console.log("AdminItemManagementTable: Final data for addGift:", giftToAdd);
+        await addGift(giftToAdd); // Pass the correctly typed object
+        handleSuccess(`Item "${storeData.name}" adicionado.`);
       }
     } catch (error) {
       handleError(operation, itemName, error); // Pass the error object
@@ -247,8 +266,13 @@ export default function AdminItemManagementTable({
       setActionLoading(`delete-${item.id}`);
       try {
         // deleteGift now handles revalidation
-        await deleteGift(item.id);
-        handleSuccess(`Item "${item.name}" excluído.`); // Show toast
+        const success = await deleteGift(item.id);
+        if (success) {
+            handleSuccess(`Item "${item.name}" excluído.`);
+        } else {
+            // Error handled implicitly if deleteGift throws, or explicitly if it returns false
+             handleError("excluir", item.name, "Delete operation returned false.");
+        }
       } catch (error) {
         handleError("excluir", item.name, error);
       } finally {
@@ -281,7 +305,7 @@ export default function AdminItemManagementTable({
       try {
         // revertSelection now handles revalidation
         await revertSelection(item.id);
-        handleSuccess(`Item "${item.name}" revertido para disponível.`); // Show toast
+        handleSuccess(`Item "${item.name}" revertido para disponível.`);
       } catch (error) {
         handleError("reverter", item.name, error);
       } finally {
@@ -295,9 +319,9 @@ export default function AdminItemManagementTable({
   // Row Action: Mark as Not Needed
   const handleMarkNotNeeded = async (item: GiftItem) => {
     if (actionLoading) return;
-    if (item.status !== "available") {
-        console.warn(`AdminItemManagementTable: Cannot mark item ID: ${item.id} as not needed, status is '${item.status}'.`);
-        return;
+    if (item.status === "not_needed") {
+        console.warn(`AdminItemManagementTable: Item ID: ${item.id} is already marked as not needed.`);
+        return; // Avoid action if already in the target state
     }
      console.log(`AdminItemManagementTable: Attempting to mark item ID: ${item.id} as not needed.`);
     if (
@@ -309,7 +333,7 @@ export default function AdminItemManagementTable({
       try {
         // markGiftAsNotNeeded now handles revalidation
         await markGiftAsNotNeeded(item.id);
-        handleSuccess(`Item "${item.name}" marcado como "Não Precisa".`); // Show toast
+        handleSuccess(`Item "${item.name}" marcado como "Não Precisa".`);
       } catch (error) {
         handleError('marcar como "Não Precisa"', item.name, error);
       } finally {
@@ -445,7 +469,8 @@ export default function AdminItemManagementTable({
                             <RotateCcw className="h-4 w-4 text-orange-600" />
                           </Button>
                         )}
-                        {item.status === "available" && (
+                         {/* Show "Mark as Not Needed" only if item is 'available' or 'selected' */}
+                         {(item.status === "available" || item.status === "selected") && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -505,6 +530,7 @@ export default function AdminItemManagementTable({
                   aria-required="true"
                   aria-invalid={!!errors.name}
                   aria-describedby="name-error"
+                  disabled={isSubmitting}
                 />
                 {errors.name && (
                   <p id="name-error" className="text-sm text-destructive mt-1">
@@ -529,6 +555,7 @@ export default function AdminItemManagementTable({
                   maxLength={200}
                   aria-invalid={!!errors.description}
                   aria-describedby="description-error"
+                   disabled={isSubmitting}
                 />
                 {errors.description && (
                   <p id="description-error" className="text-sm text-destructive mt-1">
@@ -556,6 +583,7 @@ export default function AdminItemManagementTable({
                       value={field.value}
                       defaultValue=""
                       aria-required="true"
+                       disabled={isSubmitting}
                     >
                       <SelectTrigger
                        id="category-dialog" // Unique ID
@@ -589,19 +617,26 @@ export default function AdminItemManagementTable({
                 htmlFor="status-dialog" // Unique ID
                 className="text-right text-sm font-medium"
               >
-                Status
+                Status* {/* Made status mandatory */}
               </Label>
               <div className="col-span-3">
                 <Controller
                   name="status"
                   control={control}
-                  defaultValue={editingItem?.status || "available"} // Set default
+                   defaultValue={editingItem?.status || "available"} // Set default
+                   rules={{ required: "Status é obrigatório." }} // Add required rule
                   render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || "available"} // Ensure a value is always selected
+                       disabled={isSubmitting}
+                    >
                       <SelectTrigger
                          id="status-dialog" // Unique ID
+                         className={errors.status ? "border-destructive" : ""} // Add error styling
                          aria-invalid={!!errors.status}
                          aria-describedby="status-error"
+                         aria-required="true" // Indicate required
                       >
                         <SelectValue placeholder="Selecione um status" />
                       </SelectTrigger>
@@ -644,6 +679,7 @@ export default function AdminItemManagementTable({
                     aria-required={watchedStatus === "selected"}
                     aria-invalid={!!errors.selectedBy}
                     aria-describedby="selectedBy-error"
+                     disabled={isSubmitting}
                   />
                   {/* Specific error message if status is selected but name is missing */}
                   {errors.selectedBy ? (
@@ -686,6 +722,5 @@ export default function AdminItemManagementTable({
     </div>
   );
 }
-
 
     

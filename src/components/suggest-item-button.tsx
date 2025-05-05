@@ -66,6 +66,7 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
 
   const onSubmit: SubmitHandler<AddItemFormData> = async (data) => {
     setIsSubmitting(true);
+    console.log("SuggestItemButton: Submitting suggestion:", data);
     try {
       // addSuggestion now handles revalidation internally
       const newItem = await addSuggestion({
@@ -73,6 +74,7 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
         itemDescription: data.itemDescription,
         suggesterName: data.suggesterName,
       });
+      console.log("SuggestItemButton: Suggestion added successfully:", newItem);
 
       toast({
         title: (
@@ -86,11 +88,13 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
         variant: "default",
         className: "bg-success text-success-foreground border-success",
       });
-      reset();
-      setIsOpen(false);
 
-      // Call the callback function if provided
+      // Call the callback function AFTER successful operation
+      console.log("SuggestItemButton: Calling onSuggestionAdded callback.");
       onSuggestionAdded?.();
+
+      reset(); // Reset form only after success
+      setIsOpen(false); // Close dialog only after success
 
     } catch (error) {
       console.error("Erro ao adicionar item:", error);
@@ -99,6 +103,7 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
         description: "Não foi possível adicionar seu item. Tente novamente.",
         variant: "destructive",
       });
+      // Don't close dialog or reset form on error
     } finally {
       setIsSubmitting(false);
     }
@@ -106,7 +111,7 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
 
   React.useEffect(() => {
     if (!isOpen) {
-      reset();
+      reset(); // Reset form when dialog is closed (manually or after success)
     }
   }, [isOpen, reset]);
 
@@ -223,3 +228,5 @@ export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButt
     </Dialog>
   );
 }
+
+    

@@ -28,6 +28,7 @@ import {
 interface AdminEventSettingsFormProps {
   initialSettings: EventSettings | null; // Receive initial settings as prop
   onSave?: () => void; // Callback to trigger parent refresh
+  isLoading?: boolean; // Add loading state prop
 }
 
 // Constants for file validation (used client-side)
@@ -100,6 +101,7 @@ type SettingsFormData = z.infer<typeof settingsFormSchema>;
 export default function AdminEventSettingsForm({
   initialSettings,
   onSave,
+  isLoading, // Receive loading state
 }: AdminEventSettingsFormProps) {
   const { toast } = useToast();
   // isLoading might not be needed if initialSettings are always provided
@@ -110,7 +112,7 @@ export default function AdminEventSettingsForm({
     setIsClient(true); // Set client state after mount
     // Set initial preview based on the passed prop
     if (initialSettings) {
-       console.log("EventSettingsForm: Setting initial preview from prop:", initialSettings.headerImageUrl);
+       console.log("EventSettingsForm: Setting initial preview from prop:", initialSettings.headerImageUrl?.substring(0, 50) + "...");
       setImagePreview(initialSettings.headerImageUrl || null);
     } else {
         console.log("EventSettingsForm: No initial settings provided, clearing preview.");
@@ -152,8 +154,8 @@ export default function AdminEventSettingsForm({
 
    // Reset form if initialSettings prop changes after initial mount
    useEffect(() => {
-    if (initialSettings) {
-        console.log("EventSettingsForm: Resetting form with new initialSettings prop.", initialSettings);
+    if (initialSettings && isClient) { // Ensure reset happens only on client and when settings change
+        console.log("EventSettingsForm: Resetting form with new initialSettings prop.", initialSettings.title);
         reset({
             ...initialSettings,
             headerImageUrl: initialSettings.headerImageUrl || null,
@@ -162,7 +164,7 @@ export default function AdminEventSettingsForm({
         });
         setImagePreview(initialSettings.headerImageUrl || null); // Update preview as well
     }
-   }, [initialSettings, reset]);
+   }, [initialSettings, reset, isClient]);
 
   // Watch the FileList from the input
   const watchedFileList = watch("headerImageFile");
@@ -235,9 +237,19 @@ export default function AdminEventSettingsForm({
         setImagePreview(currentUrl);
         setValue("headerImageUrl", currentUrl); // Ensure RHF state also reverts
       } else {
-         console.log("EventSettingsForm: File cleared, clearing preview.");
-        setImagePreview(null);
-         setValue("headerImageUrl", null); // Ensure RHF state also clears
+         // If the file was cleared and there was no HTTP URL, clear preview/state
+         // Check if the current RHF value is a data URI (meaning a file was previously selected but now cleared)
+         const rhfUrl = getValues("headerImageUrl");
+         if (rhfUrl && rhfUrl.startsWith("data:")) {
+             console.log("EventSettingsForm: File cleared, clearing data URI and preview.");
+             setImagePreview(null);
+             setValue("headerImageUrl", null); // Ensure RHF state also clears
+         } else {
+             // Keep existing non-data URL if present, otherwise null
+              console.log("EventSettingsForm: File cleared, keeping existing non-data URL or null:", rhfUrl);
+             setImagePreview(rhfUrl || null);
+             setValue("headerImageUrl", rhfUrl || null);
+         }
       }
     }
     // else: Initial load or no file selected - preview is managed by defaultValues/reset
@@ -259,7 +271,7 @@ export default function AdminEventSettingsForm({
   }, [setValue]);
 
   const onSubmit = async (data: SettingsFormData) => {
-    console.log("EventSettingsForm: Submitting form data...", data);
+    console.log("EventSettingsForm: Submitting form data...", { ...data, headerImageUrl: data.headerImageUrl?.substring(0, 50) + "..." }); // Log truncated URI
     // --- Client-Side File Validation ---
     const fileList = data.headerImageFile as FileList | null | undefined;
     const file = fileList?.[0];
@@ -287,7 +299,7 @@ export default function AdminEventSettingsForm({
        // If file is valid, the data URI should already be in finalImageUrl via RHF state
        console.log("EventSettingsForm: Using data URI from RHF for headerImageUrl.");
     } else {
-        console.log("EventSettingsForm: No new file detected. Using current headerImageUrl value:", finalImageUrl);
+        console.log("EventSettingsForm: No new file detected. Using current headerImageUrl value:", finalImageUrl?.substring(0, 50) + "...");
     }
     // --- End Client-Side File Validation ---
 
@@ -304,18 +316,19 @@ export default function AdminEventSettingsForm({
       headerImageUrl: finalImageUrl,
     };
 
-     console.log("EventSettingsForm: Calling updateEventSettings with:", settingsToSave);
+     console.log("EventSettingsForm: Calling updateEventSettings with:", { ...settingsToSave, headerImageUrl: settingsToSave.headerImageUrl?.substring(0, 50) + "..." });
 
     try {
       // updateEventSettings now handles revalidation internally
-      await updateEventSettings(settingsToSave);
+      const updatedSettings = await updateEventSettings(settingsToSave);
+      console.log("EventSettingsForm: updateEventSettings successful. Result:", updatedSettings);
 
       toast({
         title: "Sucesso!",
         description: "Detalhes do evento atualizados.",
       });
 
-      // Trigger parent refresh instead of internal fetch/reset
+      // Trigger parent refresh AFTER successful update and revalidation
       console.log("EventSettingsForm: Save successful, calling onSave callback.");
       onSave?.();
 
@@ -324,6 +337,7 @@ export default function AdminEventSettingsForm({
         "headerImageFile",
       ) as HTMLInputElement | null;
       if (fileInput) fileInput.value = "";
+
       // RHF reset will happen when the parent re-fetches and passes new initialSettings
 
 
@@ -337,8 +351,9 @@ export default function AdminEventSettingsForm({
     }
   };
 
-  if (!isClient && !initialSettings) { // Show loading only if not client AND no initial data
-     console.log("EventSettingsForm: Initial load state.");
+  // Show loader if parent indicates data is loading OR if initial settings haven't arrived yet on client
+  if (isLoading || (!isClient && !initialSettings)) {
+     console.log("EventSettingsForm: Initial loading state (isLoading:", isLoading, ", !isClient:", !isClient, ", !initialSettings:", !initialSettings, ")");
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -360,6 +375,7 @@ export default function AdminEventSettingsForm({
           {...register("title")}
           className={errors.title ? "border-destructive" : ""}
           maxLength={100}
+          disabled={isSubmitting} // Disable during submission
         />
         {errors.title && (
           <p className="text-sm text-destructive mt-1">
@@ -375,6 +391,7 @@ export default function AdminEventSettingsForm({
           {...register("babyName")}
           placeholder="Ex: da Maria, do João..."
           className={errors.babyName ? "border-destructive" : ""}
+          disabled={isSubmitting} // Disable during submission
         />
         {errors.babyName && (
           <p className="text-sm text-destructive mt-1">
@@ -474,6 +491,7 @@ export default function AdminEventSettingsForm({
             type="date"
             {...register("date")}
             className={errors.date ? "border-destructive" : ""}
+            disabled={isSubmitting} // Disable during submission
           />
           {errors.date && (
             <p className="text-sm text-destructive mt-1">
@@ -488,6 +506,7 @@ export default function AdminEventSettingsForm({
             type="time"
             {...register("time")}
             className={errors.time ? "border-destructive" : ""}
+            disabled={isSubmitting} // Disable during submission
           />
           {errors.time && (
             <p className="text-sm text-destructive mt-1">
@@ -504,6 +523,7 @@ export default function AdminEventSettingsForm({
           {...register("location")}
           className={errors.location ? "border-destructive" : ""}
           maxLength={100}
+          disabled={isSubmitting} // Disable during submission
         />
         {errors.location && (
           <p className="text-sm text-destructive mt-1">
@@ -519,6 +539,7 @@ export default function AdminEventSettingsForm({
           {...register("address")}
           className={errors.address ? "border-destructive" : ""}
           maxLength={200}
+          disabled={isSubmitting} // Disable during submission
         />
         {errors.address && (
           <p className="text-sm text-destructive mt-1">
@@ -535,6 +556,7 @@ export default function AdminEventSettingsForm({
           className={errors.welcomeMessage ? "border-destructive" : ""}
           rows={4} // Set default rows
           maxLength={500}
+          disabled={isSubmitting} // Disable during submission
         />
         {errors.welcomeMessage && (
           <p className="text-sm text-destructive mt-1">
@@ -544,7 +566,7 @@ export default function AdminEventSettingsForm({
       </div>
 
       <div className="flex justify-end pt-2">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || isLoading}> {/* Also disable if parent is loading */}
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
@@ -559,3 +581,5 @@ export default function AdminEventSettingsForm({
     </form>
   );
 }
+
+    

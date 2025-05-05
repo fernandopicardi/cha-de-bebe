@@ -40,7 +40,7 @@ export default function GiftList({
   filterCategory,
   onItemAction, // Receive the callback
 }: GiftListProps) {
-  const [loading, setLoading] = useState(false); // Only for client-side actions like selection
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null); // Track loading state per item
   const [selectedItem, setSelectedItem] = useState<GiftItem | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
@@ -65,6 +65,9 @@ export default function GiftList({
       const statusMatch = filterStatus === "all" || item.status === filterStatus;
       const categoryMatch = !filterCategory || item.category?.toLowerCase() === filterCategory.toLowerCase();
 
+      // Add log for each item being checked
+      // console.log(`GiftList (${filterStatus}): Checking item "${item.name}" (Status: ${item.status}, Category: ${item.category}) -> Status Match: ${statusMatch}, Category Match: ${categoryMatch}`);
+
       return statusMatch && categoryMatch;
     });
     console.log(`GiftList (${filterStatus}): Filtered down to ${result.length} items.`);
@@ -73,6 +76,7 @@ export default function GiftList({
   }, [items, filterStatus, filterCategory]);
 
   const handleSelectItemClick = (item: GiftItem) => {
+    if (loadingItemId) return; // Prevent opening dialog if another action is loading
     setSelectedItem(item);
     setIsDialogOpen(true);
   };
@@ -89,12 +93,12 @@ export default function GiftList({
     guestName: string,
   ) => {
     console.log(`GiftList (${filterStatus}): Attempting to select item ${itemId} for ${guestName}...`);
-    setLoading(true); // Indicate loading during the selection process
+    setLoadingItemId(itemId); // Indicate loading for this specific item
     try {
       // selectGift now handles revalidation internally
       const updatedItem = await selectGift(itemId, guestName);
       if (updatedItem) {
-         console.log(`GiftList (${filterStatus}): Item ${itemId} selected successfully.`);
+         console.log(`GiftList (${filterStatus}): Item ${itemId} selected successfully. Triggering onItemAction.`);
         toast({
           title: "Sucesso!",
           description: `Obrigado, ${guestName}! "${updatedItem.name}" foi reservado com sucesso!`,
@@ -104,14 +108,14 @@ export default function GiftList({
         onItemAction?.();
       } else {
         console.warn(
-          `GiftList (${filterStatus}): Failed to select item ${itemId}. It might have been selected by someone else or status changed.`,
+          `GiftList (${filterStatus}): Failed to select item ${itemId}. It might have been selected by someone else or status changed. Triggering onItemAction to refresh list.`,
         );
         toast({
           title: "Ops!",
           description: "Este item pode não estar mais disponível. A lista será atualizada.",
           variant: "destructive",
         });
-        // Optionally call refresh even on failure if the list might be stale
+        // Call refresh even on failure if the list might be stale
          onItemAction?.();
       }
     } catch (error) {
@@ -122,7 +126,7 @@ export default function GiftList({
         variant: "destructive",
       });
     } finally {
-      setLoading(false); // Stop loading indicator
+      setLoadingItemId(null); // Stop loading indicator for this item
       handleDialogClose(); // Close dialog regardless of success/failure after action attempt
        console.log(`GiftList (${filterStatus}): Selection process finished for item ${itemId}.`);
     }
@@ -169,7 +173,7 @@ export default function GiftList({
   };
 
 
-  if (filteredItems.length === 0) {
+  if (filteredItems.length === 0 && filterStatus !== "all") { // Only show specific empty message if a filter is active
     let emptyMessage = "Nenhum item encontrado com os filtros selecionados.";
     if (filterStatus === "available")
       emptyMessage =
@@ -186,6 +190,17 @@ export default function GiftList({
       </div>
     );
   }
+
+  // If filter is 'all' and items is empty, show initial empty state
+  if (items.length === 0 && filterStatus === 'all') {
+    return (
+        <div className="text-center pt-16 pb-10 text-muted-foreground">
+            <Gift className="mx-auto h-12 w-12 mb-4" />
+            <p>A lista de presentes ainda está vazia.</p>
+        </div>
+    );
+  }
+
 
   return (
     <>
@@ -216,10 +231,10 @@ export default function GiftList({
                     className="bg-accent text-accent-foreground hover:bg-accent/90 hover:animate-pulse-button"
                     onClick={() => handleSelectItemClick(item)}
                     aria-label={`Selecionar ${item.name}`}
-                    disabled={loading} // Disable button while any item is being selected
+                    disabled={!!loadingItemId} // Disable button if any item is being processed
                   >
                     {/* Show loader only if *this specific* item is being processed */}
-                    {loading && selectedItem?.id === item.id ? (
+                    {loadingItemId === item.id ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Gift className="mr-2 h-4 w-4" />
@@ -246,3 +261,5 @@ export default function GiftList({
     </>
   );
 }
+
+    
