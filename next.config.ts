@@ -16,6 +16,13 @@ const nextConfig: NextConfig = {
         port: "",
         pathname: "/**",
       },
+      // Add Firebase Storage domain
+      {
+        protocol: "https",
+        hostname: "firebasestorage.googleapis.com",
+        port: "",
+        pathname: "/**",
+      },
     ],
   },
 };

@@ -1,5 +1,4 @@
-
-"use server";
+'use server';
 
 import { revalidatePath } from "next/cache";
 import {
@@ -22,6 +21,7 @@ import {
   CollectionReference,
 } from "firebase/firestore";
 import { db } from "@/firebase/config"; // Ensure db is imported correctly
+import { uploadImage, deleteImage } from '@/services/storage'; // Import storage service
 
 // Interface definitions (ensure they are correct)
 export interface GiftItem {
@@ -34,14 +34,14 @@ export interface GiftItem {
   selectedBy?: string | null;
   selectionDate?: string | null; // ISO string date format
   createdAt?: string | null; // ISO string date format
-  imageUrl?: string | null; // Optional image URL (data URI or storage URL)
+  imageUrl?: string | null; // Store Firebase Storage URL
 }
 
 export interface SuggestionData {
   itemName: string;
   itemDescription?: string;
   suggesterName: string;
-  imageUrl?: string | null; // Image for suggestions too
+  imageDataUri?: string | null; // Suggestion might include an image data URI
 }
 
 export interface EventSettings {
@@ -54,23 +54,22 @@ export interface EventSettings {
   address: string;
   welcomeMessage: string;
   duration?: number; // Optional duration in minutes
-  headerImageUrl?: string | null; // Optional image URL or data URI
+  headerImageUrl?: string | null; // Store Firebase Storage URL
 }
 
-// Default data (ensure it matches your initial setup needs)
+// Default data (keep imageUrl as null initially)
 const defaultGiftItems: Omit<GiftItem, "id" | 'createdAt' | 'selectionDate'>[] = [
-  { name: "Body Manga Curta (RN)", category: "Roupas", status: "available", description: "Pacote com 3 unidades, cores neutras.", imageUrl: null },
-  { name: "Fraldas Pampers (P)", category: "Higiene", status: "available", description: "Pacote grande.", imageUrl: null },
-  { name: "Mamadeira Anti-cólica", category: "Alimentação", status: "available", imageUrl: null },
-  { name: "Móbile Musical", category: "Brinquedos", status: "available", imageUrl: null },
-  { name: "Lenços Umedecidos", category: "Higiene", status: "available", imageUrl: null },
-  { name: "Termômetro Digital", category: "Higiene", status: "available", imageUrl: null },
-  { name: "Macacão Pijama (M)", category: "Roupas", status: "available", description: "Algodão macio.", imageUrl: null },
-  { name: "Chupeta Calmante", category: "Outros", status: "available", imageUrl: null },
-  { name: "Cadeirinha de Descanso", category: "Outros", status: "available", imageUrl: null },
-  { name: "Pomada para Assaduras", category: "Higiene", status: "available", description: "Marca Bepantol Baby ou similar.", imageUrl: null },
+    { name: "Body Manga Curta (RN)", category: "Roupas", status: "available", description: "Pacote com 3 unidades, cores neutras.", imageUrl: null },
+    { name: "Fraldas Pampers (P)", category: "Higiene", status: "available", description: "Pacote grande.", imageUrl: null },
+    { name: "Mamadeira Anti-cólica", category: "Alimentação", status: "available", imageUrl: null },
+    { name: "Móbile Musical", category: "Brinquedos", status: "available", imageUrl: null },
+    { name: "Lenços Umedecidos", category: "Higiene", status: "available", imageUrl: null },
+    { name: "Termômetro Digital", category: "Higiene", status: "available", imageUrl: null },
+    { name: "Macacão Pijama (M)", category: "Roupas", status: "available", description: "Algodão macio.", imageUrl: null },
+    { name: "Chupeta Calmante", category: "Outros", status: "available", imageUrl: null },
+    { name: "Cadeirinha de Descanso", category: "Outros", status: "available", imageUrl: null },
+    { name: "Pomada para Assaduras", category: "Higiene", status: "available", description: "Marca Bepantol Baby ou similar.", imageUrl: null },
 ];
-
 
 const defaultEventSettings: EventSettings = {
   id: 'main', // Explicitly set ID for the single settings document
@@ -202,7 +201,13 @@ export const getEventSettings = async (): Promise<EventSettings> => {
         console.log(`Firestore GET_SETTINGS: Event settings found at ${settingsPath}.`);
         // Combine ID with fetched data
         const data = docSnap.data() || {};
-        return { id: docSnap.id, ...data } as EventSettings;
+         // Ensure headerImageUrl is null if empty or undefined
+         const settingsData: EventSettings = {
+          id: docSnap.id,
+          ...(data as Omit<EventSettings, 'id'>),
+          headerImageUrl: data.headerImageUrl || null,
+        };
+        return settingsData;
       } else {
         console.warn(`Firestore GET_SETTINGS: Settings document '${settingsPath}' does not exist. Returning default settings.`);
         // Return a copy of default settings to avoid mutation issues
@@ -255,32 +260,72 @@ export const getGifts = async (): Promise<GiftItem[]> => {
 
 /**
  * Updates the main event settings document in Firestore.
- * Merges the provided updates with the existing document.
+ * Handles header image upload/deletion if a data URI or null is provided.
  */
 export async function updateEventSettings(
     updates: Partial<EventSettings>,
   ): Promise<EventSettings | null> {
     const settingsPath = settingsDocRef.path;
-    // Remove 'id' from updates if present, as it's the document key, not a field
-    const { id, ...dataToUpdate } = updates;
-    console.log(`Firestore UPDATE_SETTINGS: Updating event settings at ${settingsPath}...`, {
-      ...dataToUpdate,
-      headerImageUrl: dataToUpdate.headerImageUrl ? dataToUpdate.headerImageUrl.substring(0, 50) + '...' : null // Log truncated URI
-    });
+    // Separate image data URI from other updates
+    const { id, headerImageUrl: newImageUrlInput, ...otherUpdates } = updates;
+    const dataToUpdate: Partial<EventSettings> = { ...otherUpdates };
+
+    console.log(`Firestore UPDATE_SETTINGS: Updating event settings at ${settingsPath}...`);
+
     try {
+      // Get current settings to check for existing image URL
+      const currentSettingsSnap = await getDoc(settingsDocRef);
+      const currentImageUrl = currentSettingsSnap.exists() ? currentSettingsSnap.data()?.headerImageUrl : null;
+
+      let finalImageUrl: string | null = currentImageUrl; // Start with the current URL
+
+      // Check if a new image (data URI) or removal (null) is requested
+      if (typeof newImageUrlInput === 'string' && newImageUrlInput.startsWith('data:image/')) {
+        // New image provided (data URI) - Upload it
+        console.log("Firestore UPDATE_SETTINGS: New header image data URI found. Uploading...");
+        // Delete old image if it exists
+        if (currentImageUrl) {
+           console.log("Firestore UPDATE_SETTINGS: Deleting previous header image:", currentImageUrl);
+           await deleteImage(currentImageUrl).catch(err => console.error("Firestore UPDATE_SETTINGS: Failed to delete previous header image, continuing...", err)); // Non-critical error
+        }
+        // Upload new image
+        finalImageUrl = await uploadImage(newImageUrlInput, 'header', 'event_header');
+        console.log("Firestore UPDATE_SETTINGS: New header image uploaded. URL:", finalImageUrl);
+      } else if (newImageUrlInput === null && currentImageUrl) {
+        // Explicit removal requested (null) and an image exists
+        console.log("Firestore UPDATE_SETTINGS: Header image removal requested. Deleting:", currentImageUrl);
+        await deleteImage(currentImageUrl).catch(err => console.error("Firestore UPDATE_SETTINGS: Failed to delete header image during removal, continuing...", err)); // Non-critical error
+        finalImageUrl = null;
+      } else if (typeof newImageUrlInput === 'string' && !newImageUrlInput.startsWith('data:image/')) {
+         // If it's a string but not a data URI, assume it's an existing URL (likely from initial load, no change needed unless explicitly null)
+         console.log("Firestore UPDATE_SETTINGS: Existing header image URL provided, no change needed unless explicitly set to null elsewhere.");
+         finalImageUrl = newImageUrlInput; // Keep the existing URL
+      }
+      // else: No new image URI, no removal requested, or already null - keep finalImageUrl as is (current or initially null)
+
+      // Add the final determined image URL to the update object
+      dataToUpdate.headerImageUrl = finalImageUrl;
+
+      console.log("Firestore UPDATE_SETTINGS: Final data being saved:", {
+        ...dataToUpdate,
+        headerImageUrl: dataToUpdate.headerImageUrl // Log the final URL
+      });
+
       // Use setDoc with merge: true to update or create if it doesn't exist
       await setDoc(settingsDocRef, dataToUpdate, { merge: true });
-      console.log("Firestore UPDATE_SETTINGS: Event settings updated successfully.");
+      console.log("Firestore UPDATE_SETTINGS: Event settings updated successfully in Firestore.");
+
       forceRevalidation(); // Revalidate paths after update
+
       // Fetch and return the updated settings
       const updatedSettings = await getEventSettings();
       return updatedSettings;
+
     } catch (error) {
       console.error(`Firestore UPDATE_SETTINGS: Error updating event settings at ${settingsPath}:`, error);
       // Check if error is permissions related
       if ((error as any)?.code === 'permission-denied') {
         console.error("Firestore: PERMISSION DENIED updating event settings. Check Firestore rules.");
-        // Consider throwing a specific error or returning a specific status
       }
       return null; // Indicate failure
     }
@@ -325,46 +370,64 @@ export async function selectGift(
 
 /**
  * Adds a new gift item suggested by a user.
+ * Handles optional image upload.
  * The item is automatically marked as 'selected' by the suggester.
  */
 export async function addSuggestion(
     suggestionData: SuggestionData,
   ): Promise<GiftItem | null> {
     console.log(
-      `Firestore ADD_SUGGESTION: Adding suggestion from ${suggestionData.suggesterName}...`,
-      { ...suggestionData, imageUrl: suggestionData.imageUrl ? suggestionData.imageUrl.substring(0, 50) + '...' : null } // Log truncated URI
+      `Firestore ADD_SUGGESTION: Adding suggestion from ${suggestionData.suggesterName}...`
     );
 
-    // Prepare data for the new gift item
-    const newItemData = {
-      name: suggestionData.itemName.trim(), // Trim whitespace
-      description: suggestionData.itemDescription?.trim() || null, // Trim or set null
-      category: "Outros", // Default category for suggestions
-      status: "selected" as const, // Automatically selected
-      selectedBy: suggestionData.suggesterName.trim(),
-      selectionDate: serverTimestamp(), // Use server timestamp
-      createdAt: serverTimestamp(), // Use server timestamp for creation
-      imageUrl: suggestionData.imageUrl || null, // Add image URL
-    };
-
-    // Validate essential fields before adding
-    if (!newItemData.name || !newItemData.selectedBy) {
-        console.error("Firestore ADD_SUGGESTION: Invalid suggestion data - name and suggesterName are required.");
-        return null;
-    }
+    let uploadedImageUrl: string | null = null;
 
     try {
-      // Add the new document to the 'gifts' collection
+      // 1. Upload image if provided
+      if (suggestionData.imageDataUri) {
+        console.log("Firestore ADD_SUGGESTION: Image data URI found. Uploading image...");
+        uploadedImageUrl = await uploadImage(suggestionData.imageDataUri, 'gifts', 'suggestion');
+        console.log("Firestore ADD_SUGGESTION: Image uploaded successfully. URL:", uploadedImageUrl);
+      }
+
+      // 2. Prepare data for the new gift item in Firestore
+      const newItemData = {
+        name: suggestionData.itemName.trim(),
+        description: suggestionData.itemDescription?.trim() || null,
+        category: "Outros", // Default category for suggestions
+        status: "selected" as const,
+        selectedBy: suggestionData.suggesterName.trim(),
+        selectionDate: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        imageUrl: uploadedImageUrl, // Store the uploaded image URL or null
+      };
+
+      // Validate essential fields before adding
+      if (!newItemData.name || !newItemData.selectedBy) {
+          console.error("Firestore ADD_SUGGESTION: Invalid suggestion data - name and suggesterName are required.");
+          // Clean up uploaded image if Firestore add fails due to validation
+          if (uploadedImageUrl) await deleteImage(uploadedImageUrl).catch(e => console.error("Cleanup failed", e));
+          return null;
+      }
+
+      // 3. Add the new document to the 'gifts' collection
       const docRef = await addFirestoreDoc(giftsCollectionRef, newItemData);
       console.log(
         `Firestore ADD_SUGGESTION: Suggestion added as new gift with ID: ${docRef.id}`
       );
       forceRevalidation(); // Revalidate paths
-      // Fetch and return the newly created item data
+
+      // 4. Fetch and return the newly created item data
       const newDocSnap = await getDoc(docRef);
       return newDocSnap.exists() ? giftFromDoc(newDocSnap) : null;
+
     } catch (error) {
       console.error("Firestore ADD_SUGGESTION: Error adding suggestion:", error);
+      // Clean up uploaded image if Firestore add fails
+      if (uploadedImageUrl) {
+         console.error("Firestore ADD_SUGGESTION: Cleaning up potentially uploaded image due to error.");
+         await deleteImage(uploadedImageUrl).catch(e => console.error("Cleanup failed for image:", uploadedImageUrl, e));
+      }
        // Check if error is permissions related
        if ((error as any)?.code === 'permission-denied') {
         console.error("Firestore: PERMISSION DENIED adding suggestion. Check Firestore rules.");
@@ -374,141 +437,211 @@ export async function addSuggestion(
   }
 
 
-// Function to add a new gift item (typically by admin)
+/**
+ * Adds a new gift item (typically by admin). Handles optional image upload.
+ */
 export async function addGift(
-    giftData: Omit<GiftItem, "id" | "createdAt" | "selectionDate">
+    giftData: Omit<GiftItem, "id" | "createdAt" | "selectionDate"> & { imageDataUri?: string | null }
 ): Promise<GiftItem | null> {
-    console.log("Firestore ADD_GIFT: Adding new gift item...", {
-      ...giftData,
-      imageUrl: giftData.imageUrl ? giftData.imageUrl.substring(0, 50) + '...' : null // Log truncated URI
-    });
-
-    // Prepare data, ensure `selectedBy` and `selectionDate` are null if status is not 'selected'
-    const dataToAdd = {
-        ...giftData,
-        description: giftData.description?.trim() || null,
-        selectedBy: giftData.status === 'selected' ? (giftData.selectedBy?.trim() || "Admin") : null,
-        selectionDate: giftData.status === 'selected' ? serverTimestamp() : null,
-        createdAt: serverTimestamp(),
-        imageUrl: giftData.imageUrl || null, // Include image URL
-    };
-
-    // Validate required fields
-    if (!dataToAdd.name || !dataToAdd.category || !dataToAdd.status) {
-        console.error("Firestore ADD_GIFT: Missing required fields (name, category, status).");
-        return null;
-    }
-    // Ensure selectedBy is present if status is 'selected'
-    if (dataToAdd.status === 'selected' && !dataToAdd.selectedBy) {
-        console.error("Firestore ADD_GIFT: 'selectedBy' is required when status is 'selected'.");
-        return null; // Or default to 'Admin'? Adjust based on requirements.
-    }
-
+    console.log("Firestore ADD_GIFT: Adding new gift item...");
+    const { imageDataUri, ...itemDetails } = giftData;
+    let uploadedImageUrl: string | null = null;
 
     try {
-        const docRef = await addFirestoreDoc(giftsCollectionRef, dataToAdd);
-        console.log(`Firestore ADD_GIFT: Gift added successfully with ID: ${docRef.id}`);
-        forceRevalidation(); // Revalidate relevant paths
-        const newDocSnap = await getDoc(docRef);
-        return newDocSnap.exists() ? giftFromDoc(newDocSnap) : null;
+      // 1. Upload image if data URI provided
+      if (imageDataUri) {
+        console.log("Firestore ADD_GIFT: Image data URI found. Uploading image...");
+        uploadedImageUrl = await uploadImage(imageDataUri, 'gifts', 'admin_add');
+        console.log("Firestore ADD_GIFT: Image uploaded. URL:", uploadedImageUrl);
+      }
+
+      // 2. Prepare data for Firestore
+      const dataToAdd = {
+          ...itemDetails,
+          description: itemDetails.description?.trim() || null,
+          selectedBy: itemDetails.status === 'selected' ? (itemDetails.selectedBy?.trim() || "Admin") : null,
+          selectionDate: itemDetails.status === 'selected' ? serverTimestamp() : null,
+          createdAt: serverTimestamp(),
+          imageUrl: uploadedImageUrl, // Use uploaded URL or null
+      };
+
+      // Validate required fields
+      if (!dataToAdd.name || !dataToAdd.category || !dataToAdd.status) {
+          console.error("Firestore ADD_GIFT: Missing required fields (name, category, status).");
+           if (uploadedImageUrl) await deleteImage(uploadedImageUrl).catch(e => console.error("Cleanup failed", e));
+          return null;
+      }
+      if (dataToAdd.status === 'selected' && !dataToAdd.selectedBy) {
+          console.error("Firestore ADD_GIFT: 'selectedBy' is required when status is 'selected'.");
+          if (uploadedImageUrl) await deleteImage(uploadedImageUrl).catch(e => console.error("Cleanup failed", e));
+          return null;
+      }
+
+      // 3. Add document to Firestore
+      const docRef = await addFirestoreDoc(giftsCollectionRef, dataToAdd);
+      console.log(`Firestore ADD_GIFT: Gift added successfully with ID: ${docRef.id}`);
+      forceRevalidation(); // Revalidate relevant paths
+
+      // 4. Fetch and return the new item
+      const newDocSnap = await getDoc(docRef);
+      return newDocSnap.exists() ? giftFromDoc(newDocSnap) : null;
+
     } catch (error) {
-        console.error("Firestore ADD_GIFT: Error adding gift:", error);
-         if ((error as any)?.code === 'permission-denied') {
+      console.error("Firestore ADD_GIFT: Error adding gift:", error);
+        if (uploadedImageUrl) {
+             console.error("Firestore ADD_GIFT: Cleaning up potentially uploaded image due to error.");
+            await deleteImage(uploadedImageUrl).catch(e => console.error("Cleanup failed for image:", uploadedImageUrl, e));
+        }
+        if ((error as any)?.code === 'permission-denied') {
             console.error("Firestore: PERMISSION DENIED adding gift. Check Firestore rules.");
-         } else if (error instanceof Error && error.message.includes("Unsupported field value")) {
+        } else if (error instanceof Error && error.message.includes("Unsupported field value")) {
             console.error("Firestore ADD_GIFT: Invalid data provided.", error);
-         }
-        return null;
+        }
+        return null; // Indicate failure
     }
 }
 
 
 /**
  * Updates an existing gift item in Firestore.
- * Allows updating various fields like name, description, category, status, selectedBy.
+ * Handles optional image update/removal.
  */
 export async function updateGift(
     itemId: string,
-    updates: Partial<Omit<GiftItem, "id" | "createdAt">>,
-  ): Promise<GiftItem | null> {
-    console.log(`Firestore UPDATE_GIFT: Updating gift ${itemId}...`, {
-      ...updates,
-      imageUrl: updates.imageUrl ? updates.imageUrl.substring(0, 50) + '...' : null // Log truncated URI
-    });
+    updates: Partial<Omit<GiftItem, "id" | "createdAt">> & { imageDataUri?: string | null | undefined }
+): Promise<GiftItem | null> {
+    console.log(`Firestore UPDATE_GIFT: Updating gift ${itemId}...`);
+    const { imageDataUri, imageUrl: newImageUrlInput, ...otherUpdates } = updates;
     const itemDocRef = doc(db, "gifts", itemId);
-
-    // Prepare update data, handling potential status changes
-    const dataToUpdate: Record<string, any> = { ...updates };
-
-    // If status is changing TO 'selected', set selectionDate
-    if (updates.status === 'selected') {
-        dataToUpdate.selectionDate = updates.selectionDate instanceof Date ? Timestamp.fromDate(new Date(updates.selectionDate)) : serverTimestamp(); // Allow passing date or use server time
-        // Ensure selectedBy is set if status becomes 'selected'
-        dataToUpdate.selectedBy = updates.selectedBy?.trim() || "Admin"; // Default if empty
-    }
-    // If status is changing FROM 'selected' (to available or not_needed), clear selection fields
-    else if (updates.status === 'available' || updates.status === 'not_needed') {
-        dataToUpdate.selectedBy = null;
-        dataToUpdate.selectionDate = null;
-    }
-
-    // Trim string fields if they exist in updates
-    if (typeof dataToUpdate.name === 'string') dataToUpdate.name = dataToUpdate.name.trim();
-    if (typeof dataToUpdate.description === 'string') dataToUpdate.description = dataToUpdate.description.trim() || null;
-    if (typeof dataToUpdate.selectedBy === 'string') dataToUpdate.selectedBy = dataToUpdate.selectedBy.trim();
-    // Handle image URL (allow setting to null)
-    if ('imageUrl' in dataToUpdate) {
-        dataToUpdate.imageUrl = dataToUpdate.imageUrl || null;
-    }
-
-
-    // Remove undefined fields to avoid Firestore errors
-    Object.keys(dataToUpdate).forEach(key => dataToUpdate[key] === undefined && delete dataToUpdate[key]);
-
-     // Validate status transition logic if needed (e.g., prevent direct available -> not_needed)
+    const dataToUpdate: Record<string, any> = { ...otherUpdates };
 
     try {
-      // Update the document
-      await updateDoc(itemDocRef, dataToUpdate);
-      console.log(`Firestore UPDATE_GIFT: Gift ${itemId} updated successfully.`);
-      forceRevalidation(); // Revalidate paths
-      // Fetch and return the updated item data
-      const updatedSnap = await getDoc(itemDocRef);
-      return updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
+        // Get current item data to check for existing image URL
+        const currentItemSnap = await getDoc(itemDocRef);
+        if (!currentItemSnap.exists()) {
+            console.error(`Firestore UPDATE_GIFT: Item with ID ${itemId} not found.`);
+            throw new Error(`Item with ID ${itemId} not found.`);
+        }
+        const currentImageUrl = currentItemSnap.data()?.imageUrl || null;
+
+        let finalImageUrl: string | null = currentImageUrl; // Start with current URL
+
+        // --- Image Handling Logic ---
+        if (typeof imageDataUri === 'string' && imageDataUri.startsWith('data:image/')) {
+            // New image data provided: Upload new, delete old
+            console.log("Firestore UPDATE_GIFT: New image data URI found. Uploading...");
+            if (currentImageUrl) {
+                 console.log("Firestore UPDATE_GIFT: Deleting previous image:", currentImageUrl);
+                await deleteImage(currentImageUrl).catch(err => console.warn("Failed to delete previous image, continuing...", err));
+            }
+            finalImageUrl = await uploadImage(imageDataUri, 'gifts', itemId); // Use itemId for prefix
+            console.log("Firestore UPDATE_GIFT: New image uploaded. URL:", finalImageUrl);
+        } else if (newImageUrlInput === null && currentImageUrl) {
+            // Explicit removal requested (imageUrl: null) and an image exists
+            console.log("Firestore UPDATE_GIFT: Image removal requested. Deleting:", currentImageUrl);
+            await deleteImage(currentImageUrl).catch(err => console.warn("Failed to delete image during removal, continuing...", err));
+            finalImageUrl = null;
+        }
+         // If imageDataUri is undefined/null and newImageUrlInput is also undefined/null,
+         // finalImageUrl remains the currentImageUrl (no change requested).
+         // If newImageUrlInput is a string (and not data URI), it's treated as no-op here,
+         // assuming it came from the form's initial state without modification.
+
+        // Add the final determined image URL to the update object
+        dataToUpdate.imageUrl = finalImageUrl;
+        // --- End Image Handling ---
+
+        // Handle status changes and related fields
+        if (updates.status === 'selected') {
+            dataToUpdate.selectionDate = updates.selectionDate instanceof Date ? Timestamp.fromDate(new Date(updates.selectionDate)) : serverTimestamp();
+            dataToUpdate.selectedBy = updates.selectedBy?.trim() || "Admin";
+        } else if (updates.status === 'available' || updates.status === 'not_needed') {
+            dataToUpdate.selectedBy = null;
+            dataToUpdate.selectionDate = null;
+        }
+
+        // Trim other string fields if they exist in updates
+        if (typeof dataToUpdate.name === 'string') dataToUpdate.name = dataToUpdate.name.trim();
+        if (typeof dataToUpdate.description === 'string') dataToUpdate.description = dataToUpdate.description.trim() || null;
+
+        // Remove undefined fields
+        Object.keys(dataToUpdate).forEach(key => dataToUpdate[key] === undefined && delete dataToUpdate[key]);
+
+         console.log("Firestore UPDATE_GIFT: Final data being saved:", {
+           ...dataToUpdate,
+           imageUrl: dataToUpdate.imageUrl // Log final URL
+         });
+
+        // Update the document in Firestore
+        await updateDoc(itemDocRef, dataToUpdate);
+        console.log(`Firestore UPDATE_GIFT: Gift ${itemId} updated successfully.`);
+        forceRevalidation(); // Revalidate paths
+
+        // Fetch and return the updated item data
+        const updatedSnap = await getDoc(itemDocRef);
+        return updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
+
     } catch (error) {
       console.error(`Firestore UPDATE_GIFT: Error updating gift ${itemId}:`, error);
-       if ((error as any)?.code === 'permission-denied') {
-          console.error("Firestore: PERMISSION DENIED updating gift. Check Firestore rules.");
-       } else if ((error as any)?.code === 'not-found') {
-          console.error(`Firestore UPDATE_GIFT: Gift item with ID ${itemId} not found.`);
-       } else if (error instanceof Error && error.message.includes("Unsupported field value")) {
+        // Clean up newly uploaded image if update fails
+        if (typeof imageDataUri === 'string' && dataToUpdate.imageUrl && dataToUpdate.imageUrl !== currentImageUrl) {
+             console.error("Firestore UPDATE_GIFT: Cleaning up uploaded image due to update error.");
+             await deleteImage(dataToUpdate.imageUrl).catch(e => console.error("Cleanup failed for image:", dataToUpdate.imageUrl, e));
+        }
+        if ((error as any)?.code === 'permission-denied') {
+            console.error("Firestore: PERMISSION DENIED updating gift. Check Firestore rules.");
+        } else if ((error as any)?.code === 'not-found') {
+            // This case is handled above, but kept here for completeness
+            console.error(`Firestore UPDATE_GIFT: Gift item with ID ${itemId} not found.`);
+        } else if (error instanceof Error && error.message.includes("Unsupported field value")) {
             console.error("Firestore UPDATE_GIFT: Invalid data provided for update.", error);
-       }
-      throw error; // Re-throw error for the calling component to handle
+        }
+        throw error; // Re-throw error for the calling component to handle
     }
   }
 
 
 /**
- * Deletes a gift item from Firestore.
+ * Deletes a gift item from Firestore and its associated image from Storage.
  */
 export async function deleteGift(itemId: string): Promise<boolean> {
     console.log(`Firestore DELETE_GIFT: Deleting gift ${itemId}...`);
     const itemDocRef = doc(db, "gifts", itemId);
     try {
-      // Delete the document
-      await deleteDoc(itemDocRef);
-      console.log(`Firestore DELETE_GIFT: Gift ${itemId} deleted successfully.`);
-      forceRevalidation(); // Revalidate paths
-      return true; // Indicate success
+        // Get the item data first to find the image URL
+        const itemSnap = await getDoc(itemDocRef);
+        if (itemSnap.exists()) {
+            const itemData = itemSnap.data();
+            const imageUrlToDelete = itemData?.imageUrl;
+
+            // Delete the Firestore document
+            await deleteDoc(itemDocRef);
+            console.log(`Firestore DELETE_GIFT: Gift document ${itemId} deleted successfully.`);
+
+            // If an image URL exists, delete the image from Storage
+            if (imageUrlToDelete) {
+                console.log(`Firestore DELETE_GIFT: Deleting associated image: ${imageUrlToDelete}`);
+                await deleteImage(imageUrlToDelete).catch(err => {
+                    // Log warning but don't fail the whole operation if image deletion fails
+                    console.warn(`Firestore DELETE_GIFT: Failed to delete image ${imageUrlToDelete}, but document was deleted. Error:`, err);
+                });
+            }
+             forceRevalidation(); // Revalidate paths after successful deletion
+            return true; // Indicate success
+
+        } else {
+             console.warn(`Firestore DELETE_GIFT: Gift document ${itemId} not found. Cannot delete.`);
+             return false; // Indicate document not found
+        }
+
     } catch (error) {
-      console.error(`Firestore DELETE_GIFT: Error deleting gift ${itemId}:`, error);
-       if ((error as any)?.code === 'permission-denied') {
-          console.error("Firestore: PERMISSION DENIED deleting gift. Check Firestore rules.");
-       }
-      return false; // Indicate failure
+        console.error(`Firestore DELETE_GIFT: Error deleting gift ${itemId}:`, error);
+        if ((error as any)?.code === 'permission-denied') {
+            console.error("Firestore: PERMISSION DENIED deleting gift. Check Firestore rules.");
+        }
+        return false; // Indicate failure
     }
-  }
+}
 
 
 /**
@@ -679,4 +812,4 @@ export async function exportGiftsToCSV(): Promise<string> {
   }
 
 // Optional: Call initialization if needed, but be cautious about running this on every server start
-initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));
+// initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));

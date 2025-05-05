@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react"; // Added useEffect and useMemo
@@ -24,8 +23,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog"; // Removed DialogTrigger as it's handled by button onClick
 import {
   Trash2,
   Edit,
@@ -91,8 +89,9 @@ const giftFormSchema = z.object({
     .max(50, "Nome do selecionador muito longo")
     .optional()
     .or(z.literal("")), // Allow selectedBy editing, map to null later
-  imageUrl: z.string().optional().nullable(), // Store image URL (data URI or path)
-  // Field for file input (not directly validated by Zod schema, handled in component)
+  // Holds existing URL, new data URI, or null for removal
+  imageUrl: z.string().optional().nullable(),
+  // Captures file input
   imageFile: z.any().optional().nullable(),
 });
 
@@ -169,53 +168,44 @@ export default function AdminItemManagementTable({
     if (file) {
       // Client-side validation
       if (file.size > MAX_FILE_SIZE) {
-        toast({
-          title: "Erro de Arquivo",
-          description: `Tamanho máximo do arquivo é ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
-          variant: "destructive",
-        });
+        toast({ title: "Erro de Arquivo", description: `Máx ${MAX_FILE_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
         setValue("imageFile", null); // Clear invalid file
-        const prevUrl = editingItem?.imageUrl || null;
-        setValue("imageUrl", prevUrl);
-        setImagePreview(prevUrl);
+        const initialUrl = editingItem?.imageUrl || null;
+        setValue("imageUrl", initialUrl);
+        setImagePreview(initialUrl);
         return;
       }
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        toast({
-          title: "Erro de Arquivo",
-          description: "Tipo de arquivo inválido. Use JPG, PNG, GIF, WebP.",
-          variant: "destructive",
-        });
+        toast({ title: "Erro de Arquivo", description: "Tipo inválido (JPG, PNG, GIF, WebP).", variant: "destructive" });
         setValue("imageFile", null);
-        const prevUrl = editingItem?.imageUrl || null;
-        setValue("imageUrl", prevUrl);
-        setImagePreview(prevUrl);
+        const initialUrl = editingItem?.imageUrl || null;
+        setValue("imageUrl", initialUrl);
+        setImagePreview(initialUrl);
         return;
       }
 
-      // Generate data URI for preview and store in RHF
+      // Generate data URI for preview and store in RHF's imageUrl field
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
         console.log("AdminItemManagementTable Dialog: Generated data URI preview.");
-        setValue("imageUrl", result, { shouldValidate: true });
+        setValue("imageUrl", result, { shouldValidate: true }); // Store data URI
         setImagePreview(result);
       };
       reader.onerror = (err) => console.error("FileReader error:", err);
       reader.readAsDataURL(file);
-    } else if (
-      fileList === null ||
-      (typeof fileList === "object" && fileList?.length === 0)
-    ) {
-        // File explicitly cleared
-        const currentUrl = editingItem?.imageUrl;
-        console.log("AdminItemManagementTable Dialog: File cleared. Setting preview to current item URL (if any):", currentUrl);
-        setImagePreview(currentUrl || null);
-        setValue("imageUrl", currentUrl || null); // Reset RHF state
+    } else if (fileList === null || (typeof fileList === "object" && fileList?.length === 0)) {
+        // File cleared, revert preview/URL to initial state if a file *was* staged
+         const initialUrl = editingItem?.imageUrl || null;
+         const currentRHFUrl = getValues("imageUrl");
+         if (currentRHFUrl && currentRHFUrl.startsWith("data:")) {
+             console.log("AdminItemManagementTable Dialog: File selection cleared, reverting preview/URL to initial state:", initialUrl);
+             setValue("imageUrl", initialUrl);
+             setImagePreview(initialUrl);
+         }
     }
-    // Initial load: preview is set in handleOpenEditDialog or cleared in handleOpenAddDialog
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchedImageFile, isClient, setValue, toast, editingItem]);
+  }, [watchedImageFile, isClient, setValue, toast, editingItem, getValues]);
 
 
   const handleOpenAddDialog = () => {
@@ -224,13 +214,13 @@ export default function AdminItemManagementTable({
       name: "",
       description: "",
       category: "",
-      status: "available", // Ensure default status is 'available'
+      status: "available",
       selectedBy: "",
       imageUrl: null,
       imageFile: null,
     });
     setEditingItem(null);
-    setImagePreview(null); // Clear preview for new item
+    setImagePreview(null);
     setIsAddEditDialogOpen(true);
   };
 
@@ -241,7 +231,7 @@ export default function AdminItemManagementTable({
       name: item.name,
       description: item.description || "",
       category: item.category,
-      status: item.status, // Use the item's current status
+      status: item.status,
       selectedBy: item.selectedBy || "",
       imageUrl: item.imageUrl || null, // Set initial image URL
       imageFile: null, // Reset file input
@@ -254,25 +244,19 @@ export default function AdminItemManagementTable({
     console.log("AdminItemManagementTable: Closing dialog.");
     setIsAddEditDialogOpen(false);
     setEditingItem(null);
-    setImagePreview(null); // Clear preview on close
-    reset({ // Reset form to defaults when closing
-        name: "",
-        description: "",
-        category: "",
-        status: "available",
-        selectedBy: "",
-        imageUrl: null,
-        imageFile: null,
+    setImagePreview(null);
+    reset({
+        name: "", description: "", category: "", status: "available",
+        selectedBy: "", imageUrl: null, imageFile: null,
       });
   };
 
-  // Function to remove the image (clears preview and RHF state)
+  // Function to remove the image (sets imageUrl to null for submission)
   const removeImage = useCallback(() => {
-    console.log("AdminItemManagementTable Dialog: Removing image.");
+    console.log("AdminItemManagementTable Dialog: Requesting image removal.");
     setValue("imageFile", null); // Clear file input
-    setValue("imageUrl", null); // Clear URL state
+    setValue("imageUrl", null); // Set URL to null for removal signal
     setImagePreview(null); // Clear preview state
-    // Manually clear the file input element
     const fileInput = document.getElementById("imageFile-dialog") as HTMLInputElement | null;
     if (fileInput) fileInput.value = "";
   }, [setValue]);
@@ -281,97 +265,77 @@ export default function AdminItemManagementTable({
   const handleSuccess = (message: string) => {
      console.log(`AdminItemManagementTable: Operation successful - ${message}. Triggering onDataChange.`);
      toast({ title: "Sucesso!", description: message });
-     // Call parent refresh AFTER toast/logging
      onDataChange?.();
-     handleDialogClose(); // Close dialog on success
+     handleDialogClose();
   };
 
-  const handleError = (
-    operation: string,
-    itemName: string,
-    errorDetails?: any,
-  ) => {
-    // Log the specific error for debugging
+  const handleError = (operation: string, itemName: string, errorDetails?: any) => {
     console.error(`AdminItemManagementTable: Error during ${operation} for "${itemName}":`, errorDetails);
-    toast({
-      title: "Erro!",
-      description: `Falha ao ${operation.toLowerCase()} o item "${itemName}". Verifique o console para mais detalhes.`,
-      variant: "destructive",
-    });
-     // Optionally keep dialog open on error?
-     // handleDialogClose();
+    toast({ title: "Erro!", description: `Falha ao ${operation.toLowerCase()} "${itemName}". Verifique console.`, variant: "destructive" });
   };
 
   // Form submission for Add/Edit
   const onSubmit = async (data: GiftFormData) => {
     const operation = editingItem ? "atualizar" : "adicionar";
-    const itemName = data.name || (editingItem ? editingItem.name : 'Novo Item'); // Use item name for logging
-    console.log(`AdminItemManagementTable: Submitting form to ${operation} item: ${itemName}`, {
-        ...data,
-        imageUrl: data.imageUrl ? data.imageUrl.substring(0, 50) + '...' : null, // Log truncated URI
-        imageFile: data.imageFile ? '[File object]' : null // Avoid logging large file object
-    });
-
+    const itemName = data.name || (editingItem ? editingItem.name : 'Novo Item');
+    console.log(`AdminItemManagementTable: Submitting form to ${operation} item: ${itemName}`);
 
     // Validate that 'selectedBy' is provided if status is 'selected'
-    if (
-      data.status === "selected" &&
-      (!data.selectedBy || data.selectedBy.trim() === "")
-    ) {
-        console.warn("AdminItemManagementTable: Validation failed - 'selectedBy' is required for 'selected' status.");
-        toast({
-        title: "Erro de Validação",
-        description: "Por favor, informe quem selecionou o item.",
-        variant: "destructive",
-      });
-      return; // Prevent submission
+    if (data.status === "selected" && (!data.selectedBy || data.selectedBy.trim() === "")) {
+      toast({ title: "Erro de Validação", description: "Informe quem selecionou.", variant: "destructive" });
+      return;
     }
 
-    // Prepare data for the store functions, ensuring nulls for empty strings
-    // Note: The structure passed to addGift/updateGift should match their expected types
-    const storeData: Partial<Omit<GiftItem, "id" | "createdAt" | "selectionDate">> & { selectionDate?: any } = {
+    // Prepare data for the store functions
+    // Pass data.imageUrl directly - it contains existing URL, new data URI, or null
+    const giftPayload = {
         name: data.name.trim(),
         description: data.description?.trim() || null,
-        category: data.category, // Already required by schema
-        status: data.status, // Status is now required by schema
-        selectedBy: data.status === "selected" ? (data.selectedBy?.trim() || "Admin") : null, // Set null if not selected, default if selected but empty
-        // selectionDate is handled by the store functions (serverTimestamp) or passed if status is selected
-        imageUrl: data.imageUrl || null, // Pass the final image URL (data URI or null)
+        category: data.category,
+        status: data.status,
+        selectedBy: data.status === "selected" ? (data.selectedBy?.trim() || "Admin") : null,
+        // Pass the image data (data URI or null) or the existing URL
+        // For updates, pass the imageUrl field from the form.
+        // For adds, pass the imageDataUri field (which is stored in imageUrl by the useEffect).
+        [editingItem ? 'imageUrl' : 'imageDataUri']: data.imageUrl, // Use correct field name based on operation
     };
-     // Pass selectionDate only if status is 'selected' and potentially null (handled by store)
-     if (storeData.status === 'selected') {
-        // Let the store handle the timestamp creation if not explicitly provided
-        // storeData.selectionDate = serverTimestamp(); // Or pass a date if needed
+
+
+    // Remove the imageFile property before sending to backend
+     const { imageFile, ...storeData } = data;
+
+     // Create the payload with potentially the imageDataUri for adds, or imageUrl for updates
+     const finalPayload = {
+        ...storeData,
+        name: storeData.name.trim(),
+        description: storeData.description?.trim() || null,
+        selectedBy: storeData.status === 'selected' ? (storeData.selectedBy?.trim() || "Admin") : null,
+        // imageUrl now holds either existing URL, data URI, or null
+        ...(editingItem ? { imageUrl: storeData.imageUrl } : { imageDataUri: storeData.imageUrl }),
+     };
+
+     // Remove the other unnecessary image field depending on the operation
+     if (editingItem) {
+       delete (finalPayload as any).imageDataUri;
      } else {
-         delete storeData.selectionDate; // Don't pass selectionDate if status is not 'selected'
+       delete (finalPayload as any).imageUrl; // Remove imageUrl for adds, pass imageDataUri
      }
 
 
     try {
       if (editingItem) {
-        console.log(`AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id} with data:`, { ...storeData, imageUrl: storeData.imageUrl ? storeData.imageUrl.substring(0, 50) + '...' : null });
-        // Pass only the necessary fields for update
-        await updateGift(editingItem.id, storeData);
-        handleSuccess(`Item "${storeData.name}" atualizado.`);
+        console.log(`AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id}`);
+        // Pass the full payload for update, including the potentially new imageUrl (data URI or null)
+        await updateGift(editingItem.id, finalPayload as Partial<GiftItem> & { imageDataUri?: string | null });
+        handleSuccess(`Item "${finalPayload.name}" atualizado.`);
       } else {
-        console.log("AdminItemManagementTable: Calling addGift with data:", { ...storeData, imageUrl: storeData.imageUrl ? storeData.imageUrl.substring(0, 50) + '...' : null });
-        // Cast to the expected type for addGift, removing potentially undefined fields
-        const giftToAdd = {
-           name: storeData.name!, // name is required
-           category: storeData.category!, // category is required
-           status: storeData.status!, // status is required
-           description: storeData.description, // Optional
-           selectedBy: storeData.selectedBy, // Optional, handled based on status
-           imageUrl: storeData.imageUrl, // Add image URL
-           // selectionDate is handled by addGift based on status
-         } as Omit<GiftItem, "id" | "createdAt" | "selectionDate">; // Ensure type matches addGift expectation
-
-         console.log("AdminItemManagementTable: Final data for addGift:", { ...giftToAdd, imageUrl: giftToAdd.imageUrl ? giftToAdd.imageUrl.substring(0, 50) + '...' : null });
-        await addGift(giftToAdd); // Pass the correctly typed object
-        handleSuccess(`Item "${storeData.name}" adicionado.`);
+        console.log("AdminItemManagementTable: Calling addGift");
+        // Pass the payload with imageDataUri for adds
+        await addGift(finalPayload as Omit<GiftItem, "id" | "createdAt" | "selectionDate"> & { imageDataUri?: string | null });
+        handleSuccess(`Item "${finalPayload.name}" adicionado.`);
       }
     } catch (error) {
-      handleError(operation, itemName, error); // Pass the error object
+      handleError(operation, itemName, error);
     }
   };
 
@@ -379,20 +343,15 @@ export default function AdminItemManagementTable({
   const handleDelete = async (item: GiftItem) => {
     if (actionLoading) return;
     console.log(`AdminItemManagementTable: Attempting to delete item ID: ${item.id}`);
-    if (
-      confirm(
-        `Tem certeza que deseja excluir o item "${item.name}"? Esta ação não pode ser desfeita.`
-      )
-    ) {
+    if (confirm(`Excluir "${item.name}"? Ação irreversível.`)) {
       setActionLoading(`delete-${item.id}`);
       try {
-        // deleteGift now handles revalidation
+        // deleteGift now handles image deletion and revalidation
         const success = await deleteGift(item.id);
         if (success) {
             handleSuccess(`Item "${item.name}" excluído.`);
         } else {
-            // Error handled implicitly if deleteGift throws, or explicitly if it returns false
-             handleError("excluir", item.name, "Delete operation returned false.");
+            handleError("excluir", item.name, "Delete operation failed.");
         }
       } catch (error) {
         handleError("excluir", item.name, error);
@@ -407,24 +366,13 @@ export default function AdminItemManagementTable({
   // Row Action: Revert to Available
   const handleRevert = async (item: GiftItem) => {
     if (actionLoading) return;
-    if (item.status !== "selected" && item.status !== "not_needed") {
-        console.warn(`AdminItemManagementTable: Cannot revert item ID: ${item.id}, status is already '${item.status}'.`);
-        return;
-    }
-    const actionText =
-      item.status === "selected"
-        ? "reverter a seleção"
-        : 'remover a marcação "Não Precisa"';
+    if (item.status !== "selected" && item.status !== "not_needed") return;
+    const actionText = item.status === "selected" ? "reverter seleção" : 'remover "Não Precisa"';
     const guestNameInfo = item.selectedBy ? ` por ${item.selectedBy}` : "";
      console.log(`AdminItemManagementTable: Attempting to revert item ID: ${item.id}`);
-    if (
-      confirm(
-        `Tem certeza que deseja ${actionText} do item "${item.name}"${guestNameInfo}? O item voltará a ficar disponível.`
-      )
-    ) {
+    if (confirm(`Tem certeza que deseja ${actionText} de "${item.name}"${guestNameInfo}?`)) {
       setActionLoading(`revert-${item.id}`);
       try {
-        // revertSelection now handles revalidation
         await revertSelection(item.id);
         handleSuccess(`Item "${item.name}" revertido para disponível.`);
       } catch (error) {
@@ -440,19 +388,11 @@ export default function AdminItemManagementTable({
   // Row Action: Mark as Not Needed
   const handleMarkNotNeeded = async (item: GiftItem) => {
     if (actionLoading) return;
-    if (item.status === "not_needed") {
-        console.warn(`AdminItemManagementTable: Item ID: ${item.id} is already marked as not needed.`);
-        return; // Avoid action if already in the target state
-    }
+    if (item.status === "not_needed") return;
      console.log(`AdminItemManagementTable: Attempting to mark item ID: ${item.id} as not needed.`);
-    if (
-      confirm(
-        `Tem certeza que deseja marcar o item "${item.name}" como "Não Precisa"?`
-      )
-    ) {
+    if (confirm(`Marcar "${item.name}" como "Não Precisa"?`)) {
       setActionLoading(`mark-${item.id}`);
       try {
-        // markGiftAsNotNeeded now handles revalidation
         await markGiftAsNotNeeded(item.id);
         handleSuccess(`Item "${item.name}" marcado como "Não Precisa".`);
       } catch (error) {
@@ -468,34 +408,12 @@ export default function AdminItemManagementTable({
   const getStatusBadge = (status: GiftItem["status"]) => {
     switch (status) {
       case "available":
-        return (
-          <Badge
-            variant="default"
-            className="bg-success text-success-foreground"
-          >
-            Disponível
-          </Badge>
-        );
+        return <Badge variant="default" className="bg-success text-success-foreground">Disponível</Badge>;
       case "selected":
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-secondary text-secondary-foreground"
-          >
-            Selecionado
-          </Badge>
-        );
+        return <Badge variant="secondary" className="bg-secondary text-secondary-foreground">Selecionado</Badge>;
       case "not_needed":
-        return (
-          <Badge
-            variant="destructive"
-            className="bg-destructive/80 text-destructive-foreground"
-          >
-            Não Precisa
-          </Badge>
-        );
+        return <Badge variant="destructive" className="bg-destructive/80 text-destructive-foreground">Não Precisa</Badge>;
       default:
-        console.warn(`AdminItemManagementTable: Unknown status in getStatusBadge: ${status}`);
         return <Badge variant="outline">Indefinido</Badge>;
     }
   };
@@ -505,11 +423,7 @@ export default function AdminItemManagementTable({
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button
-          onClick={handleOpenAddDialog}
-          size="sm"
-          disabled={isSubmitting || !!actionLoading}
-        >
+        <Button onClick={handleOpenAddDialog} size="sm" disabled={isSubmitting || !!actionLoading}>
           <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Item
         </Button>
       </div>
@@ -517,74 +431,56 @@ export default function AdminItemManagementTable({
         <Table>
           <TableHeader>
             <TableRow>
-                {/* Added Image column */}
-              <TableHead className="w-[60px]"></TableHead>
+              <TableHead className="w-[60px]"></TableHead> {/* Image col */}
               <TableHead>Nome</TableHead>
               <TableHead className="hidden md:table-cell">Descrição</TableHead>
               <TableHead className="hidden sm:table-cell">Categoria</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="hidden lg:table-cell">
-                Selecionado Por
-              </TableHead>
+              <TableHead className="hidden lg:table-cell">Selecionado Por</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {safeGifts.length === 0 ? ( // Use safeGifts
+            {safeGifts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center"> {/* Updated colSpan */}
                   Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
               </TableRow>
             ) : (
-              safeGifts.map((item) => {
-                // Add log for each item being rendered in the table
-                // console.log("AdminItemManagementTable: Rendering table row for item:", item);
-                return (
+              safeGifts.map((item) => (
                 <TableRow
                   key={item.id}
-                  className={
-                    actionLoading?.endsWith(item.id)
-                      ? "opacity-50 pointer-events-none"
-                      : ""
-                  }
+                  className={actionLoading?.endsWith(item.id) ? "opacity-50 pointer-events-none" : ""}
                 >
-                    {/* Image Cell */}
-                 <TableCell>
-                   <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50">
-                     {item.imageUrl ? (
-                       <Image
-                         src={item.imageUrl}
-                         alt={`Imagem de ${item.name}`}
-                         fill
-                         style={{ objectFit: "cover" }}
-                         sizes="40px"
-                         unoptimized={item.imageUrl.startsWith('data:image/')}
-                       />
-                     ) : (
-                       <div className="flex items-center justify-center h-full w-full">
-                         <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                       </div>
-                     )}
-                   </div>
-                 </TableCell>
+                  <TableCell>
+                    <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50">
+                      {item.imageUrl ? (
+                        <Image
+                          src={item.imageUrl}
+                          alt={`Imagem de ${item.name}`}
+                          fill
+                          style={{ objectFit: "cover" }}
+                          sizes="40px"
+                          unoptimized={item.imageUrl.startsWith('data:')} // Still needed if data URIs are used for previews
+                          onError={(e) => { (e.target as HTMLImageElement).src = ''; (e.target as HTMLImageElement).style.display='none'; }} // Basic error handling
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full w-full">
+                          <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">
-                    {item.description || "-"}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    {item.category}
-                  </TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">{item.description || "-"}</TableCell>
+                  <TableCell className="hidden sm:table-cell">{item.category}</TableCell>
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
                   <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
                     {item.selectedBy || "-"}
                     {item.selectionDate && typeof item.selectionDate === 'string' && (
                       <div className="text-[10px]">
-                        (
-                        {new Date(item.selectionDate).toLocaleDateString(
-                          "pt-BR", { day: '2-digit', month: '2-digit', year: 'numeric' }
-                        )}
-                        )
+                        ({new Date(item.selectionDate).toLocaleDateString("pt-BR", { day: '2-digit', month: '2-digit', year: 'numeric' })})
                       </div>
                     )}
                   </TableCell>
@@ -593,58 +489,27 @@ export default function AdminItemManagementTable({
                       <Loader2 className="h-4 w-4 animate-spin inline-block text-muted-foreground" />
                     ) : (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenEditDialog(item)}
-                          title="Editar Item"
-                          disabled={!!actionLoading}
-                          aria-label={`Editar item ${item.name}`}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(item)} title="Editar Item" disabled={!!actionLoading} aria-label={`Editar ${item.name}`}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        {(item.status === "selected" ||
-                          item.status === "not_needed") && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRevert(item)}
-                            title="Reverter para Disponível"
-                            disabled={!!actionLoading}
-                            aria-label={`Reverter item ${item.name} para disponível`}
-                          >
+                        {(item.status === "selected" || item.status === "not_needed") && (
+                          <Button variant="ghost" size="icon" onClick={() => handleRevert(item)} title="Reverter para Disponível" disabled={!!actionLoading} aria-label={`Reverter ${item.name}`}>
                             <RotateCcw className="h-4 w-4 text-orange-600" />
                           </Button>
                         )}
-                         {/* Show "Mark as Not Needed" only if item is 'available' or 'selected' */}
                          {(item.status === "available" || item.status === "selected") && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleMarkNotNeeded(item)}
-                            title="Marcar como Não Precisa"
-                            disabled={!!actionLoading}
-                            aria-label={`Marcar item ${item.name} como não precisa`}
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => handleMarkNotNeeded(item)} title="Marcar como Não Precisa" disabled={!!actionLoading} aria-label={`Marcar ${item.name} como não precisa`}>
                             <Ban className="h-4 w-4 text-yellow-600" />
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(item)}
-                          title="Excluir Item"
-                          disabled={!!actionLoading}
-                          aria-label={`Excluir item ${item.name}`}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(item)} title="Excluir Item" disabled={!!actionLoading} aria-label={`Excluir ${item.name}`}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </>
                     )}
                   </TableCell>
                 </TableRow>
-                );
-              })
+              ))
             )}
           </TableBody>
         </Table>
@@ -654,119 +519,52 @@ export default function AdminItemManagementTable({
       <Dialog open={isAddEditDialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>
-              {editingItem ? "Editar Item" : "Adicionar Novo Item"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingItem
-                ? "Modifique os detalhes do item, incluindo seu status e quem o selecionou."
-                : "Preencha os detalhes do novo item para a lista."}
-            </DialogDescription>
+            <DialogTitle>{editingItem ? "Editar Item" : "Adicionar Novo Item"}</DialogTitle>
+            <DialogDescription>{editingItem ? "Modifique os detalhes." : "Preencha os detalhes."}</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
             {/* Name */}
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name-dialog" className="text-right text-sm font-medium">
-                Nome*
-              </Label>
+              <Label htmlFor="name-dialog" className="text-right">Nome*</Label>
               <div className="col-span-3">
-                <Input
-                  id="name-dialog" // Unique ID for dialog input
-                  {...register("name")}
-                  className={errors.name ? "border-destructive" : ""}
-                  maxLength={100}
-                  aria-required="true"
-                  aria-invalid={!!errors.name}
-                  aria-describedby="name-error"
-                  disabled={isSubmitting}
-                />
-                {errors.name && (
-                  <p id="name-error" className="text-sm text-destructive mt-1">
-                    {errors.name.message}
-                  </p>
-                )}
+                <Input id="name-dialog" {...register("name")} className={errors.name ? "border-destructive" : ""} maxLength={100} disabled={isSubmitting} />
+                {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
               </div>
             </div>
             {/* Description */}
             <div className="grid grid-cols-4 items-start gap-4">
-              <Label
-                htmlFor="description-dialog"
-                className="text-right text-sm font-medium pt-2"
-              >
-                Descrição
-              </Label>
+              <Label htmlFor="description-dialog" className="text-right pt-2">Descrição</Label>
               <div className="col-span-3">
-                <Textarea
-                  id="description-dialog" // Unique ID
-                  {...register("description")}
-                  rows={3}
-                  maxLength={200}
-                  aria-invalid={!!errors.description}
-                  aria-describedby="description-error"
-                   disabled={isSubmitting}
-                />
-                {errors.description && (
-                  <p id="description-error" className="text-sm text-destructive mt-1">
-                    {errors.description.message}
-                  </p>
-                )}
+                <Textarea id="description-dialog" {...register("description")} rows={3} maxLength={200} disabled={isSubmitting}/>
+                {errors.description && <p className="text-sm text-destructive mt-1">{errors.description.message}</p>}
               </div>
             </div>
             {/* Category */}
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label
-                htmlFor="category-dialog" // Unique ID
-                className="text-right text-sm font-medium"
-              >
-                Categoria*
-              </Label>
+              <Label htmlFor="category-dialog" className="text-right">Categoria*</Label>
               <div className="col-span-3">
                 <Controller
                   name="category"
                   control={control}
-                  rules={{ required: "Categoria é obrigatória." }} // Add rule here too
+                  rules={{ required: "Categoria é obrigatória." }}
                   render={({ field }) => (
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      defaultValue=""
-                      aria-required="true"
-                       disabled={isSubmitting}
-                    >
-                      <SelectTrigger
-                       id="category-dialog" // Unique ID
-                        className={errors.category ? "border-destructive" : ""}
-                        aria-invalid={!!errors.category}
-                        aria-describedby="category-error"
-                      >
+                    <Select onValueChange={field.onChange} value={field.value} defaultValue="" disabled={isSubmitting}>
+                      <SelectTrigger id="category-dialog" className={errors.category ? "border-destructive" : ""}>
                         <SelectValue placeholder="Selecione uma categoria" />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
-                            {cat}
-                          </SelectItem>
-                        ))}
+                        {categories.map((cat) => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   )}
                 />
-                {errors.category && (
-                  <p id="category-error" className="text-sm text-destructive mt-1">
-                    {errors.category.message}
-                  </p>
-                )}
+                {errors.category && <p className="text-sm text-destructive mt-1">{errors.category.message}</p>}
               </div>
             </div>
 
             {/* Image Upload */}
             <div className="grid grid-cols-4 items-start gap-4">
-              <Label
-                htmlFor="imageFile-dialog"
-                className="text-right text-sm font-medium pt-2"
-              >
-                Imagem
-              </Label>
+              <Label htmlFor="imageFile-dialog" className="text-right pt-2">Imagem</Label>
               <div className="col-span-3">
                 <div className="flex items-center gap-4">
                   {imagePreview && (
@@ -774,44 +572,30 @@ export default function AdminItemManagementTable({
                        <Image
                          key={imagePreview}
                          src={imagePreview}
-                         alt="Prévia da imagem do item"
+                         alt="Prévia da imagem"
                          fill
                          style={{ objectFit: 'cover' }}
                          sizes="64px"
-                         unoptimized={imagePreview.startsWith('data:image/')}
+                         unoptimized={imagePreview.startsWith('data:')} // Unoptimize data URIs
                          onError={() => setImagePreview(null)} // Clear preview on error
                        />
-                       <Button
-                          type="button"
-                          variant="destructive"
-                          size="icon"
-                          className="absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100"
-                          onClick={removeImage}
-                          title="Remover Imagem"
-                          disabled={isSubmitting}
-                       >
+                       <Button type="button" variant="destructive" size="icon" className="absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100" onClick={removeImage} title="Remover Imagem" disabled={isSubmitting}>
                           <XCircle className="h-3 w-3" />
                        </Button>
                     </div>
                   )}
                   <div className="flex-1">
                     <Input
-                      id="imageFile-dialog" // Unique ID
+                      id="imageFile-dialog"
                       type="file"
                       accept={ACCEPTED_IMAGE_TYPES.join(",")}
                       {...register("imageFile")} // Register directly
-                      className={` ${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
+                      className={`${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
                       disabled={isSubmitting}
                     />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      JPG, PNG, GIF, WebP (Máx 5MB).
-                    </p>
-                     {errors.imageFile && typeof errors.imageFile.message === 'string' && (
-                      <p className="text-sm text-destructive mt-1">{errors.imageFile.message}</p>
-                    )}
-                     {errors.imageUrl && (
-                        <p className="text-sm text-destructive mt-1">{errors.imageUrl.message}</p>
-                     )}
+                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG, GIF, WebP (Máx 5MB).</p>
+                     {errors.imageFile && typeof errors.imageFile.message === 'string' && (<p className="text-sm text-destructive mt-1">{errors.imageFile.message}</p>)}
+                     {errors.imageUrl && (<p className="text-sm text-destructive mt-1">{errors.imageUrl.message}</p>)}
                   </div>
                 </div>
               </div>
@@ -819,107 +603,43 @@ export default function AdminItemManagementTable({
 
             {/* Status */}
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label
-                htmlFor="status-dialog" // Unique ID
-                className="text-right text-sm font-medium"
-              >
-                Status* {/* Made status mandatory */}
-              </Label>
+              <Label htmlFor="status-dialog" className="text-right">Status*</Label>
               <div className="col-span-3">
                 <Controller
                   name="status"
                   control={control}
-                   defaultValue={editingItem?.status || "available"} // Set default
-                   rules={{ required: "Status é obrigatório." }} // Add required rule
+                  defaultValue={editingItem?.status || "available"}
+                  rules={{ required: "Status é obrigatório." }}
                   render={({ field }) => (
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || "available"} // Ensure a value is always selected
-                       disabled={isSubmitting}
-                    >
-                      <SelectTrigger
-                         id="status-dialog" // Unique ID
-                         className={errors.status ? "border-destructive" : ""} // Add error styling
-                         aria-invalid={!!errors.status}
-                         aria-describedby="status-error"
-                         aria-required="true" // Indicate required
-                      >
+                    <Select onValueChange={field.onChange} value={field.value || "available"} disabled={isSubmitting}>
+                      <SelectTrigger id="status-dialog" className={errors.status ? "border-destructive" : ""}>
                         <SelectValue placeholder="Selecione um status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {statuses.map((stat) => (
-                          <SelectItem key={stat} value={stat}>
-                            {stat === "available" && "Disponível"}
-                            {stat === "selected" && "Selecionado"}{" "}
-                            {stat === "not_needed" && "Não Precisa"}
-                          </SelectItem>
-                        ))}
+                        {statuses.map((stat) => (<SelectItem key={stat} value={stat}>{stat === "available" && "Disponível"}{stat === "selected" && "Selecionado"} {stat === "not_needed" && "Não Precisa"}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   )}
                 />
-                 {errors.status && (
-                  <p id="status-error" className="text-sm text-destructive mt-1">
-                    {errors.status.message}
-                  </p>
-                )}
+                 {errors.status && <p id="status-error" className="text-sm text-destructive mt-1">{errors.status.message}</p>}
               </div>
             </div>
 
-            {/* Selected By - Conditionally shown and required */}
+            {/* Selected By - Conditionally shown */}
             {watchedStatus === "selected" && (
               <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
-                <Label
-                  htmlFor="selectedBy-dialog" // Unique ID
-                  className="text-right text-sm font-medium"
-                >
-                  Selecionado Por*
-                </Label>
+                <Label htmlFor="selectedBy-dialog" className="text-right">Selecionado Por*</Label>
                 <div className="col-span-3">
-                  <Input
-                    id="selectedBy-dialog" // Unique ID
-                    {...register("selectedBy")}
-                    className={errors.selectedBy ? "border-destructive" : ""}
-                    placeholder="Nome de quem selecionou"
-                    maxLength={50}
-                    aria-required={watchedStatus === "selected"}
-                    aria-invalid={!!errors.selectedBy}
-                    aria-describedby="selectedBy-error"
-                     disabled={isSubmitting}
-                  />
-                  {/* Specific error message if status is selected but name is missing */}
-                  {errors.selectedBy ? (
-                     <p id="selectedBy-error" className="text-sm text-destructive mt-1">
-                       {errors.selectedBy.message}
-                     </p>
-                  ) : (
-                    watchedStatus === 'selected' && !watch('selectedBy') && (
-                      <p id="selectedBy-error" className="text-sm text-destructive mt-1">
-                         Nome é obrigatório quando o status é "Selecionado".
-                      </p>
-                    )
-                  )}
+                  <Input id="selectedBy-dialog" {...register("selectedBy")} className={errors.selectedBy ? "border-destructive" : ""} placeholder="Nome de quem selecionou" maxLength={50} disabled={isSubmitting} />
+                  {errors.selectedBy ? (<p className="text-sm text-destructive mt-1">{errors.selectedBy.message}</p>) : (watchedStatus === 'selected' && !watch('selectedBy') && (<p className="text-sm text-destructive mt-1">Nome obrigatório.</p>))}
                 </div>
               </div>
             )}
 
             <DialogFooter className="mt-4">
-              <DialogClose asChild>
-                <Button type="button" variant="outline" disabled={isSubmitting}>
-                  Cancelar
-                </Button>
-              </DialogClose>
+              <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancelar</Button></DialogClose>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
-                    Salvando...
-                  </>
-                ) : (
-                  <>
-                    <Save className="mr-2 h-4 w-4" /> Salvar Item
-                  </>
-                )}
+                {isSubmitting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...</>) : (<><Save className="mr-2 h-4 w-4" /> Salvar Item</>)}
               </Button>
             </DialogFooter>
           </form>
