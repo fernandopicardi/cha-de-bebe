@@ -1,4 +1,3 @@
-
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -57,7 +56,7 @@ export interface EventSettings {
 }
 
 // Default Data (used for initial setup if Firestore is empty)
-const defaultGiftItems: Omit<GiftItem, "id" | 'createdAt'>[] = [
+const defaultGiftItems: Omit<GiftItem, "id" | 'createdAt' | 'selectionDate'>[] = [
     { name: "Body Manga Curta (RN)", category: "Roupas", status: "available", description: "Pacote com 3 unidades, cores neutras." },
     { name: "Fraldas Pampers (P)", category: "Higiene", status: "available", description: "Pacote grande." },
     { name: "Mamadeira Anti-cólica", category: "Alimentação", status: "available" },
@@ -94,6 +93,7 @@ const settingsDocRef = doc(settingsCollectionRef, "main") as DocumentReference<E
 // --- Firestore Rules Definition ---
 /*
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -111,6 +111,8 @@ service cloud.firestore {
       // Allow creating (suggesting) items as 'selected' by anyone (public write)
       allow create: if request.resource.data.status == 'selected'
                     && request.resource.data.selectedBy is string && request.resource.data.selectedBy != ''
+                    && request.resource.data.name is string && request.resource.data.name != '' // Ensure name exists
+                    && request.resource.data.category is string && request.resource.data.category != '' // Ensure category exists
                     && request.resource.data.createdAt is timestamp; // Ensure createdAt is set server-side
 
       // Allow updating an 'available' item to 'selected' by anyone (public write)
@@ -121,14 +123,14 @@ service cloud.firestore {
                     // Prevent changing other fields during public selection
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'selectedBy', 'selectionDate']);
 
-      // Allow admin full write access (update any field, delete, mark not needed, revert)
-      allow write: if isAdmin(); // Includes create, update, delete for admins
+      // Allow admin full write access (update any field, delete, mark not needed, revert, create)
+       allow write: if isAdmin(); // Includes create, update, delete for admins
     }
 
     // Simple admin check placeholder (replace with actual admin UIDs/logic in Firebase)
     function isAdmin(){
       // IMPORTANT: Replace with actual admin UIDs from Firebase Authentication
-      return request.auth != null && request.auth.uid in ['JoO9fy5roDY6FTtqajp1UG8aYzS2', 'VnCKbFH5nrYijsUda0fhK3HdwSF2'];
+       return request.auth != null && request.auth.uid in ['JoO9fy5roDY6FTtqajp1UG8aYzS2', 'VnCKbFH5nrYijsUda0fhK3HdwSF2'];
     }
   }
 }
@@ -137,23 +139,22 @@ service cloud.firestore {
 
 
 // Helper function to convert Firestore Timestamps in gift items to ISO strings
-const giftFromDoc = (docSnapshot: any): GiftItem => {
+const giftFromDoc = (docSnapshot: any): GiftItem | null => {
     const data = docSnapshot.data();
+    const docId = docSnapshot.id;
+    console.log(`Firestore Convert: Processing document ID ${docId}`);
     // Basic validation for required fields during conversion
     if (!data || !data.name || !data.category || !data.status) {
-        console.error(`Firestore Convert: Invalid data format for gift document ID ${docSnapshot.id}`, data);
-        // Return a placeholder or throw an error, depending on desired handling
-        return {
-          id: docSnapshot.id,
-          name: "Erro: Dados Inválidos",
-          category: "Erro",
-          status: "available",
-          description: "Documento com dados ausentes ou corrompidos.",
-          createdAt: new Date().toISOString(), // Provide a default timestamp
-        };
+        console.error(`Firestore Convert: Invalid or missing required fields (name, category, status) for gift document ID ${docId}. Data:`, data);
+        // Return null to indicate conversion failure for this item
+        return null;
       }
+
+      // Log field types for debugging
+      // console.log(`Firestore Convert (ID: ${docId}): name=${data.name}(${typeof data.name}), category=${data.category}(${typeof data.category}), status=${data.status}(${typeof data.status}), description=${data.description}(${typeof data.description}), selectedBy=${data.selectedBy}(${typeof data.selectedBy}), selectionDate=${data.selectionDate}(${typeof data.selectionDate}), createdAt=${data.createdAt}(${typeof data.createdAt})`);
+
     return {
-      id: docSnapshot.id,
+      id: docId,
       name: data.name,
       category: data.category,
       status: data.status,
@@ -164,14 +165,14 @@ const giftFromDoc = (docSnapshot: any): GiftItem => {
           : null, // Convert to ISO string or null
       createdAt: data.createdAt instanceof Timestamp
           ? data.createdAt.toDate().toISOString()
-          : null, // Convert to ISO string or null
+          : new Date().toISOString(), // Provide current time if createdAt is missing/invalid
     };
   };
 
 
 // Function to force revalidation of specific paths AFTER a mutation
 const forceRevalidation = (path: string = "/") => {
-  console.log(`Firestore Revalidate: Revalidating path: ${path}`);
+  console.log(`Firestore Revalidate: Revalidating path: ${path}...`);
   // Use 'layout' to attempt revalidating the entire layout, including data fetches in Server Components
   try {
     revalidatePath(path, "layout");
@@ -234,8 +235,8 @@ export async function initializeFirestoreData(): Promise<void> {
             ...item,
             createdAt: serverTimestamp(), // Use server timestamp for creation
             description: item.description ?? null,
-            selectedBy: item.selectedBy ?? null,
-            selectionDate: item.selectionDate instanceof Date ? Timestamp.fromDate(item.selectionDate) : null, // Convert Date to Timestamp if needed, otherwise null
+            selectedBy: null, // Default gifts are not selected
+            selectionDate: null, // Default gifts have no selection date
         };
         batch.set(docRef, dataToAdd);
       });
@@ -261,7 +262,7 @@ export async function initializeFirestoreData(): Promise<void> {
  * Fetches event settings from Firestore. Initializes with defaults if not found.
  * Assumes public read access is configured in Firestore rules for 'settings/main'.
  */
-export const getEventSettings = async (): Promise<EventSettings | null> => {
+export const getEventSettings = async (): Promise<EventSettings> => {
     const settingsPath = settingsDocRef.path;
     console.log(`Firestore GET: Attempting to fetch event settings from path: ${settingsPath}`);
     try {
@@ -280,19 +281,19 @@ export const getEventSettings = async (): Promise<EventSettings | null> => {
         console.log("Firestore GET: Returning event settings:", completeSettings);
         return completeSettings;
       } else {
-        console.warn(`Firestore GET: Settings document '${settingsPath}' does not exist. Cannot return settings.`);
-        // If the document doesn't exist, return null. Initialization is separate.
-        return null; // Indicate settings are not available
+        console.warn(`Firestore GET: Settings document '${settingsPath}' does not exist. Returning default settings.`);
+        // If the document doesn't exist, return defaults. Initialization is separate.
+        return defaultEventSettings; // Return defaults
       }
     } catch (error) {
       console.error(`Firestore GET: Error fetching event settings from ${settingsPath}:`, error);
-       if ((error as FirestoreError)?.code === 'permission-denied') {
+       if ((error as any)?.code === 'permission-denied') {
           console.error("Firestore: PERMISSION DENIED fetching event settings. Check Firestore rules.");
        } else {
           console.error("Firestore GET: An unexpected error occurred while fetching settings:", error)
        }
-      // Return null on error to indicate failure.
-      return null;
+      // Return defaults on error to ensure app functions
+      return defaultEventSettings;
     }
   };
 
@@ -301,27 +302,41 @@ export const getEventSettings = async (): Promise<EventSettings | null> => {
  * Assumes public read access is configured in Firestore rules.
  */
 export const getGifts = async (): Promise<GiftItem[]> => {
-    console.log("Firestore GET: Fetching gifts from 'gifts' collection...");
+    console.log("Firestore GET_GIFTS: Fetching gifts from 'gifts' collection...");
     try {
         // Order by createdAt (desc) then by name (asc) for consistent ordering
         const q = query(giftsCollectionRef, orderBy("createdAt", "desc"), orderBy("name", "asc"));
         const querySnapshot = await getDocs(q);
+        console.log(`Firestore GET_GIFTS: Query executed. Found ${querySnapshot.size} documents.`);
 
         if (querySnapshot.empty) {
-            console.log("Firestore GET: Gifts collection is empty.");
+            console.log("Firestore GET_GIFTS: Gifts collection is empty.");
             return [];
         } else {
-            const gifts = querySnapshot.docs.map(giftFromDoc); // Use converter
-            console.log(`Firestore GET: Fetched ${gifts.length} gifts.`);
-            console.log("Firestore GET: Sample Gifts after conversion:", gifts.slice(0, 5)); // Log sample for debugging
+            // Map and filter out null results from giftFromDoc
+            const gifts: GiftItem[] = querySnapshot.docs
+                .map(docSnapshot => {
+                    const mappedGift = giftFromDoc(docSnapshot);
+                    if (mappedGift === null) {
+                        console.warn(`Firestore GET_GIFTS: Skipping document ID ${docSnapshot.id} due to mapping/validation error.`);
+                    }
+                    return mappedGift;
+                })
+                .filter((item): item is GiftItem => item !== null); // Type guard to filter out nulls
+
+            console.log(`Firestore GET_GIFTS: Successfully mapped ${gifts.length} valid gifts.`);
+            // Log first few items for verification
+             if (gifts.length > 0) {
+                console.log("Firestore GET_GIFTS: Sample mapped gifts:", JSON.stringify(gifts.slice(0, 3), null, 2));
+             }
             return gifts;
         }
     } catch (error) {
-        console.error("Firestore GET: Error fetching gifts:", error);
+        console.error("Firestore GET_GIFTS: Error fetching gifts:", error);
          if ((error as FirestoreError)?.code === 'permission-denied') {
-            console.error("Firestore GET: PERMISSION DENIED fetching gifts. Check Firestore rules allow read on the 'gifts' collection.");
+            console.error("Firestore GET_GIFTS: PERMISSION DENIED fetching gifts. Check Firestore rules allow read on the 'gifts' collection.");
          } else {
-            console.error("Firestore GET: An unexpected error occurred while fetching gifts:", error);
+            console.error("Firestore GET_GIFTS: An unexpected error occurred while fetching gifts:", error);
          }
          // Return empty array on error, but log it.
         return [];
@@ -340,7 +355,7 @@ export async function updateEventSettings(
    const settingsPath = settingsDocRef.path;
    // Remove 'id' from updates if present, as it's fixed
    const { id, ...validUpdates } = updates;
-  console.log(`Firestore UPDATE: Updating event settings at ${settingsPath}...`, validUpdates);
+  console.log(`Firestore UPDATE_SETTINGS: Updating event settings at ${settingsPath}...`, validUpdates);
   try {
     const dataToUpdate: Partial<EventSettings> = {};
     // Ensure only valid keys are updated and handle nulls correctly
@@ -349,49 +364,47 @@ export async function updateEventSettings(
             const value = validUpdates[key];
             // Keep valid values (including null), skip undefined
              if (value !== undefined) {
-                 dataToUpdate[key] = value;
+                 // Explicitly handle image URL: set to null if empty string, otherwise keep value
+                  if (key === 'headerImageUrl' && value === "") {
+                       dataToUpdate[key] = null;
+                   } else if (key === 'babyName' && value === "") {
+                       dataToUpdate[key] = null; // Treat empty baby name as null
+                   }
+                   else {
+                      dataToUpdate[key] = value;
+                  }
              } else {
                  console.warn(`Firestore UPDATE_SETTINGS: Skipping undefined value for key '${key}'`);
              }
-
-            // Explicit null handling for specific fields if needed
-            // if ((key === 'babyName' || key === 'headerImageUrl') && !value) {
-            //     dataToUpdate[key] = null; // Set to null if falsy/empty/undefined
-            // } else if (value !== undefined) {
-            //     dataToUpdate[key] = value;
-            // }
         } else {
              console.warn(`Firestore UPDATE_SETTINGS: Skipping update for unknown key '${key}'`);
         }
     });
 
-    // Clean out undefined values before sending (shouldn't be necessary with above check)
-    // Object.keys(dataToUpdate).forEach(key => dataToUpdate[key as keyof EventSettings] === undefined && delete dataToUpdate[key as keyof EventSettings]);
-
 
     if (Object.keys(dataToUpdate).length === 0) {
-        console.log("Firestore UPDATE: No valid settings fields to update.");
+        console.log("Firestore UPDATE_SETTINGS: No valid settings fields to update.");
         return await getEventSettings(); // Return current settings
     }
 
-    console.log("Firestore UPDATE: Data being sent to setDoc:", dataToUpdate);
+    console.log("Firestore UPDATE_SETTINGS: Data being sent to setDoc:", dataToUpdate);
 
     // Use setDoc with merge:true for safer updates (won't overwrite missing fields)
     await setDoc(settingsDocRef, dataToUpdate, { merge: true });
-    console.log("Firestore UPDATE: Event settings updated successfully.");
+    console.log("Firestore UPDATE_SETTINGS: Event settings updated successfully.");
     forceRevalidation(); // Revalidate paths AFTER successful update
 
     // Fetch and return the updated settings to confirm
     const updatedSettings = await getEventSettings(); // Use the existing fetch function
-     console.log("Firestore UPDATE: Returning updated settings:", updatedSettings);
+     console.log("Firestore UPDATE_SETTINGS: Returning updated settings:", updatedSettings);
      return updatedSettings;
 
   } catch (error) {
-    console.error(`Firestore UPDATE: Error updating event settings at ${settingsPath}:`, error);
+    console.error(`Firestore UPDATE_SETTINGS: Error updating event settings at ${settingsPath}:`, error);
     if ((error as FirestoreError)?.code === 'permission-denied') {
-        console.error(`Firestore UPDATE: PERMISSION DENIED updating event settings at ${settingsPath}. Requires admin privileges.`);
+        console.error(`Firestore UPDATE_SETTINGS: PERMISSION DENIED updating event settings at ${settingsPath}. Requires admin privileges.`);
      } else if ((error as FirestoreError)?.code === 'invalid-argument') {
-        console.error("Firestore UPDATE: Invalid argument error. Check data types:", dataToUpdate, error);
+        console.error("Firestore UPDATE_SETTINGS: Invalid argument error. Check data types:", dataToUpdate, error);
      }
     // Return null to indicate failure
     return null;
@@ -523,8 +536,18 @@ export async function addSuggestion(
     for (const key in newItemData) {
         if (newItemData[key as keyof typeof newItemData] !== undefined) {
             cleanItemData[key] = newItemData[key as keyof typeof newItemData];
+        } else {
+             // Set undefined optional fields explicitly to null if that's desired behavior
+             if (key === 'description') {
+                 cleanItemData[key] = null;
+             }
         }
     }
+    // Explicitly set null if keys are missing after loop (shouldn't happen with above logic)
+     if (!('description' in cleanItemData)) cleanItemData.description = null;
+
+
+    console.log("Firestore ADD_SUGGESTION: Data being sent to addDoc:", cleanItemData);
 
     const docRef = await addDoc(giftsCollectionRef, cleanItemData);
     console.log(
@@ -595,17 +618,20 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
  * Assumes admin privileges are required by Firestore rules.
  */
 export async function addGift(
-    newItemData: Omit<GiftItem, "id" | "createdAt" | "selectionDate">
+    // Type definition now accepts partial data matching GiftItem structure, excluding generated fields
+    newItemData: Partial<Omit<GiftItem, "id" | "createdAt" | "selectionDate">> & { name: string; category: string; status: GiftItem['status'] } // Ensure required fields are present
   ): Promise<GiftItem | null> { // Return null on failure
-    console.log(`Firestore ADD_GIFT: Admin adding new gift "${newItemData.name}"...`, newItemData);
+    console.log(`Firestore ADD_GIFT (Admin): Adding new gift "${newItemData.name}"...`, newItemData);
 
     let selectionTimestamp: Timestamp | null = null;
     let finalSelectedBy: string | null = null;
-    const finalStatus = newItemData.status || "available"; // Default to available if not provided
+    // Status is now guaranteed by the type
+    const finalStatus = newItemData.status;
 
     if (finalStatus === "selected") {
-        finalSelectedBy = newItemData.selectedBy?.trim() || "Admin"; // Default to Admin if selected and no name provided
-        selectionTimestamp = serverTimestamp() as Timestamp; // Use server time for admin additions marked selected initially
+        // Default to "Admin" if selectedBy is missing/null/empty when admin adds a selected item
+        finalSelectedBy = newItemData.selectedBy?.trim() || "Admin";
+        selectionTimestamp = serverTimestamp() as Timestamp; // Use server time
     } else { // Status is 'available' or 'not_needed'
         finalSelectedBy = null;
         selectionTimestamp = null;
@@ -615,7 +641,7 @@ export async function addGift(
     const giftToAdd = {
       name: newItemData.name.trim(),
       description: newItemData.description?.trim() || null,
-      category: newItemData.category.trim(), // Ensure category is required and trimmed
+      category: newItemData.category.trim(),
       status: finalStatus,
       selectedBy: finalSelectedBy, // Use null if not selected
       selectionDate: selectionTimestamp, // Use null if not selected
@@ -626,30 +652,40 @@ export async function addGift(
      const cleanGiftToAdd: { [key: string]: any } = {};
      for (const key in giftToAdd) {
        const value = giftToAdd[key as keyof typeof giftToAdd];
-       if (value !== undefined) {
-         cleanGiftToAdd[key] = value;
-       }
+        if (value !== undefined) {
+             cleanGiftToAdd[key] = value;
+         } else {
+              // Assign null to optional fields if they are undefined
+             if (key === 'description' || key === 'selectedBy' || key === 'selectionDate') {
+                 cleanGiftToAdd[key] = null;
+             }
+         }
      }
+      // Ensure nulls for optional fields if missing after loop
+     if (!('description' in cleanGiftToAdd)) cleanGiftToAdd.description = null;
+     if (!('selectedBy' in cleanGiftToAdd)) cleanGiftToAdd.selectedBy = null;
+     if (!('selectionDate' in cleanGiftToAdd)) cleanGiftToAdd.selectionDate = null;
 
-    console.log("Firestore ADD_GIFT: Data being sent to addDoc:", cleanGiftToAdd);
+
+    console.log("Firestore ADD_GIFT (Admin): Data being sent to addDoc:", cleanGiftToAdd);
 
 
     try {
       const docRef = await addDoc(giftsCollectionRef, cleanGiftToAdd);
-      console.log(`Firestore ADD_GIFT: Gift added with ID: ${docRef.id}`);
+      console.log(`Firestore ADD_GIFT (Admin): Gift added with ID: ${docRef.id}`);
       forceRevalidation(); // Revalidate AFTER adding
       const newDocSnap = await getDoc(docRef);
        if (!newDocSnap.exists()) {
-           console.error(`Firestore ADD_GIFT: Failed to fetch newly created gift document ${docRef.id}.`);
+           console.error(`Firestore ADD_GIFT (Admin): Failed to fetch newly created gift document ${docRef.id}.`);
            return null; // Indicate failure
       }
       return giftFromDoc(newDocSnap);
     } catch (error) {
-      console.error(`Firestore ADD_GIFT: Error adding gift "${newItemData.name}":`, error);
+      console.error(`Firestore ADD_GIFT (Admin): Error adding gift "${newItemData.name}":`, error);
       if ((error as FirestoreError)?.code === 'permission-denied') {
-          console.error(`Firestore ADD_GIFT: PERMISSION DENIED adding gift ${newItemData.name}. Requires admin privileges.`);
+          console.error(`Firestore ADD_GIFT (Admin): PERMISSION DENIED adding gift ${newItemData.name}. Requires admin privileges.`);
        } else if ((error as FirestoreError)?.code === 'invalid-argument') {
-          console.error("Firestore ADD_GIFT: Invalid argument error. Check data types and ensure no undefined values:", cleanGiftToAdd, error);
+          console.error("Firestore ADD_GIFT (Admin): Invalid argument error. Check data types and ensure no undefined values:", cleanGiftToAdd, error);
        }
       // Return null to indicate failure
       return null;
@@ -700,8 +736,11 @@ export async function updateGift(
             // Treat empty strings as null for optional text fields
             updateData[key] = null;
         } else if (key === 'status') {
-            statusChanged = updates.status !== undefined; // Check if status is explicitly in updates
-            newStatus = updates.status;
+            // Check if status is actually different from the current one before setting flags
+            // This requires fetching the current item state, which might be inefficient.
+            // Simpler approach: always assume it might change if present in updates.
+             statusChanged = updates.status !== undefined; // Check if status is explicitly in updates
+             newStatus = updates.status;
             updateData[key] = updates.status;
         } else if (key === 'name' || key === 'category') {
              // Trim required string fields
@@ -728,11 +767,13 @@ export async function updateGift(
              // Ensure selectionDate exists (set to now if not provided or explicitly null)
              updateData.selectionDate = updateData.selectionDate || serverTimestamp();
         }
-    } else if (updateData.status === 'selected') { // Ensure consistency if status remains 'selected'
-         updateData.selectedBy = updateData.selectedBy || "Admin";
-         updateData.selectionDate = updateData.selectionDate || serverTimestamp();
+    } else if (updateData.status === 'selected') { // Ensure consistency if status remains 'selected' but other fields change
+         // If selectedBy wasn't in the original `updates` object, keep existing, otherwise use the updated (or defaulted) value
+         updateData.selectedBy = updateData.selectedBy ?? (updates.selectedBy === null ? null : (updates.selectedBy?.trim() || "Admin"));
+         // If selectionDate wasn't in the original `updates` object, keep existing, otherwise use the updated (or serverTimestamp) value
+         updateData.selectionDate = updateData.selectionDate ?? serverTimestamp();
     } else if (updateData.status === 'available' || updateData.status === 'not_needed') {
-         // Ensure consistency if status remains non-selected
+         // Ensure consistency if status remains non-selected or becomes non-selected
          updateData.selectedBy = null;
          updateData.selectionDate = null;
     }
@@ -797,6 +838,7 @@ export async function exportGiftsToCSV(): Promise<string> {
     try {
         // Fetch current gifts directly to ensure latest data
         const currentGifts = await getGifts(); // Uses the public read function
+        console.log(`Firestore EXPORT: Fetched ${currentGifts.length} gifts for CSV export.`);
 
         const headers = [
             "ID",
@@ -809,15 +851,33 @@ export async function exportGiftsToCSV(): Promise<string> {
             "Data Criação",
         ];
 
+        // Function to escape CSV special characters (quotes and commas)
+        const escapeCsv = (field: string | number | null | undefined): string => {
+            if (field === null || field === undefined) return '""'; // Represent null/undefined as empty quoted string
+            const stringField = String(field);
+            // Escape double quotes by doubling them and enclose in double quotes if it contains comma, quote, or newline
+            if (stringField.includes('"') || stringField.includes(',') || stringField.includes('\n')) {
+              return `"${stringField.replace(/"/g, '""')}"`;
+            }
+            return `"${stringField}"`; // Enclose even simple strings in quotes for consistency
+          };
+
         const rows = currentGifts.map((item) => {
+            if (!item || typeof item !== 'object') {
+                console.warn("Firestore EXPORT: Skipping invalid item during CSV generation:", item);
+                return ""; // Return empty string for invalid items
+            }
+
             let selectionDateStr = "";
             if (item.selectionDate) { // Now expecting ISO string or null
                 try {
                     const date = new Date(item.selectionDate);
                      if (!isNaN(date.getTime())) {
                        selectionDateStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+                     } else {
+                          console.warn("Firestore EXPORT: Invalid selection date string for CSV:", item.selectionDate);
                      }
-                } catch (e) { console.warn("Could not parse selection date string for CSV:", item.selectionDate); }
+                } catch (e) { console.warn("Firestore EXPORT: Could not parse selection date string for CSV:", item.selectionDate, e); }
             }
             let createdAtStr = "";
              if (item.createdAt) { // Now expecting ISO string or null
@@ -825,23 +885,14 @@ export async function exportGiftsToCSV(): Promise<string> {
                      const date = new Date(item.createdAt);
                       if (!isNaN(date.getTime())) {
                         createdAtStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+                     } else {
+                         console.warn("Firestore EXPORT: Invalid creation date string for CSV:", item.createdAt);
                      }
-                } catch (e) { console.warn("Could not parse creation date string for CSV:", item.createdAt); }
+                } catch (e) { console.warn("Firestore EXPORT: Could not parse creation date string for CSV:", item.createdAt, e); }
             }
 
             const description = item.description ?? "";
             const selectedBy = item.selectedBy ?? "";
-
-            // Function to escape CSV special characters (quotes and commas)
-             const escapeCsv = (field: string | number | null | undefined): string => {
-               if (field === null || field === undefined) return '""';
-               const stringField = String(field);
-               // Escape double quotes by doubling them and enclose in double quotes if it contains comma, quote, or newline
-               if (stringField.includes('"') || stringField.includes(',') || stringField.includes('\n')) {
-                 return `"${stringField.replace(/"/g, '""')}"`;
-               }
-               return stringField; // Return as is if no special characters
-             };
 
 
             return [
@@ -855,11 +906,11 @@ export async function exportGiftsToCSV(): Promise<string> {
                 escapeCsv(createdAtStr),
             ]
             .join(","); // Join escaped values
-        });
+        }).filter(row => row !== ""); // Filter out empty rows from invalid items
 
         console.log("Firestore EXPORT: CSV export generated successfully.");
         // Ensure headers are also properly handled if they contain commas or quotes
-        const escapedHeaders = headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",");
+        const escapedHeaders = headers.map(h => escapeCsv(h)).join(",");
         return [escapedHeaders, ...rows].join("\n");
     } catch (error) {
         console.error("Firestore EXPORT: Error exporting gifts to CSV:", error);
@@ -870,3 +921,4 @@ export async function exportGiftsToCSV(): Promise<string> {
 // Consider calling initialization only under specific conditions,
 // e.g., via an admin interface button or a setup script, not on every server start.
 // initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));
+

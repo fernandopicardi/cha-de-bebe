@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react"; // Added useCallback
@@ -46,16 +45,17 @@ export default function Home() {
       console.log("Home Page: Fetched Event Settings:", eventData ? "Data received" : "Null/Undefined");
       console.log("Home Page: Fetched Gifts Count:", giftsData?.length ?? 0);
       // Log raw gifts data immediately after fetch
-      // console.log("Home Page: Raw Gifts Data from getGifts:", giftsData?.slice(0, 5) ?? []);
+      console.log("Home Page: Raw Gifts Data from getGifts:", giftsData?.slice(0, 5) ?? []);
 
       // Add null check before setting state
       if (eventData) {
          console.log("Home Page: Setting event details state.");
         setEventDetails(eventData);
       } else {
-         console.warn("Home Page: Event data was null or undefined after fetch.");
-         console.log("Home Page: Setting event details state to null.");
-         setEventDetails(null); // Explicitly set to null if fetch returns null
+         console.warn("Home Page: Event data was null or undefined after fetch. Using default settings.");
+         // Use default settings if fetch fails or returns null
+         // const defaults = await getDefaultEventSettings(); // Assuming a function exists or import defaults
+         setEventDetails(null); // Explicitly set to null if fetch returns null - defaults are handled in getEventSettings now
       }
 
       // Add null/undefined check for giftsData
@@ -63,7 +63,7 @@ export default function Home() {
       if (giftsData) {
         console.log(`Home Page: Setting gifts state with ${giftsData.length} fetched gifts.`);
         // Log details of the first few gifts to verify data structure before setting state
-        // console.log("Home Page: Sample gifts being set to state:", giftsData.slice(0, 5));
+        console.log("Home Page: Sample gifts being set to state:", giftsData.slice(0, 5));
         setGifts(giftsData);
       } else {
          console.warn("Home Page: Gifts data was null or undefined after fetch.");
@@ -168,7 +168,7 @@ export default function Home() {
 
   // Add log just before render to check final state being passed to GiftList
   console.log(`Home Page: Rendering page. Passing ${gifts?.length ?? 'null'} gifts to GiftList component.`);
-  // console.log(`Home Page: Sample gifts being passed as prop:`, gifts?.slice(0, 5));
+  console.log(`Home Page: Sample gifts being passed as prop:`, gifts?.slice(0, 5));
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 relative">
@@ -259,7 +259,6 @@ export default function Home() {
             <TabsTrigger value="selected" className="flex-shrink-0">
               Selecionados
             </TabsTrigger>
-            {/* Removed 'not_needed' tab from public view */}
              <TabsTrigger value="not_needed" className="flex-shrink-0">
                 Não Precisa
              </TabsTrigger>
@@ -269,10 +268,10 @@ export default function Home() {
            {/* Pass fetched gifts (ensure it's an array) and stable refresh callback to GiftList */}
            {/* GiftList now handles its own empty/loading states */}
           <TabsContent value="all" className="mt-6">
-            <GiftList items={gifts ?? []} filterStatus="all" onItemAction={fetchData} />
+             <GiftList items={gifts ?? []} filterStatus="all" onItemAction={fetchData} />
           </TabsContent>
           <TabsContent value="available" className="mt-6">
-            <GiftList items={gifts ?? []} filterStatus="available" onItemAction={fetchData} />
+             <GiftList items={gifts ?? []} filterStatus="available" onItemAction={fetchData} />
           </TabsContent>
           <TabsContent value="selected" className="mt-6">
             <GiftList items={gifts ?? []} filterStatus="selected" onItemAction={fetchData} />
@@ -286,3 +285,4 @@ export default function Home() {
     </div>
   );
 }
+

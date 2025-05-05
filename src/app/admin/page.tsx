@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -74,11 +73,11 @@ export default function AdminPage() {
           console.log(`AdminPage: Fetched ${giftsData?.length ?? 0} gifts.`);
           console.log("AdminPage: Fetched Event Settings:", settingsData ? "Data received" : "Null/Undefined");
           // Log raw gifts data immediately after fetch
-           console.log("AdminPage: Raw Gifts Data from getGifts:", giftsData?.slice(0, 5) ?? []);
+           console.log("AdminPage: Raw Gifts Data from getGifts:", JSON.stringify(giftsData?.slice(0, 5) ?? [], null, 2));
 
           // Update state with fetched data, handling potential null/undefined
           // Log details of the first few gifts to verify data structure before setting state
-          console.log("AdminPage: Sample gifts being set to state:", giftsData?.slice(0, 5));
+          console.log("AdminPage: Sample gifts being set to state:", JSON.stringify(giftsData?.slice(0, 5), null, 2));
           setGifts(giftsData || []); // Set empty array if null/undefined
           setEventSettings(settingsData); // Set directly (can be null)
 
@@ -106,10 +105,10 @@ export default function AdminPage() {
     // Only trigger refreshData if user is definitively authenticated (not null)
     // and auth is no longer loading.
     if (user && !authLoading) {
-      console.log("AdminPage: User authenticated, fetching data.");
+      console.log("AdminPage: User authenticated, fetching data via useEffect.");
       refreshData("useEffect[user, authLoading]");
     } else if (!authLoading && !user) {
-      console.log("AdminPage: User not authenticated or auth check complete.");
+      console.log("AdminPage: User not authenticated or auth check complete. Clearing data.");
       // Clear data and loading state if user is not logged in after auth check
       setGifts([]);
       setEventSettings(null);
@@ -227,7 +226,7 @@ export default function AdminPage() {
   // Render the admin dashboard if authenticated and data loaded
   // Add log just before render to check final state being passed to child components
   console.log(`AdminPage: Rendering dashboard. Passing ${gifts.length} gifts to AdminItemManagementTable.`);
-  console.log(`AdminPage: Sample gifts being passed:`, gifts.slice(0, 5));
+  console.log(`AdminPage: Sample gifts being passed:`, JSON.stringify(gifts.slice(0, 5), null, 2));
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 bg-background text-foreground">
@@ -263,7 +262,9 @@ export default function AdminPage() {
           <CardContent>
              {/* Pass gifts and refresh callback */}
              {/* Ensure gifts are passed correctly */}
+             {/* Add key to force re-render when gifts change, aiding debugging */}
              <AdminItemManagementTable
+              key={`item-table-${gifts.length}-${gifts[0]?.id || 'no-items'}`}
               gifts={gifts} // Pass the fetched gifts
               onDataChange={refreshData} // Pass stable refresh callback
             />
@@ -286,6 +287,7 @@ export default function AdminPage() {
                {/* Filter gifts before passing */}
                {/* Ensure selectedItems are passed correctly here */}
               <AdminSelectionViewer
+                key={`selection-viewer-${gifts.filter(g => g && g.status === 'selected').length}`} // Key based on selected items count
                 selectedItems={gifts.filter(g => g && g.status === 'selected')}
                 onDataChange={refreshData} // Pass stable refresh callback
               />
@@ -337,3 +339,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
