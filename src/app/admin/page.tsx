@@ -150,7 +150,7 @@ export default function AdminPage() {
   };
 
   const handleExport = async () => {
-    console.log("Export clicked");
+
     try {
       const csvData = await exportGiftsToCSV();
       const blob = new Blob([`\uFEFF${csvData}`], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel compatibility
@@ -178,7 +178,6 @@ export default function AdminPage() {
 
   // Callback to refresh data when child components modify it
    const refreshData = useCallback(() => {
-       console.log("Refreshing admin data...");
        fetchAdminData();
    }, [fetchAdminData]); // Include fetchAdminData in dependencies
 
@@ -223,6 +222,9 @@ export default function AdminPage() {
          </div>
       </header>
 
+        {/*
+        Removed security warning for deployment preparation.
+        NOTE: The login method itself IS STILL INSECURE and should be replaced for production.
         <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Aviso de Segurança</AlertTitle>
@@ -230,6 +232,7 @@ export default function AdminPage() {
               Este painel está usando um método de login inseguro (senha fixa). Substitua por Firebase Authentication ou outro método seguro antes de usar em produção.
             </AlertDescription>
         </Alert>
+        */}
 
         {error && !isDataLoading && ( // Show data loading error separately only if not loading
             <Alert variant="destructive">

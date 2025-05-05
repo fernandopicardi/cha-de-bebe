@@ -1,4 +1,5 @@
 
+
 'use server'; // Mark module for server-side execution
 
 import { revalidatePath } from 'next/cache'; // Import revalidatePath
@@ -80,11 +81,9 @@ let eventSettings: EventSettings = {
  * This ensures that Server Components re-fetch the latest data from the store.
  */
 const triggerRevalidation = () => {
-  console.log(`[${new Date().toISOString()}] Revalidating paths: '/' and '/admin'`);
   try {
     revalidatePath('/');
     revalidatePath('/admin');
-    console.log(`[${new Date().toISOString()}] Revalidation triggered successfully.`);
   } catch (error) {
      console.error(`[${new Date().toISOString()}] Error triggering revalidation:`, error);
      // Handle error appropriately, maybe log it more formally
@@ -98,7 +97,6 @@ const triggerRevalidation = () => {
  * @returns A promise resolving to the event settings object.
  */
 export async function getEventSettings(): Promise<EventSettings> {
-  // console.log("getEventSettings called."); // Uncomment for debugging fetch calls
   // Simulate async if needed: await new Promise(resolve => setTimeout(resolve, 50));
   return JSON.parse(JSON.stringify(eventSettings));
 }
@@ -110,7 +108,6 @@ export async function getEventSettings(): Promise<EventSettings> {
  * @returns A promise resolving to the updated event settings object.
  */
 export async function updateEventSettings(updates: Partial<EventSettings>): Promise<EventSettings> {
-   console.log(`[${new Date().toISOString()}] updateEventSettings called with updates:`, updates);
    // Simulate async operation
    // await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -132,7 +129,6 @@ export async function updateEventSettings(updates: Partial<EventSettings>): Prom
 
     eventSettings = { ...eventSettings, ...filteredUpdates };
 
-    console.log(`[${new Date().toISOString()}] Event settings updated in store:`, eventSettings);
     triggerRevalidation(); // Revalidate after update
 
     return JSON.parse(JSON.stringify(eventSettings));
@@ -147,7 +143,6 @@ export async function updateEventSettings(updates: Partial<EventSettings>): Prom
  * @returns A promise resolving to the array of gift items.
  */
 export async function getGifts(): Promise<GiftItem[]> {
-  // console.log("getGifts called."); // Uncomment for debugging fetch calls
   // Simulate async if needed: await new Promise(resolve => setTimeout(resolve, 50));
   return JSON.parse(JSON.stringify(giftItems));
 }
@@ -160,7 +155,6 @@ export async function getGifts(): Promise<GiftItem[]> {
  * @returns A promise resolving to the updated item or null if not found/unavailable.
  */
 export async function selectGift(itemId: string, guestName: string): Promise<GiftItem | null> {
-  console.log(`[${new Date().toISOString()}] selectGift called for item ${itemId} by ${guestName}`);
   // Simulate async
   // await new Promise(resolve => setTimeout(resolve, 100));
   const itemIndex = giftItems.findIndex(item => item.id === itemId && item.status === 'available');
@@ -183,7 +177,6 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
     ...giftItems.slice(itemIndex + 1),
   ];
 
-  console.log(`[${new Date().toISOString()}] Item ${itemId} selected by ${guestName}. Total items: ${giftItems.length}`);
   triggerRevalidation(); // Revalidate after successful update
   return JSON.parse(JSON.stringify(updatedItem));
 }
@@ -195,7 +188,6 @@ export async function selectGift(itemId: string, guestName: string): Promise<Gif
  * @returns A promise resolving to the updated item or null if not found/unavailable.
  */
 export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | null> {
-    console.log(`[${new Date().toISOString()}] markGiftAsNotNeeded called for item ${itemId}`);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 100));
     const itemIndex = giftItems.findIndex(item => item.id === itemId && item.status === 'available');
@@ -217,7 +209,6 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`[${new Date().toISOString()}] Admin marked item ${itemId} as not needed. Total items: ${giftItems.length}`);
     triggerRevalidation();
     return JSON.parse(JSON.stringify(updatedItem));
 }
@@ -232,14 +223,13 @@ export async function markGiftAsNotNeeded(itemId: string): Promise<GiftItem | nu
  * @returns A promise resolving to the newly added item.
  */
 export async function addSuggestion(suggestionData: SuggestionData): Promise<GiftItem> {
-  console.log(`[${new Date().toISOString()}] addSuggestion called by ${suggestionData.suggesterName} for item "${suggestionData.itemName}"`);
   // Simulate async
   // await new Promise(resolve => setTimeout(resolve, 100));
   const newItem: GiftItem = {
     id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     name: suggestionData.itemName,
     description: suggestionData.itemDescription,
-    category: 'Outros',
+    category: 'Outros', // Default category for suggestions
     status: 'selected',
     selectedBy: suggestionData.suggesterName,
     selectionDate: new Date().toISOString(),
@@ -247,7 +237,6 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
 
   giftItems = [...giftItems, newItem]; // Appends the new item
 
-  console.log(`[${new Date().toISOString()}] Item "${newItem.name}" added and selected by ${newItem.selectedBy}. Total items: ${giftItems.length}`);
   triggerRevalidation();
   return JSON.parse(JSON.stringify(newItem));
 }
@@ -262,7 +251,6 @@ export async function addSuggestion(suggestionData: SuggestionData): Promise<Gif
  * @returns A promise resolving to the updated item or null if not found/not in a revertible status.
  */
 export async function revertSelection(itemId: string): Promise<GiftItem | null> {
-    console.log(`[${new Date().toISOString()}] revertSelection called for item ${itemId}`);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 100));
     const itemIndex = giftItems.findIndex(item => item.id === itemId && (item.status === 'selected' || item.status === 'not_needed'));
@@ -286,7 +274,6 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
         ...giftItems.slice(itemIndex + 1),
     ];
 
-    console.log(`[${new Date().toISOString()}] Item ${itemId} reverted to available by admin. Total items: ${giftItems.length}`);
     triggerRevalidation();
     return JSON.parse(JSON.stringify(updatedItem));
 }
@@ -298,7 +285,6 @@ export async function revertSelection(itemId: string): Promise<GiftItem | null> 
  * @returns A promise resolving to the newly added gift item.
  */
 export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'> & { selectionDate?: Date | string }): Promise<GiftItem> {
-    console.log(`[${new Date().toISOString()}] addGift called with data:`, newItemData);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 100));
     const newItem: GiftItem = {
@@ -315,7 +301,6 @@ export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'
     }
 
     giftItems = [...giftItems, newItem]; // Appends the new item
-    console.log(`[${new Date().toISOString()}] Admin added new gift: ${newItem.name} with status ${newItem.status}. Total items: ${giftItems.length}`);
     triggerRevalidation();
     return JSON.parse(JSON.stringify(newItem));
 }
@@ -329,7 +314,6 @@ export async function addGift(newItemData: Omit<GiftItem, 'id' | 'selectionDate'
  * @returns A promise resolving to the updated item or null if not found.
  */
 export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem, 'id' | 'selectionDate'> & { selectionDate?: Date | string }>): Promise<GiftItem | null> {
-     console.log(`[${new Date().toISOString()}] updateGift called for item ${itemId} with updates:`, updates);
      // Simulate async
      // await new Promise(resolve => setTimeout(resolve, 100));
      const itemIndex = giftItems.findIndex(item => item.id === itemId);
@@ -354,12 +338,16 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
          updatedItem.selectedBy = undefined;
          updatedItem.selectionDate = undefined;
      } else if (updatedItem.status === 'selected') {
-         if (!originalItem.selectedBy && !updatedItem.selectedBy) {
-             updatedItem.selectedBy = updates.selectedBy || 'Admin';
-         }
+         // If status is 'selected', ensure selectedBy has a value
+         // If the update doesn't provide a selectedBy, keep the original or default to 'Admin'
+         updatedItem.selectedBy = updates.selectedBy || originalItem.selectedBy || 'Admin';
+
+         // If the selection date isn't provided and wasn't there before, set it now
          if (!originalItem.selectionDate && !updatedItem.selectionDate) {
              updatedItem.selectionDate = new Date().toISOString();
-         } else if (updates.selectedBy && updatedItem.selectedBy !== originalItem.selectedBy) {
+         }
+         // If the selector is changed, update the date
+         else if (updates.selectedBy && updatedItem.selectedBy !== originalItem.selectedBy) {
             updatedItem.selectionDate = new Date().toISOString();
          }
      }
@@ -371,7 +359,6 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
          ...giftItems.slice(itemIndex + 1),
      ];
 
-     console.log(`[${new Date().toISOString()}] Item ${itemId} updated by admin. New data:`, updatedItem);
      triggerRevalidation();
      return JSON.parse(JSON.stringify(updatedItem));
 }
@@ -383,14 +370,12 @@ export async function updateGift(itemId: string, updates: Partial<Omit<GiftItem,
  * @returns A promise resolving to true if successful, false otherwise.
  */
 export async function deleteGift(itemId: string): Promise<boolean> {
-    console.log(`[${new Date().toISOString()}] deleteGift called for item ${itemId}`);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 100));
     const initialLength = giftItems.length;
     giftItems = giftItems.filter(item => item.id !== itemId);
     const success = giftItems.length < initialLength;
     if (success) {
-        console.log(`[${new Date().toISOString()}] Item ${itemId} deleted by admin. Total items: ${giftItems.length}`);
         triggerRevalidation();
     } else {
         console.warn(`[${new Date().toISOString()}] Item ${itemId} not found for deletion by admin.`);
@@ -404,7 +389,6 @@ export async function deleteGift(itemId: string): Promise<boolean> {
  * @returns A promise resolving to the CSV string.
  */
 export async function exportGiftsToCSV(): Promise<string> {
-    console.log(`[${new Date().toISOString()}] exportGiftsToCSV called`);
     // Simulate async
     // await new Promise(resolve => setTimeout(resolve, 50));
     const headers = ['ID', 'Nome', 'Descrição', 'Categoria', 'Status', 'Selecionado Por', 'Data Seleção'];
@@ -422,14 +406,20 @@ export async function exportGiftsToCSV(): Promise<string> {
     ].map(value => `"${String(value).replace(/"/g, '""')}"`)
      .join(','));
 
-    console.log(`[${new Date().toISOString()}] CSV export generated with ${rows.length} rows.`);
     return [headers.join(','), ...rows].join('\n');
 }
 
 // Example: Function to log the current state of the store (for debugging)
+// Keeping this function but commenting out the automatic call might be useful for manual debugging
 export async function logCurrentStoreState() {
-    console.log("--- Current In-Memory Store State ---");
-    console.log("Event Settings:", JSON.stringify(eventSettings, null, 2)); // Pretty print
-    console.log("Gift Items:", JSON.stringify(giftItems, null, 2)); // Pretty print
-    console.log("-------------------------------------");
+    // console.log("--- Current In-Memory Store State ---");
+    // console.log("Event Settings:", JSON.stringify(eventSettings, null, 2)); // Pretty print
+    // console.log("Gift Items:", JSON.stringify(giftItems, null, 2)); // Pretty print
+    // console.log("-------------------------------------");
+}
+
+// Example: Add a simple health check endpoint (optional)
+// This isn't standard practice for a data store file but shows a possibility
+export async function healthCheck() {
+    return { status: 'ok', timestamp: new Date().toISOString(), itemCount: giftItems.length };
 }

@@ -1,4 +1,5 @@
 
+
 /**
  * Represents event details to be added to a calendar.
  */

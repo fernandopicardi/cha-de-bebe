@@ -33,9 +33,11 @@ export default async function Home() {
             hour: '2-digit', minute: '2-digit', hour12: false
         });
      } else {
+       // Keep console.error for important parsing failures
        console.error("Failed to parse event date/time:", eventDetails.date, eventDetails.time);
      }
    } catch (e) {
+     // Keep console.error for important formatting errors
      console.error("Error formatting date/time:", e);
    }
 
@@ -143,3 +145,4 @@ export default async function Home() {
     </div>
   );
 }
+

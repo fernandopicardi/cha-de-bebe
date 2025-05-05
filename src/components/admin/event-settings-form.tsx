@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -46,7 +47,14 @@ const settingsFormSchema = z.object({
         (fileList) => !fileList || fileList.length === 0 || ACCEPTED_IMAGE_TYPES.includes(fileList[0].type),
       "Apenas arquivos .jpg, .jpeg, .png, .webp e .gif são aceitos."
     ),
-}).refine(data => !data.headerImageUrl || data.headerImageUrl.startsWith('data:image/') || data.headerImageUrl.startsWith('http'), {
+}).refine(data => {
+    // Skip URL validation if a file is being uploaded (headerImageUrl will be data URI or cleared later)
+    if (data.headerImageFile && data.headerImageFile.length > 0) {
+        return true;
+    }
+    // Validate existing URL if no file is being uploaded
+    return !data.headerImageUrl || data.headerImageUrl.startsWith('data:image/') || data.headerImageUrl.startsWith('http');
+}, {
     message: "URL da imagem inválido. Deve ser um URL http(s) ou uma imagem carregada.", // Custom validation message
     path: ["headerImageUrl"],
 });
@@ -66,7 +74,6 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
        setIsLoading(true);
        try {
          const settings = await getEventSettings();
-         console.log("Initial settings fetched:", settings); // Debug log
          setImagePreview(settings.headerImageUrl || null); // Set initial preview
          return {
              ...settings,
@@ -103,14 +110,12 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
      const file = watchedFileList?.[0]; // Get the first file from the FileList
 
      if (file) {
-       console.log("useEffect: Detected File instance", file.name, file.size);
        // Validation is now handled by Zod schema
 
        // Generate data URI for preview and store it in headerImageUrl
        const reader = new FileReader();
        reader.onloadend = () => {
          const result = reader.result as string;
-         console.log("useEffect: FileReader finished, setting RHF URL and preview to data URI.");
          setValue('headerImageUrl', result, { shouldValidate: true }); // Store data URI in headerImageUrl
          setImagePreview(result); // Update client-side preview state
        };
@@ -126,25 +131,22 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
      } else if (watchedFileList === null) {
         // File was explicitly cleared (e.g., by removeImage or resetting the form)
         // `removeImage` handles clearing the URL and preview as well.
-        console.log("useEffect: FileList is null (cleared).");
      } else {
         // No file selected or FileList is undefined (initial state)
         // Restore preview from potentially existing URL in RHF state if file is cleared implicitly
         const currentUrl = getValues('headerImageUrl');
-        if (currentUrl) {
-           console.log("useEffect: No file, using existing URL for preview.");
+        if (currentUrl && currentUrl.startsWith('http')) {
            setImagePreview(currentUrl);
-        } else {
-           console.log("useEffect: No file and no URL.");
+        } else if (!currentUrl) {
            setImagePreview(null); // Ensure preview is clear if no file and no URL
         }
+        // Don't update preview if currentUrl is a data URI (means previous upload hasn't been saved yet)
      }
 
    }, [watchedFileList, setValue, toast, getValues]);
 
 
    const removeImage = useCallback(async () => {
-      console.log("removeImage called.");
       setValue('headerImageFile', null, { shouldValidate: true }); // Clear the FileList in RHF state
       setValue('headerImageUrl', null, { shouldValidate: true }); // Clear the URL in RHF state
       setImagePreview(null); // Clear the preview state
@@ -153,24 +155,10 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
        if (fileInput) {
            fileInput.value = '';
        }
-        // Fetch initial settings again to potentially restore original image if needed
-        // This is optional, depends on desired behavior when removing a newly uploaded image
-        try {
-            const settings = await getEventSettings();
-            if (settings.headerImageUrl) {
-                // If there was an original URL, restore it
-                // setValue('headerImageUrl', settings.headerImageUrl, { shouldValidate: true });
-                // setImagePreview(settings.headerImageUrl);
-                // Decided against restoring automatically, requires explicit save to remove
-            }
-        } catch (error) {
-            console.error("Error fetching settings after removing image:", error);
-        }
    }, [setValue]);
 
 
    const onSubmit = async (data: SettingsFormData) => {
-     console.log("onSubmit started. Raw form data:", data);
 
      // headerImageUrl already contains data URI if a file was selected and read successfully,
      // or the initial URL, or null if removed/cleared.
@@ -188,8 +176,6 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
      };
 
     try {
-      console.log("Submitting data to updateEventSettings:", settingsToSave);
-
       await updateEventSettings(settingsToSave); // This now handles revalidation internally
 
       toast({ title: "Sucesso!", description: "Detalhes do evento atualizados." });
@@ -197,7 +183,6 @@ export default function AdminEventSettingsForm({ onSave }: AdminEventSettingsFor
       // Re-fetch settings to update the form state with saved data
       try {
         const latestSettings = await getEventSettings();
-        console.log("Refetched settings after save:", latestSettings);
         reset({
           ...latestSettings,
           headerImageUrl: latestSettings.headerImageUrl || null,
