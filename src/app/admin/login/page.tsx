@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -26,7 +25,12 @@ export default function AdminLoginPage() {
   const [localError, setLocalError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
-  const { user, loading: authLoading, loginWithEmail, error: authError } = useAuth(); // Use login function from hook
+  const {
+    user,
+    loading: authLoading,
+    loginWithEmail,
+    error: authError,
+  } = useAuth(); // Use login function from hook
 
   // Redirect if already logged in
   useEffect(() => {
@@ -44,27 +48,30 @@ export default function AdminLoginPage() {
     console.log("Admin Login: Attempting login with email:", email);
 
     try {
-        // Call the login function from the hook
-        await loginWithEmail(email, password);
-        // Successful login is handled by the useEffect redirecting
-        console.log("Admin Login: loginWithEmail successful (redirect handled by effect).");
-        toast({
-            title: "Login Bem-sucedido!",
-            description: "Redirecionando para o painel...",
-        });
-        // No need to manually redirect here, useEffect handles it based on user state change
+      // Call the login function from the hook
+      await loginWithEmail(email, password);
+      // Successful login is handled by the useEffect redirecting
+      console.log(
+        "Admin Login: loginWithEmail successful (redirect handled by effect).",
+      );
+      toast({
+        title: "Login Bem-sucedido!",
+        description: "Redirecionando para o painel...",
+      });
+      // No need to manually redirect here, useEffect handles it based on user state change
     } catch (err: any) {
-        console.error("Admin Login: Login failed.", err);
-        // Use a more specific error message if available, otherwise generic
-        const message = err.code === 'auth/invalid-credential'
-            ? "E-mail ou senha inválidos."
-            : err.message || "Falha no login. Verifique suas credenciais.";
-        setLocalError(message);
-        toast({
-            title: "Erro no Login",
-            description: message,
-            variant: "destructive",
-        });
+      console.error("Admin Login: Login failed.", err);
+      // Use a more specific error message if available, otherwise generic
+      const message =
+        err.code === "auth/invalid-credential"
+          ? "E-mail ou senha inválidos."
+          : err.message || "Falha no login. Verifique suas credenciais.";
+      setLocalError(message);
+      toast({
+        title: "Erro no Login",
+        description: message,
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -72,23 +79,23 @@ export default function AdminLoginPage() {
 
   // Show loading spinner while checking auth state initially
   if (authLoading) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-            <p className="text-lg text-muted-foreground">Verificando sessão...</p>
-        </div>
-      );
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Verificando sessão...</p>
+      </div>
+    );
   }
 
   // If user becomes authenticated after initial check, useEffect will redirect
   // This prevents showing the login form briefly before redirecting
   if (user) {
-     return (
-        <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-            <p className="text-lg text-muted-foreground">Redirecionando...</p>
-        </div>
-      );
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Redirecionando...</p>
+      </div>
+    );
   }
 
   return (
@@ -139,17 +146,20 @@ export default function AdminLoginPage() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Entrando...
                 </>
               ) : (
-                 <>
-                    <LogIn className="mr-2 h-4 w-4" /> Entrar
-                 </>
+                <>
+                  <LogIn className="mr-2 h-4 w-4" /> Entrar
+                </>
               )}
             </Button>
           </form>
         </CardContent>
-         <CardFooter className="flex flex-col items-center space-y-2 text-sm">
-          <Link href="/" className="hover:underline text-muted-foreground hover:text-primary">
+        <CardFooter className="flex flex-col items-center space-y-2 text-sm">
+          <Link
+            href="/"
+            className="hover:underline text-muted-foreground hover:text-primary"
+          >
             <Button variant="link" size="sm" className="px-0">
-                <Home className="mr-1 h-3 w-3" /> Voltar para a Página Inicial
+              <Home className="mr-1 h-3 w-3" /> Voltar para a Página Inicial
             </Button>
           </Link>
         </CardFooter>

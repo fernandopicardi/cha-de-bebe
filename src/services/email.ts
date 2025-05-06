@@ -1,18 +1,23 @@
-'use server';
+"use server";
 
-import type { GiftItem, EventSettings } from '@/data/gift-store';
-import { addToCalendar } from './calendar'; // Import calendar service
+import type { GiftItem, EventSettings } from "@/data/gift-store";
+import { addToCalendar } from "./calendar"; // Import calendar service
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@example.com'; // Use default if not set
+const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@example.com"; // Use default if not set
 const PARENT_NAMES = process.env.PARENT_NAMES || "[Nome dos Pais]"; // Get parent names from env or use placeholder
 
 // Basic validation
 if (!RESEND_API_KEY) {
-  console.warn("Email Service: RESEND_API_KEY environment variable is not set. Email sending will be disabled.");
+  console.warn(
+    "Email Service: RESEND_API_KEY environment variable is not set. Email sending will be disabled.",
+  );
 }
-if (!process.env.FROM_EMAIL) { // Check specifically if the original env var was set
-    console.warn("Email Service: FROM_EMAIL environment variable is not set. Defaulting to 'noreply@example.com'.");
+if (!process.env.FROM_EMAIL) {
+  // Check specifically if the original env var was set
+  console.warn(
+    "Email Service: FROM_EMAIL environment variable is not set. Defaulting to 'noreply@example.com'.",
+  );
 }
 
 /**
@@ -29,49 +34,60 @@ export async function sendGiftReminderEmail(
   guestName: string,
   item: GiftItem,
   quantitySelected: number,
-  eventSettings: EventSettings
+  eventSettings: EventSettings,
 ): Promise<void> {
   if (!RESEND_API_KEY || !FROM_EMAIL) {
-    console.log("Email Service: Skipping email send due to missing API key or FROM address.");
+    console.log(
+      "Email Service: Skipping email send due to missing API key or FROM address.",
+    );
     return; // Don't proceed if Resend isn't configured
   }
   if (!guestEmail) {
-     console.log("Email Service: Skipping email send because guest email is missing.");
-     return;
+    console.log(
+      "Email Service: Skipping email send because guest email is missing.",
+    );
+    return;
   }
 
-  console.log(`Email Service: Preparing reminder email for ${guestName} <${guestEmail}> for item "${item.name}" (Qty: ${quantitySelected})`);
+  console.log(
+    `Email Service: Preparing reminder email for ${guestName} <${guestEmail}> for item "${item.name}" (Qty: ${quantitySelected})`,
+  );
 
-   // Format event date and time
-   let formattedDateTime = "Data e hora a confirmar";
-   if (eventSettings.date && eventSettings.time) {
-     try {
-       const date = new Date(`${eventSettings.date}T${eventSettings.time}:00`);
-       if (!isNaN(date.getTime())) {
-           formattedDateTime = date.toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' });
-       }
-     } catch (e) { console.error("Error formatting date for email:", e); }
-   }
+  // Format event date and time
+  let formattedDateTime = "Data e hora a confirmar";
+  if (eventSettings.date && eventSettings.time) {
+    try {
+      const date = new Date(`${eventSettings.date}T${eventSettings.time}:00`);
+      if (!isNaN(date.getTime())) {
+        formattedDateTime = date.toLocaleString("pt-BR", {
+          dateStyle: "full",
+          timeStyle: "short",
+        });
+      }
+    } catch (e) {
+      console.error("Error formatting date for email:", e);
+    }
+  }
 
-   // Generate calendar links
-   let googleCalendarLink = '#';
-   let iCalLink = '#';
-   try {
-       googleCalendarLink = addToCalendar(eventSettings, 'google');
-       iCalLink = addToCalendar(eventSettings, 'ical');
-   } catch(e) {
-       console.error("Error generating calendar links for email:", e);
-   }
+  // Generate calendar links
+  let googleCalendarLink = "#";
+  let iCalLink = "#";
+  try {
+    googleCalendarLink = addToCalendar(eventSettings, "google");
+    iCalLink = addToCalendar(eventSettings, "ical");
+  } catch (e) {
+    console.error("Error generating calendar links for email:", e);
+  }
 
-   const isQuantityItem = typeof item.totalQuantity === 'number' && item.totalQuantity > 0;
-   const itemDisplayName = `${item.name}${isQuantityItem ? ` (${quantitySelected} unidade${quantitySelected > 1 ? 's' : ''})` : ''}`;
+  const isQuantityItem =
+    typeof item.totalQuantity === "number" && item.totalQuantity > 0;
+  const itemDisplayName = `${item.name}${isQuantityItem ? ` (${quantitySelected} unidade${quantitySelected > 1 ? "s" : ""})` : ""}`;
 
+  // Email subject
+  const subject = `Lembrete do presente: ${item.name} - Chá de Bebê ${eventSettings.babyName || ""}`;
 
-   // Email subject
-   const subject = `Lembrete do presente: ${item.name} - Chá de Bebê ${eventSettings.babyName || ''}`;
-
-   // Email HTML body using template literals for better readability
-   const htmlBody = `
+  // Email HTML body using template literals for better readability
+  const htmlBody = `
      <!DOCTYPE html>
      <html>
      <head>
@@ -102,7 +118,7 @@ export async function sendGiftReminderEmail(
      <body>
        <div class="email-container">
          <div class="header">
-           <h1>Lembrete do Chá de Bebê ${eventSettings.babyName ? `de ${eventSettings.babyName}` : ''}!</h1>
+           <h1>Lembrete do Chá de Bebê ${eventSettings.babyName ? `de ${eventSettings.babyName}` : ""}!</h1>
          </div>
 
          <div class="content">
@@ -114,16 +130,16 @@ export async function sendGiftReminderEmail(
            <div class="item-details">
              <h2>🎁 Presente Selecionado</h2>
              <p><strong>Item:</strong> ${itemDisplayName}</p>
-             ${item.description ? `<p><strong>Detalhes:</strong> ${item.description}</p>` : ''}
-             ${item.imageUrl ? `<div class="item-image-container"><img src="${item.imageUrl}" alt="${item.name}" class="item-image"></div>` : ''}
+             ${item.description ? `<p><strong>Detalhes:</strong> ${item.description}</p>` : ""}
+             ${item.imageUrl ? `<div class="item-image-container"><img src="${item.imageUrl}" alt="${item.name}" class="item-image"></div>` : ""}
            </div>
 
            <div class="section event-details">
              <h2>🗓️ Detalhes do Evento</h2>
              <ul>
                <li><strong>Data e Hora:</strong> ${formattedDateTime}</li>
-               <li><strong>Local:</strong> ${eventSettings.location || 'A confirmar'}</li>
-               <li><strong>Endereço:</strong> ${eventSettings.address || 'A confirmar'}</li>
+               <li><strong>Local:</strong> ${eventSettings.location || "A confirmar"}</li>
+               <li><strong>Endereço:</strong> ${eventSettings.address || "A confirmar"}</li>
              </ul>
              <p class="calendar-links">
                Adicione ao seu calendário para não esquecer: <br>
@@ -145,36 +161,45 @@ export async function sendGiftReminderEmail(
      </html>
    `;
 
-   // --- Send Email using Resend ---
-   try {
-     console.log("Email Service: Sending email via Resend...");
-     const response = await fetch('https://api.resend.com/emails', {
-       method: 'POST',
-       headers: {
-         'Content-Type': 'application/json',
-         'Authorization': `Bearer ${RESEND_API_KEY}`,
-       },
-       body: JSON.stringify({
-         from: FROM_EMAIL,
-         to: guestEmail,
-         subject: subject,
-         html: htmlBody,
-       }),
-     });
+  // --- Send Email using Resend ---
+  try {
+    console.log("Email Service: Sending email via Resend...");
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: FROM_EMAIL,
+        to: guestEmail,
+        subject: subject,
+        html: htmlBody,
+      }),
+    });
 
-     const data = await response.json();
+    const data = await response.json();
 
-     if (!response.ok) {
-       console.error(`Email Service: Resend API error (${response.status}):`, data);
-       // Log specific error details if available
-       const errorMessage = data?.message || data?.error?.message || 'Failed to send email via Resend API';
-       throw new Error(errorMessage);
-     }
+    if (!response.ok) {
+      console.error(
+        `Email Service: Resend API error (${response.status}):`,
+        data,
+      );
+      // Log specific error details if available
+      const errorMessage =
+        data?.message ||
+        data?.error?.message ||
+        "Failed to send email via Resend API";
+      throw new Error(errorMessage);
+    }
 
-     console.log("Email Service: Email sent successfully via Resend. Response ID:", data.id);
-   } catch (error) {
-     console.error("Email Service: Error sending email:", error);
-     // Decide if you want to re-throw the error or handle it silently
-     // throw error; // Re-throwing might be better for debugging in development
-   }
+    console.log(
+      "Email Service: Email sent successfully via Resend. Response ID:",
+      data.id,
+    );
+  } catch (error) {
+    console.error("Email Service: Error sending email:", error);
+    // Decide if you want to re-throw the error or handle it silently
+    // throw error; // Re-throwing might be better for debugging in development
+  }
 }

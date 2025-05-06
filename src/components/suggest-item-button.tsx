@@ -6,24 +6,26 @@ import { PlusCircle } from "lucide-react";
 import SuggestItemDialog from "./suggest-item-dialog"; // Import the new dialog component
 
 interface SuggestItemButtonProps {
-    onSuggestionAdded?: () => void; // Callback to notify parent (passed down to dialog)
+  onSuggestionAdded?: () => void; // Callback to notify parent (passed down to dialog)
 }
 
-export default function SuggestItemButton({ onSuggestionAdded }: SuggestItemButtonProps) {
+export default function SuggestItemButton({
+  onSuggestionAdded,
+}: SuggestItemButtonProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const handleOpenDialog = () => {
-      setIsDialogOpen(true);
-  }
+    setIsDialogOpen(true);
+  };
 
-   const handleCloseDialog = () => {
-      setIsDialogOpen(false);
-  }
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false);
+  };
 
-   const handleSuccess = () => {
-      // Close dialog is handled inside SuggestItemDialog on success
-      onSuggestionAdded?.(); // Notify parent to refresh data
-  }
+  const handleSuccess = () => {
+    // Close dialog is handled inside SuggestItemDialog on success
+    onSuggestionAdded?.(); // Notify parent to refresh data
+  };
 
   return (
     <>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useEffect } from "react";
-import Image from 'next/image'; // Import Image
+import Image from "next/image"; // Import Image
 import {
   Dialog,
   DialogContent,
@@ -33,40 +33,61 @@ const ACCEPTED_IMAGE_TYPES = [
   "image/gif",
 ];
 
-
 // Define validation schema for adding an item, including email fields
-const AddItemSchema = z.object({
-  itemName: z.string().min(3, "Nome curto demais.").max(100, "Nome longo demais."),
-  itemDescription: z.string().max(200, "Descrição longa demais.").optional(),
-  suggesterName: z.string().min(2, "Nome curto demais.").max(50, "Nome longo demais."),
-  // Field to store the data URI temporarily for upload
-  imageDataUri: z.string().optional().nullable(),
-  // Field for the file input itself - allow FileList or null
-  imageFile: z.any().optional().nullable(),
-  // Email fields
-  sendReminderEmail: z.boolean().default(false),
-  guestEmail: z.string().email("Formato de e-mail inválido.").optional().or(z.literal("")),
-}).refine(data => !data.sendReminderEmail || (data.sendReminderEmail && data.guestEmail && data.guestEmail.length > 0), {
-    message: "E-mail é obrigatório para receber o lembrete.",
-    path: ["guestEmail"],
-});
-
+const AddItemSchema = z
+  .object({
+    itemName: z
+      .string()
+      .min(3, "Nome curto demais.")
+      .max(100, "Nome longo demais."),
+    itemDescription: z.string().max(200, "Descrição longa demais.").optional(),
+    suggesterName: z
+      .string()
+      .min(2, "Nome curto demais.")
+      .max(50, "Nome longo demais."),
+    // Field to store the data URI temporarily for upload
+    imageDataUri: z.string().optional().nullable(),
+    // Field for the file input itself - allow FileList or null
+    imageFile: z.any().optional().nullable(),
+    // Email fields
+    sendReminderEmail: z.boolean().default(false),
+    guestEmail: z
+      .string()
+      .email("Formato de e-mail inválido.")
+      .optional()
+      .or(z.literal("")),
+  })
+  .refine(
+    (data) =>
+      !data.sendReminderEmail ||
+      (data.sendReminderEmail && data.guestEmail && data.guestEmail.length > 0),
+    {
+      message: "E-mail é obrigatório para receber o lembrete.",
+      path: ["guestEmail"],
+    },
+  );
 
 type AddItemFormData = z.infer<typeof AddItemSchema>;
 
 interface SuggestItemDialogProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onSuccess: () => void; // Callback to notify parent
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void; // Callback to notify parent
 }
 
-export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: SuggestItemDialogProps) {
+export default function SuggestItemDialog({
+  isOpen,
+  onClose,
+  onSuccess,
+}: SuggestItemDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => { setIsClient(true); }, []);
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const {
     register,
@@ -79,8 +100,13 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
   } = useForm<AddItemFormData>({
     resolver: zodResolver(AddItemSchema),
     defaultValues: {
-      itemName: "", itemDescription: "", suggesterName: "",
-      imageDataUri: null, imageFile: null, sendReminderEmail: false, guestEmail: ""
+      itemName: "",
+      itemDescription: "",
+      suggesterName: "",
+      imageDataUri: null,
+      imageFile: null,
+      sendReminderEmail: false,
+      guestEmail: "",
     },
   });
 
@@ -95,24 +121,35 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
     const file = fileList?.[0];
 
     if (file) {
-       // Ensure it's a File object
+      // Ensure it's a File object
       if (!(file instanceof File)) {
-          console.warn("SuggestItemDialog: imageFile is not a File object.", file);
-          setValue("imageFile", null);
-          setValue("imageDataUri", null);
-          setImagePreview(null);
-          return;
+        console.warn(
+          "SuggestItemDialog: imageFile is not a File object.",
+          file,
+        );
+        setValue("imageFile", null);
+        setValue("imageDataUri", null);
+        setImagePreview(null);
+        return;
       }
       // Validation
       if (file.size > MAX_FILE_SIZE) {
-        toast({ title: "Erro", description: `Máx ${MAX_FILE_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
+        toast({
+          title: "Erro",
+          description: `Máx ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
+          variant: "destructive",
+        });
         setValue("imageFile", null);
         setValue("imageDataUri", null); // Clear data URI if file invalid
         setImagePreview(null);
         return;
       }
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        toast({ title: "Erro", description: "Tipo inválido (JPG, PNG, etc).", variant: "destructive" });
+        toast({
+          title: "Erro",
+          description: "Tipo inválido (JPG, PNG, etc).",
+          variant: "destructive",
+        });
         setValue("imageFile", null);
         setValue("imageDataUri", null);
         setImagePreview(null);
@@ -126,31 +163,37 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
         setValue("imageDataUri", result, { shouldValidate: true }); // Store data URI
         setImagePreview(result);
       };
-       reader.onerror = (error) => {
-            console.error("FileReader error:", error);
-            toast({ title: "Erro ao Ler Imagem", description: "Não foi possível carregar a prévia da imagem.", variant: "destructive" });
-            setValue("imageFile", null);
-            setValue("imageDataUri", null);
-            setImagePreview(null);
-       };
+      reader.onerror = (error) => {
+        console.error("FileReader error:", error);
+        toast({
+          title: "Erro ao Ler Imagem",
+          description: "Não foi possível carregar a prévia da imagem.",
+          variant: "destructive",
+        });
+        setValue("imageFile", null);
+        setValue("imageDataUri", null);
+        setImagePreview(null);
+      };
       reader.readAsDataURL(file);
     } else {
       // File explicitly cleared or no file selected initially
-       const currentDataUri = getValues("imageDataUri");
-       if (currentDataUri) { // Only clear if one was set
-          setValue("imageDataUri", null);
-          setImagePreview(null);
-       }
+      const currentDataUri = getValues("imageDataUri");
+      if (currentDataUri) {
+        // Only clear if one was set
+        setValue("imageDataUri", null);
+        setImagePreview(null);
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedImageFile, isClient, setValue, toast, getValues]);
-
 
   const removeImage = useCallback(() => {
     setValue("imageFile", null);
     setValue("imageDataUri", null); // Clear stored data URI
     setImagePreview(null);
-    const fileInput = document.getElementById("imageFile-suggest") as HTMLInputElement | null;
+    const fileInput = document.getElementById(
+      "imageFile-suggest",
+    ) as HTMLInputElement | null;
     if (fileInput) fileInput.value = "";
   }, [setValue]);
 
@@ -159,39 +202,51 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
     console.log("SuggestItemDialog: Submitting suggestion...");
     try {
       // Prepare data for addSuggestion, including email fields
-       const suggestionPayload: SuggestionData = {
-            itemName: data.itemName,
-            itemDescription: data.itemDescription,
-            suggesterName: data.suggesterName,
-            imageDataUri: data.imageDataUri,
-            sendReminderEmail: data.sendReminderEmail,
-            guestEmail: data.guestEmail,
-          };
+      const suggestionPayload: SuggestionData = {
+        itemName: data.itemName,
+        itemDescription: data.itemDescription,
+        suggesterName: data.suggesterName,
+        imageDataUri: data.imageDataUri,
+        sendReminderEmail: data.sendReminderEmail,
+        guestEmail: data.guestEmail,
+      };
 
       // Pass data including the imageDataUri to the backend function
       const newItem = await addSuggestion(suggestionPayload);
 
       if (newItem) {
-          console.log("SuggestItemDialog: Suggestion added successfully:", newItem);
-          toast({
-            title: "Item Adicionado!",
-            description: `Obrigado, ${data.suggesterName}! "${data.itemName}" adicionado e escolhido.`,
-            variant: "default", // Use default or success if available
-            className: "bg-success text-success-foreground border-success", // Example success styling
-          });
-          onSuccess(); // Call parent callback
-          reset();
-          setImagePreview(null);
-          onClose(); // Close the dialog
+        console.log(
+          "SuggestItemDialog: Suggestion added successfully:",
+          newItem,
+        );
+        toast({
+          title: "Item Adicionado!",
+          description: `Obrigado, ${data.suggesterName}! "${data.itemName}" adicionado e escolhido.`,
+          variant: "default", // Use default or success if available
+          className: "bg-success text-success-foreground border-success", // Example success styling
+        });
+        onSuccess(); // Call parent callback
+        reset();
+        setImagePreview(null);
+        onClose(); // Close the dialog
       } else {
-          // Handle case where addSuggestion returns null (e.g., validation error server-side)
-          console.error("SuggestItemDialog: Failed to add suggestion (backend returned null).");
-          toast({ title: "Erro", description: "Não foi possível adicionar. Tente novamente.", variant: "destructive" });
+        // Handle case where addSuggestion returns null (e.g., validation error server-side)
+        console.error(
+          "SuggestItemDialog: Failed to add suggestion (backend returned null).",
+        );
+        toast({
+          title: "Erro",
+          description: "Não foi possível adicionar. Tente novamente.",
+          variant: "destructive",
+        });
       }
-
     } catch (error) {
       console.error("Erro ao adicionar item:", error);
-      toast({ title: "Ops!", description: "Não foi possível adicionar. Tente novamente.", variant: "destructive" });
+      toast({
+        title: "Ops!",
+        description: "Não foi possível adicionar. Tente novamente.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -209,114 +264,205 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
       <DialogContent className="sm:max-w-[480px] bg-card">
         <DialogHeader>
           <DialogTitle>Adicionar Novo Item</DialogTitle>
-          <DialogDescription>Adicione um item à lista. Ele será marcado como escolhido por você.</DialogDescription>
+          <DialogDescription>
+            Adicione um item à lista. Ele será marcado como escolhido por você.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
           {/* Item Name */}
           <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="itemName-suggest" className="text-right pt-2">Nome*</Label>
+            <Label htmlFor="itemName-suggest" className="text-right pt-2">
+              Nome*
+            </Label>
             <div className="col-span-3">
-              <Input id="itemName-suggest" {...register("itemName")} className={`${errors.itemName ? "border-destructive" : ""}`} disabled={isSubmitting}/>
-              {errors.itemName && <p className="text-sm text-destructive mt-1">{errors.itemName.message}</p>}
+              <Input
+                id="itemName-suggest"
+                {...register("itemName")}
+                className={`${errors.itemName ? "border-destructive" : ""}`}
+                disabled={isSubmitting}
+              />
+              {errors.itemName && (
+                <p className="text-sm text-destructive mt-1">
+                  {errors.itemName.message}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Item Description */}
           <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="itemDescription-suggest" className="text-right pt-2">Descrição</Label>
+            <Label
+              htmlFor="itemDescription-suggest"
+              className="text-right pt-2"
+            >
+              Descrição
+            </Label>
             <div className="col-span-3">
-              <Textarea id="itemDescription-suggest" placeholder="Ex: Marca, cor, link..." {...register("itemDescription")} className={`${errors.itemDescription ? "border-destructive" : ""}`} disabled={isSubmitting} />
-              {errors.itemDescription && <p className="text-sm text-destructive mt-1">{errors.itemDescription.message}</p>}
+              <Textarea
+                id="itemDescription-suggest"
+                placeholder="Ex: Marca, cor, link..."
+                {...register("itemDescription")}
+                className={`${errors.itemDescription ? "border-destructive" : ""}`}
+                disabled={isSubmitting}
+              />
+              {errors.itemDescription && (
+                <p className="text-sm text-destructive mt-1">
+                  {errors.itemDescription.message}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Image Upload */}
           <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="imageFile-suggest" className="text-right pt-2">Imagem (Opc.)</Label>
+            <Label htmlFor="imageFile-suggest" className="text-right pt-2">
+              Imagem (Opc.)
+            </Label>
             <div className="col-span-3">
-               <div className="flex items-center gap-4">
-                 {imagePreview && (
-                    <div className="relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0">
-                       <Image key={imagePreview} src={imagePreview} alt="Prévia" fill style={{ objectFit: 'cover' }} sizes="64px" unoptimized onError={() => setImagePreview(null)} />
-                       <Button type="button" variant="destructive" size="icon" className="absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100" onClick={removeImage} title="Remover" disabled={isSubmitting}>
-                          <XCircle className="h-3 w-3" />
-                       </Button>
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <Input
-                      id="imageFile-suggest"
-                      type="file"
-                      accept={ACCEPTED_IMAGE_TYPES.join(",")}
-                      {...register("imageFile")} // Register file input
-                      className={` ${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
-                      disabled={isSubmitting}
+              <div className="flex items-center gap-4">
+                {imagePreview && (
+                  <div className="relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0">
+                    <Image
+                      key={imagePreview}
+                      src={imagePreview}
+                      alt="Prévia"
+                      fill
+                      style={{ objectFit: "cover" }}
+                      sizes="64px"
+                      unoptimized
+                      onError={() => setImagePreview(null)}
                     />
-                     <p className="text-xs text-muted-foreground mt-1">JPG, PNG, etc (Máx 5MB).</p>
-                     {errors.imageFile && typeof errors.imageFile.message === 'string' && (<p className="text-sm text-destructive mt-1">{errors.imageFile.message}</p>)}
-                     {/* Error for imageDataUri is less likely needed as it's derived */}
-                     {errors.imageDataUri && (<p className="text-sm text-destructive mt-1">{errors.imageDataUri.message}</p>)}
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100"
+                      onClick={removeImage}
+                      title="Remover"
+                      disabled={isSubmitting}
+                    >
+                      <XCircle className="h-3 w-3" />
+                    </Button>
                   </div>
-               </div>
-            </div>
-          </div>
-
-
-          {/* Suggester Name */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="suggesterName-suggest" className="text-right">Seu Nome*</Label>
-            <div className="col-span-3">
-              <Input id="suggesterName-suggest" {...register("suggesterName")} className={`${errors.suggesterName ? "border-destructive" : ""}`} disabled={isSubmitting} />
-              {errors.suggesterName && <p className="text-sm text-destructive mt-1">{errors.suggesterName.message}</p>}
-            </div>
-          </div>
-
-           {/* Email Reminder Section */}
-           <div className="col-span-4 grid grid-cols-subgrid gap-4 items-center">
-              <div className="col-span-4 flex items-center space-x-2 justify-start pl-[calc(25%+1rem)]">
-                <Checkbox
-                  id="sendReminderEmail-suggest"
-                  {...register("sendReminderEmail")}
-                  disabled={isSubmitting}
-                  aria-describedby="sendReminderEmail-suggest-label"
-                />
-                <Label htmlFor="sendReminderEmail-suggest" className="text-sm font-normal text-muted-foreground cursor-pointer" id="sendReminderEmail-suggest-label">
-                   Receber lembrete deste presente por e-mail?
-                </Label>
-              </div>
-            </div>
-
-           {/* Conditional Guest Email Input */}
-            {watchSendReminder && (
-              <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
-                <Label htmlFor="guestEmail-suggest" className="text-right">
-                  Seu E-mail*
-                </Label>
-                <div className="col-span-3">
+                )}
+                <div className="flex-1">
                   <Input
-                    id="guestEmail-suggest"
-                    type="email"
-                    placeholder="seuemail@exemplo.com"
-                    {...register("guestEmail")}
-                    className={`col-span-3 ${errors.guestEmail ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                    id="imageFile-suggest"
+                    type="file"
+                    accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                    {...register("imageFile")} // Register file input
+                    className={` ${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
                     disabled={isSubmitting}
-                    aria-invalid={errors.guestEmail ? "true" : "false"}
-                    aria-describedby="guestEmail-suggest-error"
                   />
-                  {errors.guestEmail && (
-                    <p id="guestEmail-suggest-error" className="text-sm text-destructive mt-1">
-                      {errors.guestEmail.message}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    JPG, PNG, etc (Máx 5MB).
+                  </p>
+                  {errors.imageFile &&
+                    typeof errors.imageFile.message === "string" && (
+                      <p className="text-sm text-destructive mt-1">
+                        {errors.imageFile.message}
+                      </p>
+                    )}
+                  {/* Error for imageDataUri is less likely needed as it's derived */}
+                  {errors.imageDataUri && (
+                    <p className="text-sm text-destructive mt-1">
+                      {errors.imageDataUri.message}
                     </p>
                   )}
                 </div>
               </div>
-            )}
+            </div>
+          </div>
 
+          {/* Suggester Name */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="suggesterName-suggest" className="text-right">
+              Seu Nome*
+            </Label>
+            <div className="col-span-3">
+              <Input
+                id="suggesterName-suggest"
+                {...register("suggesterName")}
+                className={`${errors.suggesterName ? "border-destructive" : ""}`}
+                disabled={isSubmitting}
+              />
+              {errors.suggesterName && (
+                <p className="text-sm text-destructive mt-1">
+                  {errors.suggesterName.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Email Reminder Section */}
+          <div className="col-span-4 grid grid-cols-subgrid gap-4 items-center">
+            <div className="col-span-4 flex items-center space-x-2 justify-start pl-[calc(25%+1rem)]">
+              <Checkbox
+                id="sendReminderEmail-suggest"
+                {...register("sendReminderEmail")}
+                disabled={isSubmitting}
+                aria-describedby="sendReminderEmail-suggest-label"
+              />
+              <Label
+                htmlFor="sendReminderEmail-suggest"
+                className="text-sm font-normal text-muted-foreground cursor-pointer"
+                id="sendReminderEmail-suggest-label"
+              >
+                Receber lembrete deste presente por e-mail?
+              </Label>
+            </div>
+          </div>
+
+          {/* Conditional Guest Email Input */}
+          {watchSendReminder && (
+            <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
+              <Label htmlFor="guestEmail-suggest" className="text-right">
+                Seu E-mail*
+              </Label>
+              <div className="col-span-3">
+                <Input
+                  id="guestEmail-suggest"
+                  type="email"
+                  placeholder="seuemail@exemplo.com"
+                  {...register("guestEmail")}
+                  className={`col-span-3 ${errors.guestEmail ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  disabled={isSubmitting}
+                  aria-invalid={errors.guestEmail ? "true" : "false"}
+                  aria-describedby="guestEmail-suggest-error"
+                />
+                {errors.guestEmail && (
+                  <p
+                    id="guestEmail-suggest-error"
+                    className="text-sm text-destructive mt-1"
+                  >
+                    {errors.guestEmail.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           <DialogFooter className="mt-4">
-            <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancelar</Button></DialogClose>
-            <Button type="submit" disabled={isSubmitting} className="bg-accent text-accent-foreground hover:bg-accent/90">
-              {isSubmitting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adicionando...</>) : (<><Send className="mr-2 h-4 w-4" /> Adicionar e Escolher</>)}
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={isSubmitting}>
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                  Adicionando...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" /> Adicionar e Escolher
+                </>
+              )}
             </Button>
           </DialogFooter>
         </form>
