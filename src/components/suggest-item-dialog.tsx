@@ -24,15 +24,16 @@ import { Loader2, Send, Image as ImageIcon, XCircle } from 'lucide-react';
 import { addSuggestion, type SuggestionData } from '@/data/gift-store'; // Uses updated function
 
 // Constants for file validation
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ACCEPTED_IMAGE_TYPES = [
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const ACCEPTED_MEDIA_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/webp',
   'image/gif',
+  'video/mp4',
+  'video/quicktime',
 ];
-
 // Define validation schema for adding an item, without email fields
 const AddItemSchema = z.object({
   itemName: z
@@ -125,7 +126,7 @@ export default function SuggestItemDialog({
         setImagePreview(null);
         return;
       }
-      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      if (!ACCEPTED_MEDIA_TYPES.includes(file.type)) {
         toast({
           title: 'Erro',
           description: 'Tipo inválido (JPG, PNG, etc).',
@@ -323,15 +324,12 @@ export default function SuggestItemDialog({
                 <Input
                   id='imageFile-suggest'
                   type='file'
-                  accept={ACCEPTED_IMAGE_TYPES.join(',')}
+                  accept={ACCEPTED_MEDIA_TYPES.join(',')}
                   {...register('imageFile')} // Register file input
                   className={` ${errors.imageFile ? 'border-destructive' : ''} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
                   disabled={isSubmitting}
                 />
-                <p className='text-xs text-muted-foreground mt-1'>
-                  JPG, PNG, etc (Máx 5MB).
-                </p>
-                {errors.imageFile &&
+                 <p className='text-xs text-muted-foreground mt-1'>JPG, PNG, GIF, WebP, MP4, MOV (Máx 50MB).</p>{errors.imageFile &&
                   typeof errors.imageFile.message === 'string' && (
                     <p className='text-sm text-destructive mt-1'>
                       {errors.imageFile.message}

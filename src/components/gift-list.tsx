@@ -52,13 +52,31 @@ export default function GiftList({
     );
   }, [items, filterStatus]);
 
+  // Helper function to determine the effective status based on quantity
+  const getEffectiveStatus = (item: GiftItem): GiftItem['status'] => {
+      if (!item) return 'available'; // Should not happen, but safe default
+
+      const isQuantityItem = item.totalQuantity !== null && item.totalQuantity > 0;
+
+      if (item.status === 'not_needed') {
+          return 'not_needed';
+      }
+      if (isQuantityItem) {
+          return (item.selectedQuantity ?? 0) >= item.totalQuantity
+              ? 'selected'
+              : 'available';
+      }
+      return item.status; // For non-quantity items, return the stored status
+  };
+
+
   const filteredItems = useMemo(() => {
     const safeItems = Array.isArray(items) ? items : [];
     console.log(
       `GiftList (${filterStatus}): Filtering ${safeItems.length} items based on prop...`
     );
 
-    const result = safeItems.filter((item) => {
+    const initiallyFiltered = safeItems.filter((item) => {
       if (!item || typeof item.status === 'undefined' || !item.id) {
         console.warn(
           `GiftList (${filterStatus}): Skipping invalid item during filtering:`,
@@ -66,17 +84,7 @@ export default function GiftList({
         );
         return false;
       }
-      // Determine the effective status, considering quantity
-      const isQuantityItem =
-        item.totalQuantity !== null && item.totalQuantity > 0;
-      let effectiveStatus = item.status;
-
-      if (isQuantityItem && item.status !== 'not_needed') {
-        effectiveStatus =
-          (item.selectedQuantity ?? 0) >= item.totalQuantity
-            ? 'selected'
-            : 'available';
-      }
+      const effectiveStatus = getEffectiveStatus(item);
 
       const statusMatch =
         filterStatus === 'all' || effectiveStatus === filterStatus;
@@ -85,22 +93,47 @@ export default function GiftList({
         item.category?.toLowerCase() === filterCategory.toLowerCase();
       return statusMatch && categoryMatch;
     });
+
+    // Sort only if the filter is 'all'
+    if (filterStatus === 'all') {
+        initiallyFiltered.sort((a, b) => {
+            const statusA = getEffectiveStatus(a);
+            const statusB = getEffectiveStatus(b);
+
+            // Prioritize 'available' items
+            if (statusA === 'available' && statusB !== 'available') {
+                return -1; // a comes first
+            }
+            if (statusA !== 'available' && statusB === 'available') {
+                return 1; // b comes first
+            }
+
+             // Secondary sort: 'selected' before 'not_needed'
+             if (statusA === 'selected' && statusB === 'not_needed') {
+                return -1; // a comes first
+             }
+             if (statusA === 'not_needed' && statusB === 'selected') {
+                 return 1; // b comes first
+             }
+
+            // Optional: Add further sorting if statuses are the same (e.g., by name)
+            // return a.name.localeCompare(b.name);
+            return 0; // Keep original relative order if statuses are the same
+        });
+    }
+
+
     console.log(
-      `GiftList (${filterStatus}): Filtered down to ${result.length} items.`
+      `GiftList (${filterStatus}): Final filtered/sorted count: ${initiallyFiltered.length} items.`
     );
-    return result;
+    return initiallyFiltered;
   }, [items, filterStatus, filterCategory]);
 
   const handleSelectItemClick = (item: GiftItem) => {
     if (loadingItemId) return;
-    // Ensure item is actually available before opening dialog
-    const isQuantityItem =
-      item.totalQuantity !== null && item.totalQuantity > 0;
-    const isAvailable = isQuantityItem
-      ? (item.selectedQuantity ?? 0) < item.totalQuantity
-      : item.status === 'available';
+    const effectiveStatus = getEffectiveStatus(item);
 
-    if (isAvailable && item.status !== 'not_needed') {
+    if (effectiveStatus === 'available') {
       setSelectedItem(item);
       setIsDialogOpen(true);
     } else {
@@ -110,8 +143,6 @@ export default function GiftList({
         description: 'Este item não está mais disponível para seleção.',
         variant: 'destructive',
       });
-      // Optionally refresh data if status might be stale
-      // onItemAction?.();
     }
   };
 
@@ -177,19 +208,15 @@ export default function GiftList({
   };
 
   const getStatusBadge = (item: GiftItem) => {
-    const isQuantityItem =
-      item.totalQuantity !== null && item.totalQuantity > 0;
-    let displayStatus: GiftItem['status'] = item.status;
-    let quantityText = '';
+      const isQuantityItem = item.totalQuantity !== null && item.totalQuantity > 0;
+      const displayStatus = getEffectiveStatus(item); // Use the helper function
+      let quantityText = '';
 
-    if (item.status === 'not_needed') {
-      displayStatus = 'not_needed';
-    } else if (isQuantityItem) {
-      const selected = item.selectedQuantity ?? 0;
-      const total = item.totalQuantity ?? 0;
-      displayStatus = selected >= total ? 'selected' : 'available';
-      quantityText = `(${selected}/${total})`; // Add quantity text
-    }
+      if (isQuantityItem && displayStatus !== 'not_needed') {
+          const selected = item.selectedQuantity ?? 0;
+          const total = item.totalQuantity ?? 0;
+          quantityText = `(${selected}/${total})`; // Add quantity text
+      }
 
     switch (displayStatus) {
       case 'available':
@@ -279,18 +306,19 @@ export default function GiftList({
       <div className='text-center py-16 text-muted-foreground'>
         <Gift className='mx-auto h-12 w-12 mb-4' />
         <p>A lista de presentes ainda está vazia.</p>
+        <p className="text-sm mt-2">Use o botão "Adicionar um Item" acima para começar!</p>
       </div>
     );
   }
 
   if (isFilteredListEmpty) {
-    let emptyMessage = 'Nenhum item encontrado.';
+    let emptyMessage = 'Nenhum item encontrado para esta seleção.';
     if (filterStatus === 'available')
-      emptyMessage = 'Todos os presentes disponíveis já foram escolhidos.';
+      emptyMessage = 'Oba! Todos os presentes disponíveis já foram escolhidos.';
     if (filterStatus === 'selected')
       emptyMessage = 'Nenhum presente foi selecionado ainda.';
     if (filterStatus === 'not_needed')
-      emptyMessage = "Nenhum item marcado como 'Não Precisa'.";
+      emptyMessage = "Nenhum item marcado como 'Não Precisa' nesta lista.";
     console.log(
       `GiftList (${filterStatus}): Rendering specific empty message: ${emptyMessage}`
     );
@@ -310,15 +338,8 @@ export default function GiftList({
       {/* Responsive grid layout */}
       <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'>
         {filteredItems.map((item) => {
-          const isQuantityItem =
-            item.totalQuantity !== null && item.totalQuantity > 0;
-          const effectiveStatus =
-            isQuantityItem && item.status !== 'not_needed'
-              ? (item.selectedQuantity ?? 0) >= item.totalQuantity
-                ? 'selected'
-                : 'available'
-              : item.status;
-          const isAvailableForSelection = effectiveStatus === 'available';
+           const effectiveStatus = getEffectiveStatus(item);
+           const isAvailableForSelection = effectiveStatus === 'available';
 
           return (
             <Card
@@ -335,12 +356,20 @@ export default function GiftList({
                     style={{ objectFit: 'cover' }}
                     sizes='(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw' // Adjusted sizes
                     priority={filterStatus === 'all'} // Prioritize images in 'all' tab might help LCP
-                    unoptimized={item.imageUrl.startsWith('data:')} // Keep for data URIs if used
+                    // unoptimized={item.imageUrl.startsWith("data:")} // Keep for data URIs if used
                     data-ai-hint='baby gift item'
                     onError={(e) => {
                       console.warn(`Failed to load image: ${item.imageUrl}`);
                       (e.target as HTMLImageElement).style.display = 'none';
-                    }} // Hide broken image icon
+                      // Optionally display a placeholder or icon in the parent div
+                      const parent = (e.target as HTMLImageElement).parentElement;
+                      if(parent && !parent.querySelector('.placeholder-icon')) {
+                          const placeholder = document.createElement('div');
+                          placeholder.className = 'placeholder-icon flex items-center justify-center h-full w-full';
+                          placeholder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image-off text-muted-foreground/30"><path d="M10.4 10.4A3 3 0 0 0 12 12a3 3 0 0 0 1.6-4.4Z"/><path d="m21 1-9.2 9.2"/><path d="M13.5 5.5C15 4.5 16.5 4 18 4c2.8 0 5 2.2 5 5c0 1.5-.5 3-1.5 4.5L19 16"/><path d="M3 3v18h18"/><path d="M12 12.7a4.8 4.8 0 0 0-5.1-4.9A5 5 0 0 0 2 12.5V13a5 5 0 0 0 5 5h1.5"/></svg>`;
+                          parent.appendChild(placeholder);
+                      }
+                    }}
                   />
                 ) : (
                   <div className='flex items-center justify-center h-full w-full'>

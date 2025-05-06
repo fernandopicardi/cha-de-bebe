@@ -61,12 +61,14 @@ interface AdminItemManagementTableProps {
   onDataChange?: () => void; // Callback for parent component refresh
 }
 
-// Constants for file validation (used client-side)
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+// Constants for file validation (used client-side) - Updated to 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
   "image/jpg",
   "image/png",
+  "video/mp4", // Add video types
+  "video/quicktime",
   "image/webp",
   "image/gif",
 ];
@@ -954,7 +956,7 @@ export default function AdminItemManagementTable({
                     />
                     <p className="text-xs text-muted-foreground mt-1">
                       JPG, PNG, GIF, WebP (Máx 5MB).
-                    </p>
+                    </p><p className="text-xs text-muted-foreground mt-1">Videos and gifs are also accepted.</p>
                     {errors.imageFile &&
                       typeof errors.imageFile.message === "string" && (
                         <p className="text-sm text-destructive mt-1">
