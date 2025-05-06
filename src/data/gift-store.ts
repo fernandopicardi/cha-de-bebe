@@ -604,9 +604,10 @@ export async function addGift(
       const isQuantityItem = typeof totalQuantity === 'number' && totalQuantity > 0;
 
       // 2. Prepare data for Firestore
-      const dataToAdd = {
-          ...itemDetails,
+      const dataToAdd: Omit<GiftItem, 'id'> & { createdAt: any, selectionDate: any } = {
+          name: itemDetails.name.trim(),
           description: itemDetails.description?.trim() || null,
+          category: itemDetails.category,
           // Set status and selectedBy based on quantity or admin input
           status: itemDetails.status === 'not_needed' ? 'not_needed' : (isQuantityItem ? 'available' : itemDetails.status),
           selectedBy: itemDetails.status === 'selected' && !isQuantityItem ? (itemDetails.selectedBy?.trim() || "Admin") : null,
@@ -617,6 +618,7 @@ export async function addGift(
           totalQuantity: isQuantityItem ? totalQuantity : null,
           selectedQuantity: 0, // Initialize selected quantity to 0
       };
+
 
       // Validate required fields
       if (!dataToAdd.name || !dataToAdd.category || !dataToAdd.status) {
@@ -636,8 +638,17 @@ export async function addGift(
            dataToAdd.selectedQuantity = 0; // Ensure selected quantity is 0
        }
 
+        // Remove undefined fields manually before sending to Firestore
+        const finalDataToAdd: Record<string, any> = {};
+        for (const key in dataToAdd) {
+            if (dataToAdd[key as keyof typeof dataToAdd] !== undefined) {
+                finalDataToAdd[key] = dataToAdd[key as keyof typeof dataToAdd];
+            }
+        }
+
+
       // 3. Add document to Firestore
-      const docRef = await addFirestoreDoc(giftsCollectionRef, dataToAdd);
+      const docRef = await addFirestoreDoc(giftsCollectionRef, finalDataToAdd);
       console.log(`Firestore ADD_GIFT: Gift added successfully with ID: ${docRef.id}`);
       forceRevalidation("/admin"); // Revalidate admin page
 
@@ -656,9 +667,9 @@ export async function addGift(
         } else if (error instanceof Error && error.message.includes("Unsupported field value")) {
              console.error("Firestore ADD_GIFT: Invalid data provided. Potentially undefined field:", error);
              // You might want to log dataToAdd here for debugging
-             console.log("Data attempted to add:", dataToAdd);
+             console.log("Data attempted to add:", finalDataToAdd);
         }
-        return null; // Indicate failure
+        throw error; // Re-throw the error for the calling component
     }
 }
 
@@ -1094,4 +1105,3 @@ export async function getConfirmations(): Promise<Confirmation[]> {
 // Consider calling this less frequently, perhaps in a dedicated setup or via a manual trigger.
 // Calling it on every server render of a component using this module might be excessive.
 // initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));
-```

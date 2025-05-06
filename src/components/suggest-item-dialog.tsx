@@ -41,8 +41,8 @@ const AddItemSchema = z.object({
   suggesterName: z.string().min(2, "Nome curto demais.").max(50, "Nome longo demais."),
   // Field to store the data URI temporarily for upload
   imageDataUri: z.string().optional().nullable(),
-  // Field for the file input itself
-  imageFile: z.instanceof(FileList).optional().nullable(),
+  // Field for the file input itself - allow FileList or null
+  imageFile: z.any().optional().nullable(),
   // Email fields
   sendReminderEmail: z.boolean().default(false),
   guestEmail: z.string().email("Formato de e-mail inválido.").optional().or(z.literal("")),
@@ -89,12 +89,20 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
 
   // Handle image preview updates and store data URI
   useEffect(() => {
-    if (!isClient || !(watchedImageFile instanceof FileList)) return;
+    if (!isClient || !watchedImageFile) return; // Exit if not client or no file input value
 
-    const fileList = watchedImageFile;
+    const fileList = watchedImageFile as FileList | null; // Type cast
     const file = fileList?.[0];
 
     if (file) {
+       // Ensure it's a File object
+      if (!(file instanceof File)) {
+          console.warn("SuggestItemDialog: imageFile is not a File object.", file);
+          setValue("imageFile", null);
+          setValue("imageDataUri", null);
+          setImagePreview(null);
+          return;
+      }
       // Validation
       if (file.size > MAX_FILE_SIZE) {
         toast({ title: "Erro", description: `Máx ${MAX_FILE_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
@@ -118,9 +126,16 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
         setValue("imageDataUri", result, { shouldValidate: true }); // Store data URI
         setImagePreview(result);
       };
+       reader.onerror = (error) => {
+            console.error("FileReader error:", error);
+            toast({ title: "Erro ao Ler Imagem", description: "Não foi possível carregar a prévia da imagem.", variant: "destructive" });
+            setValue("imageFile", null);
+            setValue("imageDataUri", null);
+            setImagePreview(null);
+       };
       reader.readAsDataURL(file);
-    } else if (fileList === null || (typeof fileList === "object" && fileList?.length === 0)) {
-      // File explicitly cleared, clear data URI and preview
+    } else {
+      // File explicitly cleared or no file selected initially
        const currentDataUri = getValues("imageDataUri");
        if (currentDataUri) { // Only clear if one was set
           setValue("imageDataUri", null);
@@ -266,7 +281,7 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
                   aria-describedby="sendReminderEmail-suggest-label"
                 />
                 <Label htmlFor="sendReminderEmail-suggest" className="text-sm font-normal text-muted-foreground cursor-pointer" id="sendReminderEmail-suggest-label">
-                  Lembrar-me deste presente por e-mail?
+                   Receber lembrete deste presente por e-mail?
                 </Label>
               </div>
             </div>
@@ -309,5 +324,3 @@ export default function SuggestItemDialog({ isOpen, onClose, onSuccess }: Sugges
     </Dialog>
   );
 }
-
-```
