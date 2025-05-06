@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react"; // Added useEffect and useMemo
@@ -73,6 +74,7 @@ const ACCEPTED_IMAGE_TYPES = [
 
 
 // Validation Schema for the Add/Edit Form
+// Removed z.instanceof(FileList) to avoid SSR errors
 const giftFormSchema = z.object({
   name: z
     .string()
@@ -92,23 +94,29 @@ const giftFormSchema = z.object({
     .or(z.literal("")), // Allow selectedBy editing, map to null later
   // Holds existing URL, new data URI, or null for removal
   imageUrl: z.string().optional().nullable(),
-  // Captures file input - adjusted validation
-   imageFile: z
-    .union([
-      z.instanceof(FileList).optional().nullable(), // Accept FileList (from input type="file")
-      z.null(),                                   // Accept null
-      z.undefined(),                              // Accept undefined
-    ])
+  // Captures file input - Use z.any() or z.unknown() for SSR safety
+   imageFile: z.any()
     .refine((files) => {
-      if (!files || files.length === 0) return true; // Allow empty/null
-      const file = files[0];
-      return ACCEPTED_IMAGE_TYPES.includes(file.type); // Validate type
+        // Validation happens primarily client-side in useEffect
+        if (!files || files.length === 0) return true; // Allow empty/null
+        const file = files[0];
+        // Basic check if it looks like a file object (on client)
+        if (typeof File !== 'undefined' && file instanceof File) {
+            return ACCEPTED_IMAGE_TYPES.includes(file.type);
+        }
+        return true; // Pass validation on server if not a File
     }, "Tipo de arquivo inválido.")
     .refine((files) => {
-      if (!files || files.length === 0) return true; // Allow empty/null
-      const file = files[0];
-      return file.size <= MAX_FILE_SIZE; // Validate size
-    }, `Tamanho máximo ${MAX_FILE_SIZE / 1024 / 1024}MB.`),
+        if (!files || files.length === 0) return true; // Allow empty/null
+        const file = files[0];
+        // Basic check if it looks like a file object (on client)
+         if (typeof File !== 'undefined' && file instanceof File) {
+            return file.size <= MAX_FILE_SIZE; // Validate size
+         }
+         return true; // Pass validation on server if not a File
+    }, `Tamanho máximo ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
+    .optional()
+    .nullable(),
   // Quantity field - optional, must be a positive integer if provided
   totalQuantity: z.preprocess(
     (val) => (val === "" ? null : Number(val)), // Convert empty string to null, otherwise to number
@@ -184,9 +192,10 @@ export default function AdminItemManagementTable({
 
   // Handle image preview updates
   useEffect(() => {
-    if (!isClient || !watchedImageFile) return; // Exit if not client or no file input value
+    // Ensure this runs only on the client where FileList and File are defined
+    if (!isClient || !watchedImageFile) return;
 
-     const fileList = watchedImageFile as FileList | null; // Type cast
+     const fileList = watchedImageFile as FileList | null; // Type cast is safe here
      const file = fileList?.[0];
 
     if (file) {
@@ -200,7 +209,7 @@ export default function AdminItemManagementTable({
           return;
       }
 
-      // Manual Client-side validation (redundant with Zod, but safe fallback)
+      // Client-side validation (critical now that Zod schema is less strict)
       if (file.size > MAX_FILE_SIZE) {
         toast({ title: "Erro de Arquivo", description: `Máx ${MAX_FILE_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
         setValue("imageFile", null); // Clear invalid file
@@ -225,8 +234,8 @@ export default function AdminItemManagementTable({
         console.log("AdminItemManagementTable Dialog: Generated data URI preview.");
         setValue("imageUrl", result); // Store data URI
         setImagePreview(result);
-        // Trigger validation for the field after setting value
-        trigger("imageFile");
+        // Trigger validation for the field after setting value (optional, as validation moved here)
+        // trigger("imageFile");
       };
       reader.onerror = (err) => console.error("FileReader error:", err);
       reader.readAsDataURL(file);
@@ -238,7 +247,7 @@ export default function AdminItemManagementTable({
              console.log("AdminItemManagementTable Dialog: File selection cleared, reverting preview/URL to initial state:", initialUrl);
              setValue("imageUrl", initialUrl);
              setImagePreview(initialUrl);
-             trigger("imageFile"); // Re-validate after clearing
+             // trigger("imageFile"); // Re-validate after clearing (optional)
          }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -293,12 +302,12 @@ export default function AdminItemManagementTable({
   // Function to remove the image (sets imageUrl to null for submission)
   const removeImage = useCallback(() => {
     console.log("AdminItemManagementTable Dialog: Requesting image removal.");
-    setValue("imageFile", null); // Clear file input
+    setValue("imageFile", null); // Clear file input state
     setValue("imageUrl", null); // Set URL to null for removal signal
     setImagePreview(null); // Clear preview state
     const fileInput = document.getElementById("imageFile-dialog") as HTMLInputElement | null;
     if (fileInput) fileInput.value = "";
-    trigger("imageFile"); // Re-validate after removing
+    // trigger("imageFile"); // Re-validate after removing (optional)
   }, [setValue, trigger]);
 
   // Show toast and trigger parent refresh after data store mutation completes
