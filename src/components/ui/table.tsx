@@ -54,7 +54,6 @@ const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
 >(({ className, children, ...props }, ref) => (
-  // Ensure no whitespace is introduced before children
   <tr
     ref={ref}
     className={cn(
@@ -62,7 +61,7 @@ const TableRow = React.forwardRef<
       className,
     )}
     {...props}
-  >{children}</tr> // Ensure no whitespace after children and render children directly
+  >{children}</tr>
 ));
 TableRow.displayName = "TableRow";
 
@@ -77,7 +76,7 @@ const TableHead = React.forwardRef<
       className,
     )}
     {...props}
-  >{children}</th> // Ensure no whitespace
+  >{children}</th>
 ));
 TableHead.displayName = "TableHead";
 
@@ -89,7 +88,7 @@ const TableCell = React.forwardRef<
     ref={ref}
     className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
     {...props}
-  >{children}</td> // Ensure no whitespace
+  >{children}</td>
 ));
 TableCell.displayName = "TableCell";
 
@@ -101,7 +100,7 @@ const TableCaption = React.forwardRef<
     ref={ref}
     className={cn("mt-4 text-sm text-muted-foreground", className)}
     {...props}
-  >{children}</caption> // Ensure no whitespace
+  >{children}</caption>
 ));
 TableCaption.displayName = "TableCaption";
 
