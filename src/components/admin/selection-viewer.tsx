@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react"; // Import useState, useMemo, useEffect
+import Image from 'next/image'; // Import Image
 import {
   Table,
   TableBody,
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RotateCcw, User, CalendarDays, Loader2, Package } from "lucide-react"; // Added Loader2 and Package
+import { RotateCcw, User, CalendarDays, Loader2, Package, ImageIcon } from "lucide-react"; // Added Loader2 and Package
 import { revertSelection, type GiftItem } from "@/data/gift-store"; // Import store function
 import { useToast } from "@/hooks/use-toast";
 
@@ -95,6 +96,7 @@ export default function AdminSelectionViewer({
         <Table>
           <TableHeader>
             <TableRow>
+             <TableHead className="w-[60px]"></TableHead> {/* Image Column */}
               <TableHead>Item</TableHead>
               <TableHead>
                 <Package className="inline-block mr-1 h-4 w-4" /> {/* Icon for Quantity */}
@@ -114,7 +116,7 @@ export default function AdminSelectionViewer({
           <TableBody>
             {actuallySelectedItems.length === 0 ? ( // Use filtered list
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center"> {/* Updated colSpan */}
+                <TableCell colSpan={6} className="h-24 text-center"> {/* Updated colSpan */}
                   Nenhum item selecionado ainda.
                 </TableCell>
               </TableRow>
@@ -128,6 +130,25 @@ export default function AdminSelectionViewer({
                     key={item.id}
                     className={loadingItemId === item.id ? "opacity-50" : ""}
                     >
+                    <TableCell>
+                         <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50 flex-shrink-0">
+                         {item.imageUrl ? (
+                             <Image
+                             src={item.imageUrl}
+                             alt={`Imagem de ${item.name}`}
+                             fill
+                             style={{ objectFit: "cover" }}
+                             sizes="40px"
+                             unoptimized={item.imageUrl.startsWith('data:')}
+                             onError={(e) => { (e.target as HTMLImageElement).src = ''; (e.target as HTMLImageElement).style.display='none'; }} // Basic error handling
+                             />
+                         ) : (
+                             <div className="flex items-center justify-center h-full w-full">
+                             <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                             </div>
+                         )}
+                         </div>
+                    </TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
                      {/* Quantity Display */}
                      <TableCell className="text-center">
@@ -173,3 +194,4 @@ export default function AdminSelectionViewer({
     </div>
   );
 }
+

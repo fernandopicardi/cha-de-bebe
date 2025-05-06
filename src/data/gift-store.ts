@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from "next/cache";
@@ -20,7 +21,7 @@ import {
   WriteBatch,
   CollectionReference,
 } from "firebase/firestore";
-import { db } from "@/firebase/config"; // Ensure db is imported correctly
+import { db, storage } from "@/firebase/config"; // Ensure db and storage are imported correctly
 import { uploadImage, deleteImage } from '@/services/storage'; // Import storage service
 import { sendGiftReminderEmail } from '@/services/email'; // Import email service
 
@@ -39,11 +40,9 @@ export interface GiftItem {
   createdAt?: string | null; // ISO string date format
   imageUrl?: string | null; // Store Firebase Storage URL
 
-  // --- New Quantity Fields ---
+  // --- Quantity Fields ---
   totalQuantity?: number | null; // Total units available (optional)
   selectedQuantity?: number; // Units already selected (defaults to 0)
-  // We might need a way to track *who* selected *how many*, perhaps a subcollection or array field,
-  // but keeping it simple for now. 'selectedBy' will hold the name of the *last* person who selected.
 }
 
 
@@ -58,7 +57,7 @@ export interface SuggestionData {
 }
 
 export interface EventSettings {
-  id?: string; // Usually 'main'
+  id: string; // Usually 'main'
   title: string;
   babyName?: string | null; // Optional baby name
   date: string; // Format: YYYY-MM-DD
@@ -111,8 +110,7 @@ const defaultEventSettings: EventSettings = {
 // --- FIRESTORE REFERENCES ---
 
 const giftsCollectionRef = collection(db, "gifts") as CollectionReference<Omit<GiftItem, 'id'>>;
-const settingsCollectionRef = collection(db, "settings");
-const settingsDocRef = doc(settingsCollectionRef, "main") as DocumentReference<EventSettings>;
+const settingsDocRef = doc(db, "settings", "main") as DocumentReference<EventSettings>;
 const confirmationsCollectionRef = collection(db, "confirmations") as CollectionReference<Omit<Confirmation, 'id'>>; // Ref for confirmations
 
 // --- HELPER FUNCTIONS ---
@@ -641,6 +639,7 @@ export async function addGift(
         // Remove undefined fields manually before sending to Firestore
         const finalDataToAdd: Record<string, any> = {};
         for (const key in dataToAdd) {
+            // Check for both undefined and null for fields like description, selectedBy, etc.
             if (dataToAdd[key as keyof typeof dataToAdd] !== undefined) {
                 finalDataToAdd[key] = dataToAdd[key as keyof typeof dataToAdd];
             }
@@ -929,16 +928,29 @@ export async function markGiftAsNotNeeded(
   }
 
 
+// Helper function to escape CSV fields correctly
+const escapeCsv = (field: string | number | null | undefined): string => {
+    if (field === null || field === undefined) return '""'; // Handle null/undefined
+    const stringField = String(field);
+    // Quote the field if it contains commas, double quotes, or newlines
+    if (stringField.includes('"') || stringField.includes(',') || stringField.includes('\n')) {
+      // Escape double quotes within the field by doubling them
+      return `"${stringField.replace(/"/g, '""')}"`;
+    }
+    // Otherwise, just quote the field
+    return `"${stringField}"`;
+  };
+
 /**
  * Exports the current gift list data to a CSV formatted string.
  * Includes quantity information.
  */
 export async function exportGiftsToCSV(): Promise<string> {
-    console.log("Firestore EXPORT_CSV: Exporting gifts to CSV...");
+    console.log("Firestore EXPORT_GIFTS_CSV: Exporting gifts to CSV...");
     try {
       // Fetch the current gifts data
       const currentGifts = await getGifts(); // Assumes getGifts fetches fresh data
-      console.log(`Firestore EXPORT_CSV: Fetched ${currentGifts.length} gifts for CSV export.`);
+      console.log(`Firestore EXPORT_GIFTS_CSV: Fetched ${currentGifts.length} gifts for CSV export.`);
 
       // Define CSV headers including quantity
       const headers = [
@@ -955,23 +967,11 @@ export async function exportGiftsToCSV(): Promise<string> {
         "URL da Imagem",
       ];
 
-      // Helper function to escape CSV fields correctly
-      const escapeCsv = (field: string | number | null | undefined): string => {
-        if (field === null || field === undefined) return '""'; // Handle null/undefined
-        const stringField = String(field);
-        // Quote the field if it contains commas, double quotes, or newlines
-        if (stringField.includes('"') || stringField.includes(',') || stringField.includes('\n')) {
-          // Escape double quotes within the field by doubling them
-          return `"${stringField.replace(/"/g, '""')}"`;
-        }
-        // Otherwise, just quote the field
-        return `"${stringField}"`;
-      };
 
       // Map gift items to CSV rows
       const rows = currentGifts.map((item) => {
         if (!item || typeof item !== 'object') {
-          console.warn("Firestore EXPORT_CSV: Skipping invalid item during CSV generation:", item);
+          console.warn("Firestore EXPORT_GIFTS_CSV: Skipping invalid item during CSV generation:", item);
           return ""; // Skip invalid items
         }
 
@@ -984,9 +984,9 @@ export async function exportGiftsToCSV(): Promise<string> {
               // Format to locale string (e.g., "dd/mm/yyyy, HH:MM:SS")
               selectionDateStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
             } else {
-              console.warn("Firestore EXPORT_CSV: Invalid selection date string for CSV:", item.selectionDate);
+              console.warn("Firestore EXPORT_GIFTS_CSV: Invalid selection date string for CSV:", item.selectionDate);
             }
-          } catch (e) { console.warn("Firestore EXPORT_CSV: Could not parse selection date string for CSV:", item.selectionDate, e); }
+          } catch (e) { console.warn("Firestore EXPORT_GIFTS_CSV: Could not parse selection date string for CSV:", item.selectionDate, e); }
         }
         let createdAtStr = "";
         if (item.createdAt) {
@@ -996,9 +996,9 @@ export async function exportGiftsToCSV(): Promise<string> {
               // Format to locale string
               createdAtStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
             } else {
-              console.warn("Firestore EXPORT_CSV: Invalid creation date string for CSV:", item.createdAt);
+              console.warn("Firestore EXPORT_GIFTS_CSV: Invalid creation date string for CSV:", item.createdAt);
             }
-          } catch (e) { console.warn("Firestore EXPORT_CSV: Could not parse creation date string for CSV:", item.createdAt, e); }
+          } catch (e) { console.warn("Firestore EXPORT_GIFTS_CSV: Could not parse creation date string for CSV:", item.createdAt, e); }
         }
 
         // Get optional fields or default to empty string/0
@@ -1024,16 +1024,69 @@ export async function exportGiftsToCSV(): Promise<string> {
         ].join(",");
       }).filter(row => row !== ""); // Filter out any empty rows from skipped items
 
-      console.log("Firestore EXPORT_CSV: CSV export generated successfully.");
+      console.log("Firestore EXPORT_GIFTS_CSV: CSV export generated successfully.");
       // Combine headers and rows with newline characters
       const escapedHeaders = headers.map(h => escapeCsv(h)).join(",");
       return [escapedHeaders, ...rows].join("\n");
 
     } catch (error) {
-      console.error("Firestore EXPORT_CSV: Error exporting gifts to CSV:", error);
-      throw new Error("Erro ao gerar o arquivo CSV."); // Throw error for user feedback
+      console.error("Firestore EXPORT_GIFTS_CSV: Error exporting gifts to CSV:", error);
+      throw new Error("Erro ao gerar o arquivo CSV de presentes."); // Throw error for user feedback
     }
   }
+
+/**
+ * Exports the current presence confirmation data to a CSV formatted string.
+ */
+export async function exportConfirmationsToCSV(): Promise<string> {
+    console.log("Firestore EXPORT_CONFIRMATIONS_CSV: Exporting confirmations to CSV...");
+    try {
+      // Fetch the current confirmations data
+      const currentConfirmations = await getConfirmations();
+      console.log(`Firestore EXPORT_CONFIRMATIONS_CSV: Fetched ${currentConfirmations.length} confirmation entries.`);
+
+      const headers = ["ID Confirmação", "Nome Convidado", "Data Confirmação"];
+
+      // Flatten the confirmations into individual rows for each name
+      const rows = currentConfirmations.flatMap(confirmation => {
+          if (!confirmation || typeof confirmation !== 'object') {
+             console.warn("Firestore EXPORT_CONFIRMATIONS_CSV: Skipping invalid confirmation entry:", confirmation);
+             return []; // Skip invalid entries
+          }
+
+          // Format confirmation date safely
+          let confirmedAtStr = "";
+          if (confirmation.confirmedAt) {
+              try {
+                  const date = new Date(confirmation.confirmedAt);
+                  if (!isNaN(date.getTime())) {
+                      confirmedAtStr = date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+                  } else {
+                      console.warn("Firestore EXPORT_CONFIRMATIONS_CSV: Invalid confirmation date string for CSV:", confirmation.confirmedAt);
+                  }
+              } catch (e) { console.warn("Firestore EXPORT_CONFIRMATIONS_CSV: Could not parse confirmation date string for CSV:", confirmation.confirmedAt, e); }
+          }
+
+          // Create a row for each name in the confirmation entry
+          return confirmation.names.map(name =>
+              [
+                  escapeCsv(confirmation.id),
+                  escapeCsv(name),
+                  escapeCsv(confirmedAtStr),
+              ].join(",")
+          );
+      });
+
+      console.log("Firestore EXPORT_CONFIRMATIONS_CSV: CSV export generated successfully.");
+      // Combine headers and rows
+      const escapedHeaders = headers.map(h => escapeCsv(h)).join(",");
+      return [escapedHeaders, ...rows].join("\n");
+
+    } catch (error) {
+      console.error("Firestore EXPORT_CONFIRMATIONS_CSV: Error exporting confirmations to CSV:", error);
+      throw new Error("Erro ao gerar o arquivo CSV de presença.");
+    }
+}
 
 // --- Presence Confirmation Functions ---
 
@@ -1105,3 +1158,4 @@ export async function getConfirmations(): Promise<Confirmation[]> {
 // Consider calling this less frequently, perhaps in a dedicated setup or via a manual trigger.
 // Calling it on every server render of a component using this module might be excessive.
 // initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));
+

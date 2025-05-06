@@ -22,11 +22,13 @@ import {
   AlertTriangle, // Import AlertTriangle
   Frown, // Import Frown icon for 404
   ClipboardList, // Icon for Confirmations list
+  UserCheck, // Icon for Confirmation Export
 } from "lucide-react";
 import {
   getGifts,
   getEventSettings,
   exportGiftsToCSV,
+  exportConfirmationsToCSV, // Import new export function
   getConfirmations,
   type GiftItem,
   type EventSettings,
@@ -132,28 +134,47 @@ export default function AdminPage() {
   }, [user, authLoading, refreshData]);
 
 
-  // Handle CSV Export
-  const handleExport = async () => {
-     if (isDataLoading || gifts.length === 0) return; // Prevent export if loading or no data
-    console.log("AdminPage: Exporting CSV...");
+  // Helper function for triggering file download
+  const triggerDownload = (csvData: string, baseFilename: string) => {
+    const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `${baseFilename}_${new Date().toISOString().split("T")[0]}.csv`,
+    );
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Handle CSV Gift Export
+  const handleGiftExport = async () => {
+    if (isDataLoading || gifts.length === 0) return; // Prevent export if loading or no data
+    console.log("AdminPage: Exporting Gifts CSV...");
     try {
       const csvData = await exportGiftsToCSV();
-      const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `lista_presentes_${new Date().toISOString().split("T")[0]}.csv`,
-      );
-      link.style.visibility = "hidden";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      console.log("AdminPage: CSV downloaded successfully.");
+      triggerDownload(csvData, 'lista_presentes');
+      console.log("AdminPage: Gifts CSV downloaded successfully.");
     } catch (error) {
-      console.error("AdminPage: Error exporting CSV:", error);
-      setError("Erro ao gerar o arquivo CSV."); // Show error to user
+      console.error("AdminPage: Error exporting gifts CSV:", error);
+      setError("Erro ao gerar o arquivo CSV de presentes."); // Show error to user
+    }
+  };
+
+  // Handle CSV Confirmation Export
+  const handleConfirmationExport = async () => {
+    if (isDataLoading || confirmations.length === 0) return; // Prevent export if loading or no data
+    console.log("AdminPage: Exporting Confirmations CSV...");
+    try {
+      const csvData = await exportConfirmationsToCSV();
+      triggerDownload(csvData, 'lista_presenca');
+      console.log("AdminPage: Confirmations CSV downloaded successfully.");
+    } catch (error) {
+      console.error("AdminPage: Error exporting confirmations CSV:", error);
+      setError("Erro ao gerar o arquivo CSV de presença."); // Show error to user
     }
   };
 
@@ -259,11 +280,67 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Main content grid - Responsive: 1 column default, 2 columns on large screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+      {/* Single Column Layout */}
+      <div className="space-y-6 lg:space-y-8 max-w-4xl mx-auto"> {/* Center content */}
 
-        {/* Column 1: Item Management - Takes full width on smaller screens */}
-        <Card className="lg:col-span-1 bg-card shadow-sm"> {/* Occupies one column on large screens */}
+        {/* 1. Event Settings Card */}
+         <Card className="bg-card shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings /> Configurações do Evento
+            </CardTitle>
+            <CardDescription>
+              Atualizar detalhes do evento e mensagens personalizadas.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdminEventSettingsForm
+              key={user ? `admin-settings-${eventSettings?.title || 'loading'}` : "no-settings"}
+              initialSettings={eventSettings}
+              onSave={() => refreshData("event settings save")} // More specific source
+              isLoading={isDataLoading}
+            />
+          </CardContent>
+        </Card>
+
+        {/* 2. Confirmations List Card */}
+        <Card className="bg-card shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList /> Lista de Presença Confirmada
+            </CardTitle>
+            <CardDescription>
+              Veja quem confirmou presença no evento.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdminConfirmationsList
+              confirmations={confirmations} // Pass the fetched confirmations
+            />
+          </CardContent>
+        </Card>
+
+        {/* 3. Selection Viewer Card */}
+        <Card className="bg-card shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users /> Visualizar Seleções de Presentes
+            </CardTitle>
+            <CardDescription>
+              Ver quem selecionou quais itens e reverter seleções.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdminSelectionViewer
+              key={`selection-viewer-${gifts.filter(g => g && g.status === 'selected').length}`}
+              selectedItems={gifts.filter(g => g && g.status === 'selected' || (typeof g.selectedQuantity === 'number' && g.selectedQuantity > 0))} // Include quantity items
+              onDataChange={() => refreshData("selection viewer change")} // More specific source
+            />
+          </CardContent>
+        </Card>
+
+        {/* 4. Item Management Card */}
+        <Card className="bg-card shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gift /> Gerenciar Itens da Lista
@@ -281,90 +358,37 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Column 2: Contains Settings, Selections, Confirmations, Export */}
-        <div className="lg:col-span-1 space-y-6"> {/* Occupies one column on large screens */}
+        {/* 5. Export Card */}
+        <Card className="bg-card shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileDown /> Exportar Dados
+            </CardTitle>
+            <CardDescription>
+              Baixar listas em formato CSV.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-4">
+            <Button
+              onClick={handleGiftExport}
+              className="mt-4"
+              disabled={isDataLoading || !gifts || gifts.length === 0} // Disable if data is loading or no gifts
+            >
+               <Gift className="mr-2 h-4 w-4" /> Exportar Presentes (CSV)
+            </Button>
+            <Button
+              onClick={handleConfirmationExport}
+              className="mt-4"
+              variant="outline" // Different style for second button
+              disabled={isDataLoading || !confirmations || confirmations.length === 0} // Disable if data is loading or no confirmations
+            >
+              <UserCheck className="mr-2 h-4 w-4" /> Exportar Presença (CSV)
+            </Button>
+          </CardContent>
+        </Card>
 
-          {/* Event Settings Card */}
-           <Card className="bg-card shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings /> Configurações do Evento
-              </CardTitle>
-              <CardDescription>
-                Atualizar detalhes do evento e mensagens personalizadas.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AdminEventSettingsForm
-                key={user ? `admin-settings-${eventSettings?.title || 'loading'}` : "no-settings"}
-                initialSettings={eventSettings}
-                onSave={() => refreshData("event settings save")} // More specific source
-                isLoading={isDataLoading}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Selection Viewer Card */}
-          <Card className="bg-card shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users /> Visualizar Seleções de Presentes
-              </CardTitle>
-              <CardDescription>
-                Ver quem selecionou quais itens e reverter seleções.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AdminSelectionViewer
-                key={`selection-viewer-${gifts.filter(g => g && g.status === 'selected').length}`}
-                selectedItems={gifts.filter(g => g && g.status === 'selected')}
-                onDataChange={() => refreshData("selection viewer change")} // More specific source
-              />
-            </CardContent>
-          </Card>
-
-          {/* Confirmations List Card */}
-          <Card className="bg-card shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardList /> Lista de Presença Confirmada
-              </CardTitle>
-              <CardDescription>
-                Veja quem confirmou presença no evento.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AdminConfirmationsList
-                confirmations={confirmations} // Pass the fetched confirmations
-              />
-            </CardContent>
-          </Card>
-
-          {/* Export Card */}
-          <Card className="bg-card shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileDown /> Exportar Seleções de Presentes
-              </CardTitle>
-              <CardDescription>
-                Baixar a lista completa de itens e status em formato CSV.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={handleExport}
-                className="mt-4"
-                disabled={isDataLoading || !gifts || gifts.length === 0} // Disable if data is loading or no gifts
-              >
-                Exportar CSV
-              </Button>
-            </CardContent>
-          </Card>
-
-        </div> {/* End of Column 2 */}
-      </div> {/* End of main grid */}
+      </div> {/* End of Single Column Layout */}
     </div>
   );
 }
-
     
