@@ -67,8 +67,7 @@ export default function GiftList({
         return false;
       }
       // Determine the effective status, considering quantity
-      const isQuantityItem =
-        (item.totalQuantity ?? 0) > 0;
+      const isQuantityItem = item.totalQuantity !== null && item.totalQuantity > 0;
       let effectiveStatus = item.status;
 
       if (isQuantityItem && item.status !== "not_needed") {
@@ -94,8 +93,7 @@ export default function GiftList({
   const handleSelectItemClick = (item: GiftItem) => {
     if (loadingItemId) return;
     // Ensure item is actually available before opening dialog
-    const isQuantityItem =
-      (item.totalQuantity ?? 0) > 0;
+    const isQuantityItem = item.totalQuantity !== null && item.totalQuantity > 0;
     const isAvailable = isQuantityItem
       ? (item.selectedQuantity ?? 0) < item.totalQuantity
       : item.status === "available";
@@ -120,26 +118,19 @@ export default function GiftList({
     setSelectedItem(null);
   };
 
+  // Updated handleItemSelectionSuccess signature
   const handleItemSelectionSuccess = async (
     itemId: string,
     guestName: string,
     quantity: number,
-    sendReminder: boolean,
-    email?: string,
   ) => {
     console.log(
-      `GiftList (${filterStatus}): Attempting to select item ${itemId} for ${guestName}, Qty: ${quantity}, Email: ${email ? "Yes" : "No"}...`,
+      `GiftList (${filterStatus}): Attempting to select item ${itemId} for ${guestName}, Qty: ${quantity}...`,
     );
     setLoadingItemId(itemId);
     try {
-      // Pass quantity, email flag, and email address to selectGift
-      const updatedItem = await selectGift(
-        itemId,
-        guestName,
-        quantity,
-        sendReminder,
-        email,
-      );
+      // Pass only necessary parameters to selectGift
+      const updatedItem = await selectGift(itemId, guestName, quantity);
 
       if (updatedItem) {
         console.log(
@@ -184,8 +175,7 @@ export default function GiftList({
   };
 
   const getStatusBadge = (item: GiftItem) => {
-    const isQuantityItem =
-      (item.totalQuantity ?? 0) > 0;
+    const isQuantityItem = item.totalQuantity !== null && item.totalQuantity > 0;
     let displayStatus: GiftItem["status"] = item.status;
     let quantityText = "";
 
@@ -194,7 +184,7 @@ export default function GiftList({
     } else if (isQuantityItem) {
       const selected = item.selectedQuantity ?? 0;
       const total = item.totalQuantity ?? 0;
-      displayStatus = selected >= (item.totalQuantity ?? 0) ? "selected" : "available";
+      displayStatus = selected >= total ? "selected" : "available";
       quantityText = `(${selected}/${total})`; // Add quantity text
     }
 
@@ -317,8 +307,7 @@ export default function GiftList({
       {/* Responsive grid layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredItems.map((item) => {
-          const isQuantityItem =
-            (item.totalQuantity ?? 0) > 0;
+          const isQuantityItem = item.totalQuantity !== null && item.totalQuantity > 0;
           const effectiveStatus =
             isQuantityItem && item.status !== "not_needed"
               ? (item.selectedQuantity ?? 0) >= item.totalQuantity

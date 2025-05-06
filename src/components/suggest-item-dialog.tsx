@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
+// Removed Checkbox import
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -33,39 +33,23 @@ const ACCEPTED_IMAGE_TYPES = [
   "image/gif",
 ];
 
-// Define validation schema for adding an item, including email fields
-const AddItemSchema = z
-  .object({
-    itemName: z
-      .string()
-      .min(3, "Nome curto demais.")
-      .max(100, "Nome longo demais."),
-    itemDescription: z.string().max(200, "Descrição longa demais.").optional(),
-    suggesterName: z
-      .string()
-      .min(2, "Nome curto demais.")
-      .max(50, "Nome longo demais."),
-    // Field to store the data URI temporarily for upload
-    imageDataUri: z.string().optional().nullable(),
-    // Field for the file input itself - allow FileList or null
-    imageFile: z.any().optional().nullable(),
-    // Email fields
-    sendReminderEmail: z.boolean().default(false),
-    guestEmail: z
-      .string()
-      .email("Formato de e-mail inválido.")
-      .optional()
-      .or(z.literal("")),
-  })
-  .refine(
-    (data) =>
-      !data.sendReminderEmail ||
-      (data.sendReminderEmail && data.guestEmail && data.guestEmail.length > 0),
-    {
-      message: "E-mail é obrigatório para receber o lembrete.",
-      path: ["guestEmail"],
-    },
-  );
+// Define validation schema for adding an item, without email fields
+const AddItemSchema = z.object({
+  itemName: z
+    .string()
+    .min(3, "Nome curto demais.")
+    .max(100, "Nome longo demais."),
+  itemDescription: z.string().max(200, "Descrição longa demais.").optional(),
+  suggesterName: z
+    .string()
+    .min(2, "Nome curto demais.")
+    .max(50, "Nome longo demais."),
+  // Field to store the data URI temporarily for upload
+  imageDataUri: z.string().optional().nullable(),
+  // Field for the file input itself - allow FileList or null
+  imageFile: z.any().optional().nullable(),
+});
+// Removed email validation logic
 
 type AddItemFormData = z.infer<typeof AddItemSchema>;
 
@@ -105,13 +89,10 @@ export default function SuggestItemDialog({
       suggesterName: "",
       imageDataUri: null,
       imageFile: null,
-      sendReminderEmail: false,
-      guestEmail: "",
     },
   });
 
   const watchedImageFile = watch("imageFile");
-  const watchSendReminder = watch("sendReminderEmail"); // Watch checkbox
 
   // Handle image preview updates and store data URI
   useEffect(() => {
@@ -201,14 +182,15 @@ export default function SuggestItemDialog({
     setIsSubmitting(true);
     console.log("SuggestItemDialog: Submitting suggestion...");
     try {
-      // Prepare data for addSuggestion, including email fields
+      // Prepare data for addSuggestion, without email fields
       const suggestionPayload: SuggestionData = {
         itemName: data.itemName,
         itemDescription: data.itemDescription,
         suggesterName: data.suggesterName,
         imageDataUri: data.imageDataUri,
-        sendReminderEmail: data.sendReminderEmail,
-        guestEmail: data.guestEmail,
+        // Removed email fields
+        // sendReminderEmail: data.sendReminderEmail,
+        // guestEmail: data.guestEmail,
       };
 
       // Pass data including the imageDataUri to the backend function
@@ -261,7 +243,9 @@ export default function SuggestItemDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg bg-card p-6"> {/* Adjusted max-width and padding */}
+      <DialogContent className="sm:max-w-lg bg-card p-6">
+        {" "}
+        {/* Adjusted max-width and padding */}
         <DialogHeader>
           <DialogTitle>Adicionar Novo Item</DialogTitle>
           <DialogDescription>
@@ -271,7 +255,9 @@ export default function SuggestItemDialog({
         {/* Use space-y for vertical spacing */}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
           {/* Item Name */}
-          <div className="grid gap-2"> {/* Simplified grid for single column */}
+          <div className="grid gap-2">
+            {" "}
+            {/* Simplified grid for single column */}
             <Label htmlFor="itemName-suggest">Nome*</Label>
             <Input
               id="itemName-suggest"
@@ -376,58 +362,19 @@ export default function SuggestItemDialog({
             )}
           </div>
 
-          {/* Email Reminder Section */}
-          <div className="items-top flex space-x-2 pt-2"> {/* Added padding-top */}
-            <Checkbox
-              id="sendReminderEmail-suggest"
-              {...register("sendReminderEmail")}
-              disabled={isSubmitting}
-              aria-describedby="sendReminderEmail-suggest-label"
-            />
-            <div className="grid gap-1.5 leading-none">
-              <Label
-                htmlFor="sendReminderEmail-suggest"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                id="sendReminderEmail-suggest-label"
-              >
-                Receber lembrete deste presente por e-mail?
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                 Enviaremos um e-mail para você com os detalhes do presente.
-              </p>
-            </div>
-          </div>
-
-
-          {/* Conditional Guest Email Input */}
-          {watchSendReminder && (
-            <div className="grid gap-2 animate-fade-in"> {/* Adjusted fade-in */}
-              <Label htmlFor="guestEmail-suggest">Seu E-mail*</Label>
-              <Input
-                id="guestEmail-suggest"
-                type="email"
-                placeholder="seuemail@exemplo.com"
-                {...register("guestEmail")}
-                className={`${errors.guestEmail ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                disabled={isSubmitting}
-                aria-invalid={errors.guestEmail ? "true" : "false"}
-                aria-describedby="guestEmail-suggest-error"
-              />
-              {errors.guestEmail && (
-                <p
-                  id="guestEmail-suggest-error"
-                  className="text-sm text-destructive mt-1"
-                >
-                  {errors.guestEmail.message}
-                </p>
-              )}
-            </div>
-          )}
+          {/* Removed Email Reminder Section */}
 
           {/* Footer buttons */}
-          <DialogFooter className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0"> {/* Adjust footer layout */}
+          <DialogFooter className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0">
+            {" "}
+            {/* Adjust footer layout */}
             <DialogClose asChild>
-              <Button type="button" variant="outline" disabled={isSubmitting} className="w-full sm:w-auto">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                className="w-full sm:w-auto"
+              >
                 Cancelar
               </Button>
             </DialogClose>
@@ -453,5 +400,3 @@ export default function SuggestItemDialog({
     </Dialog>
   );
 }
-
-    

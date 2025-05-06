@@ -22,7 +22,7 @@ import {
 } from "firebase/firestore";
 import { db, storage } from "@/firebase/config"; // Ensure db and storage are imported correctly
 import { uploadImage, deleteImage } from "@/services/storage"; // Import storage service
-import { sendGiftReminderEmail } from "@/services/email"; // Import email service
+// Removed email service import
 
 // --- INTERFACE DEFINITIONS ---
 
@@ -49,9 +49,9 @@ export interface SuggestionData {
   itemDescription?: string;
   suggesterName: string;
   imageDataUri?: string | null; // Suggestion might include an image data URI
-  // --- Email fields ---
-  sendReminderEmail: boolean;
-  guestEmail?: string;
+  // Removed email fields
+  // sendReminderEmail: boolean;
+  // guestEmail?: string;
 }
 
 export interface EventSettings {
@@ -313,7 +313,7 @@ export async function initializeFirestoreData(): Promise<void> {
         const docRef = doc(giftsCollectionRef); // Generate a new doc reference
         // Initialize selectedQuantity to 0 for all items
         batch.set(docRef, {
-          ...item,          
+          ...item,
           createdAt: serverTimestamp(),
           selectedQuantity: 0,
         });
@@ -547,17 +547,14 @@ export async function updateEventSettings(
 /**
  * Marks a gift item as 'selected' by a guest.
  * Handles both single items and quantity-based items.
- * Optionally sends a reminder email.
  */
 export async function selectGift(
   itemId: string,
   guestName: string,
   quantityToSelect: number = 1, // Default to selecting 1 unit
-  sendReminder: boolean = false,
-  guestEmail?: string,
 ): Promise<GiftItem | null> {
   console.log(
-    `Firestore SELECT_GIFT: Selecting gift ${itemId} for ${guestName} (Quantity: ${quantityToSelect}). Send reminder: ${sendReminder}`,
+    `Firestore SELECT_GIFT: Selecting gift ${itemId} for ${guestName} (Quantity: ${quantityToSelect})`,
   );
   const itemDocRef = doc(db, "gifts", itemId);
 
@@ -630,32 +627,9 @@ export async function selectGift(
 
     forceRevalidation(); // Revalidate paths
 
-    // --- Fetch Updated Item & Send Email ---
+    // --- Fetch Updated Item ---
     const updatedSnap = await getDoc(itemDocRef);
     const updatedItem = updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
-
-    if (updatedItem && sendReminder && guestEmail) {
-      try {
-        const eventSettings = await getEventSettings(); // Fetch latest settings
-        await sendGiftReminderEmail(
-          guestEmail,
-          guestName,
-          updatedItem,
-          quantityToSelect,
-          eventSettings,
-        );
-      } catch (emailError) {
-        console.error(
-          `Firestore SELECT_GIFT: Failed to send reminder email for item ${itemId} to ${guestEmail}:`,
-          emailError,
-        );
-        // Don't fail the whole operation if email fails, but log it.
-      }
-    } else if (sendReminder && !guestEmail) {
-      console.warn(
-        `Firestore SELECT_GIFT: Reminder requested for item ${itemId} but no email provided.`,
-      );
-    }
 
     return updatedItem;
   } catch (error) {
@@ -680,14 +654,14 @@ export async function selectGift(
 
 /**
  * Adds a new gift item suggested by a user.
- * Handles optional image upload and reminder email sending.
+ * Handles optional image upload.
  * The item is automatically marked as 'selected' by the suggester.
  */
 export async function addSuggestion(
   suggestionData: SuggestionData,
 ): Promise<GiftItem | null> {
   console.log(
-    `Firestore ADD_SUGGESTION: Adding suggestion from ${suggestionData.suggesterName}. Send reminder: ${suggestionData.sendReminderEmail}`,
+    `Firestore ADD_SUGGESTION: Adding suggestion from ${suggestionData.suggesterName}.`,
   );
 
   let uploadedImageUrl: string | null = null;
@@ -720,8 +694,8 @@ export async function addSuggestion(
       createdAt: serverTimestamp(),
       imageUrl: uploadedImageUrl, // Store the uploaded image URL or null
       selectedQuantity: 1, // Suggestion implies selecting 1 unit
-      totalQuantity: 1, // Default total quantity to 1 for suggested items      
-    };    
+      totalQuantity: 1, // Default total quantity to 1 for suggested items
+    };
 
     // Validate essential fields before adding
     if (!newItemData.name || !newItemData.selectedBy) {
@@ -746,34 +720,6 @@ export async function addSuggestion(
     // 4. Fetch the newly created item data
     const newDocSnap = await getDoc(docRef);
     const newItem = newDocSnap.exists() ? giftFromDoc(newDocSnap) : null;
-
-    // 5. Send reminder email if requested
-    if (
-      newItem &&
-      suggestionData.sendReminderEmail &&
-      suggestionData.guestEmail
-    ) {
-      try {
-        const eventSettings = await getEventSettings(); // Fetch latest settings
-        await sendGiftReminderEmail(
-          suggestionData.guestEmail,
-          suggestionData.suggesterName,
-          newItem,
-          1, // Quantity is 1 for suggestions
-          eventSettings,
-        );
-      } catch (emailError) {
-        console.error(
-          `Firestore ADD_SUGGESTION: Failed to send reminder email for new item ${newItem.id} to ${suggestionData.guestEmail}:`,
-          emailError,
-        );
-        // Don't fail the whole operation if email fails, but log it.
-      }
-    } else if (suggestionData.sendReminderEmail && !suggestionData.guestEmail) {
-      console.warn(
-        `Firestore ADD_SUGGESTION: Reminder requested for new item but no email provided.`,
-      );
-    }
 
     return newItem;
   } catch (error) {
@@ -800,35 +746,38 @@ export async function addSuggestion(
 /**
  * Adds a new gift item (typically by admin). Handles optional image upload and quantity.
  */
-export async function addGift(
-  giftData: Omit<
-    GiftItem,
-    "id" | "createdAt" | "selectionDate" | "selectedQuantity"
-  > & { imageDataUri?: string | null },
+export async function addGiftAdmin(
+  giftData: Partial<GiftItem> & { imageDataUri?: string | null },
 ): Promise<GiftItem | null> {
-  console.log("Firestore ADD_GIFT: Adding new gift item...");
+  console.log("Firestore ADD_GIFT_ADMIN: Adding new gift item...");
   const { imageDataUri, totalQuantity, ...itemDetails } = giftData; // Extract totalQuantity
-  let uploadedImageUrl: string | null = null;  
+  let uploadedImageUrl: string | null = null;
 
-    try {
+  try {
     // 1. Upload image if data URI provided
     if (imageDataUri) {
       console.log(
-        "Firestore ADD_GIFT: Image data URI found. Uploading image...",        
+        "Firestore ADD_GIFT_ADMIN: Image data URI found. Uploading image...",
       );
-      uploadedImageUrl = await uploadImage(imageDataUri, "gifts", "admin_add");
-      console.log("Firestore ADD_GIFT: Image uploaded. URL:", uploadedImageUrl);
+      uploadedImageUrl = await uploadImage(
+        imageDataUri,
+        "gifts",
+        "admin_add",
+      );
+      console.log(
+        "Firestore ADD_GIFT_ADMIN: Image uploaded. URL:",
+        uploadedImageUrl,
+      );
     }
 
     // Determine if it's a quantity item
     const isQuantityItem =
       typeof totalQuantity === "number" && totalQuantity > 0;
 
-    let finalImageUrl: string | null = uploadedImageUrl;    
-    // Validate required fields   
+    // Validate required fields
     if (!itemDetails.name || !itemDetails.category || !itemDetails.status) {
       console.error(
-        "Firestore ADD_GIFT: Missing required fields (name, category, status).",        
+        "Firestore ADD_GIFT_ADMIN: Missing required fields (name, category, status).",
       );
       if (uploadedImageUrl)
         await deleteImage(uploadedImageUrl).catch((e) =>
@@ -837,52 +786,44 @@ export async function addGift(
       return null;
     }
 
-    let finalDataToAdd: Omit<GiftItem, "id"> & {
+    const finalDataToAdd: Omit<GiftItem, "id"> & {
       createdAt: any;
       selectionDate: any;
+    } = {
+      name: itemDetails.name.trim(),
+      description: itemDetails.description?.trim() || null,
+      category: itemDetails.category,
+      // Set status and selectedBy based on quantity or admin input
+      status:
+        itemDetails.status === "not_needed"
+          ? "not_needed"
+          : isQuantityItem
+            ? "available"
+            : itemDetails.status,
+      selectedBy:
+        itemDetails.status === "selected" && !isQuantityItem
+          ? itemDetails.selectedBy?.trim() || "Admin"
+          : null,
+      selectionDate:
+        itemDetails.status === "selected" && !isQuantityItem
+          ? serverTimestamp()
+          : null,
+      createdAt: serverTimestamp(),
+      imageUrl: uploadedImageUrl, // Use uploaded URL or null
+      // Quantity fields
+      totalQuantity: isQuantityItem ? totalQuantity : null,
+      selectedQuantity: 0, // Initialize selected quantity to 0,
     };
 
-    if (itemDetails.id) {
-      console.log("Firestore ADD_GIFT: gift being updated, item data:", itemDetails);
-      const itemDocRef = doc(db, "gifts", itemDetails.id);
-      const itemSnap = await getDoc(itemDocRef);
-      const item = itemSnap.exists() ? giftFromDoc(itemSnap) : null;
-      if (!item) return null;
-      finalDataToAdd = {
-        name: itemDetails.name.trim(),
-        description: itemDetails.description?.trim() || null,
-        category: itemDetails.category,
-        // Set status and selectedBy based on quantity or admin input
-        status: itemDetails.status === "not_needed" ? "not_needed" : isQuantityItem ? "available" : itemDetails.status,
-        selectedBy: itemDetails.status === "selected" && !isQuantityItem ? itemDetails.selectedBy?.trim() || "Admin" : null,
-        selectionDate: itemDetails.status === "selected" && !isQuantityItem ? serverTimestamp() : null,
-        createdAt: item.createdAt,
-        imageUrl: finalImageUrl, // Use uploaded URL or null
-        // Quantity fields
-        totalQuantity: isQuantityItem ? totalQuantity : null,
-        selectedQuantity: 0, // Initialize selected quantity to 0,
-      };
-    } else {
-      console.log("Firestore ADD_GIFT: gift being added");
-      finalDataToAdd = {
-        name: itemDetails.name.trim(),
-        description: itemDetails.description?.trim() || null,
-        category: itemDetails.category,
-        // Set status and selectedBy based on quantity or admin input
-        status: itemDetails.status === "not_needed" ? "not_needed" : isQuantityItem ? "available" : itemDetails.status,
-        selectedBy: itemDetails.status === "selected" && !isQuantityItem ? itemDetails.selectedBy?.trim() || "Admin" : null,
-        selectionDate: itemDetails.status === "selected" && !isQuantityItem ? serverTimestamp() : null,
-        createdAt: serverTimestamp(),
-        imageUrl: finalImageUrl, // Use uploaded URL or null
-        // Quantity fields
-        totalQuantity: isQuantityItem ? totalQuantity : null,
-        selectedQuantity: 0, // Initialize selected quantity to 0,
-      };
-    }
-
     // If status is 'selected' (for non-quantity items), selectedBy must not be null or undefined
-    if (finalDataToAdd.status === "selected" && !isQuantityItem && !finalDataToAdd.selectedBy) {
-      console.warn("Firestore ADD_GIFT: Status is 'selected' but 'selectedBy' is missing. Defaulting to 'Admin'.");
+    if (
+      finalDataToAdd.status === "selected" &&
+      !isQuantityItem &&
+      !finalDataToAdd.selectedBy
+    ) {
+      console.warn(
+        "Firestore ADD_GIFT_ADMIN: Status is 'selected' but 'selectedBy' is missing. Defaulting to 'Admin'.",
+      );
       finalDataToAdd.selectedBy = "Admin";
     }
     // If status is 'not_needed', clear selection fields
@@ -890,33 +831,35 @@ export async function addGift(
       finalDataToAdd.selectedBy = null;
       finalDataToAdd.selectionDate = null;
       finalDataToAdd.selectedQuantity = 0; // Ensure selected quantity is 0
-    }    
+    }
 
     // Remove undefined fields manually before sending to Firestore
-    
-    for (const key in finalDataToAdd) {
-      // Check for both undefined and null for fields like description, selectedBy, etc.
-      if (finalDataToAdd[key as keyof typeof finalDataToAdd] === undefined) {
-        delete finalDataToAdd[key];
-      }
-    }   
+    const cleanedData = Object.fromEntries(
+      Object.entries(finalDataToAdd).filter(([, value]) => value !== undefined),
+    );
 
-    
+    console.log(
+      "Firestore ADD_GIFT_ADMIN: Cleaned Data to Add:",
+      cleanedData,
+    );
+
     // 3. Add document to Firestore
-    const docRef = await addFirestoreDoc(giftsCollectionRef, finalDataToAdd);
-    console.log(`Firestore ADD_GIFT: Gift added successfully with ID: ${docRef.id}`);
+    const docRef = await addFirestoreDoc(giftsCollectionRef, cleanedData);
+    console.log(
+      `Firestore ADD_GIFT_ADMIN: Gift added successfully with ID: ${docRef.id}`,
+    );
     forceRevalidation("/admin"); // Revalidate admin page
 
     // 4. Fetch and return the new item
     const newDocSnap = await getDoc(docRef);
     return newDocSnap.exists() ? giftFromDoc(newDocSnap) : null;
   } catch (error) {
-    console.error("Firestore ADD_GIFT: Error adding gift:", error);
+    console.error("Firestore ADD_GIFT_ADMIN: Error adding gift:", error);
     if (uploadedImageUrl) {
       console.error(
-        "Firestore ADD_GIFT: Cleaning up potentially uploaded image due to error.",
+        "Firestore ADD_GIFT_ADMIN: Cleaning up potentially uploaded image due to error.",
       );
-      await deleteImage(uploadedImageUrl).catch((e) =>        
+      await deleteImage(uploadedImageUrl).catch((e) =>
         console.error("Cleanup failed for image:", uploadedImageUrl, e),
       );
     }
@@ -924,18 +867,18 @@ export async function addGift(
       console.error(
         "Firestore: PERMISSION DENIED adding gift. Check Firestore rules.",
       );
-    } else if (error instanceof Error &&
+    } else if (
+      error instanceof Error &&
       error.message.includes("Unsupported field value")
     ) {
       console.error(
-        "Firestore ADD_GIFT: Invalid data provided. Potentially undefined field:",
+        "Firestore ADD_GIFT_ADMIN: Invalid data provided. Potentially undefined field:",
         error,
       );
-      // You might want to log dataToAdd here for debugging
       console.log("Data attempted to add:", finalDataToAdd);
-    }    
-    throw error;// Re-throw the error for the calling component
-  }    
+    }
+    throw error; // Re-throw the error for the calling component
+  }
 }
 
 /**
@@ -972,7 +915,7 @@ export async function updateGift(
         ? currentItemData.totalQuantity
         : null;
     const currentSelectedQuantity =
-      typeof currentItemData?.selectedQuantity === "number"      
+      typeof currentItemData?.selectedQuantity === "number"
         ? currentItemData.selectedQuantity
         : 0;
 
@@ -1029,7 +972,7 @@ export async function updateGift(
     const isQuantityItem = newTotalQuantity !== null && newTotalQuantity > 0;
 
     // Reset selectedQuantity if totalQuantity is removed or set to 0
-    if (!isQuantityItem) {      
+    if (!isQuantityItem) {
       dataToUpdate.selectedQuantity = 0;
     } else if (
       newTotalQuantity !== null &&
@@ -1225,7 +1168,7 @@ export async function revertSelection(
       selectionDate: null, // Clear selectionDate
       selectedQuantity: 0, // Reset selected quantity regardless of item type
     };
-    // Update the document    
+    // Update the document
     await updateDoc(itemDocRef, updateData);
     console.log(
       `Firestore REVERT_SELECTION: Selection/status for gift ${itemId} reverted successfully.`,
@@ -1614,8 +1557,3 @@ export async function getConfirmations(): Promise<Confirmation[]> {
     return []; // Return empty array on error
   }
 }
-
-// --- Initialization Call ---
-// Consider calling this less frequently, perhaps in a dedicated setup or via a manual trigger.
-// Calling it on every server render of a component using this module might be excessive.
-// initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));

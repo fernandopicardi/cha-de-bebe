@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
+// Removed Checkbox import
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -26,42 +26,24 @@ interface SelectItemDialogProps {
   item: GiftItem; // Use imported type
   isOpen: boolean;
   onClose: () => void;
-  // Updated onSuccess to include quantity, email flag, and optional email
+  // Updated onSuccess to remove email-related parameters
   onSuccess: (
     itemId: string,
     guestName: string,
     quantity: number,
-    sendReminder: boolean,
-    guestEmail?: string,
   ) => Promise<void>;
 }
 
-// Define validation schema including quantity and conditional email
-const FormSchema = z
-  .object({
-    guestName: z
-      .string()
-      .min(2, { message: "Por favor, insira seu nome (mínimo 2 caracteres)." })
-      .max(50, { message: "Nome muito longo (máximo 50 caracteres)." }),
-    // Quantity is required, minimum 1
-    quantity: z.number().min(1, "Selecione pelo menos 1 unidade."),
-    sendReminderEmail: z.boolean().default(false),
-    guestEmail: z
-      .string()
-      .email("Formato de e-mail inválido.")
-      .optional()
-      .or(z.literal("")),
-  })
-  .refine(
-    (data) =>
-      !data.sendReminderEmail ||
-      (data.sendReminderEmail && data.guestEmail && data.guestEmail.length > 0),
-    {
-      // If sendReminderEmail is true, guestEmail must be provided
-      message: "E-mail é obrigatório para receber o lembrete.",
-      path: ["guestEmail"], // Specify the path of the error
-    },
-  );
+// Define validation schema without quantity and email fields
+const FormSchema = z.object({
+  guestName: z
+    .string()
+    .min(2, { message: "Por favor, insira seu nome (mínimo 2 caracteres)." })
+    .max(50, { message: "Nome muito longo (máximo 50 caracteres)." }),
+  // Quantity is required, minimum 1
+  quantity: z.number().min(1, "Selecione pelo menos 1 unidade."),
+});
+// Removed email validation logic
 
 type FormData = z.infer<typeof FormSchema>;
 
@@ -91,14 +73,11 @@ export default function SelectItemDialog({
     defaultValues: {
       guestName: "",
       quantity: 1, // Default quantity to 1
-      sendReminderEmail: false,
-      guestEmail: "",
     },
   });
 
   // Watch relevant fields
   const watchQuantity = watch("quantity");
-  const watchSendReminder = watch("sendReminderEmail");
 
   // Adjust quantity based on available amount
   useEffect(() => {
@@ -136,14 +115,8 @@ export default function SelectItemDialog({
     }
 
     try {
-      // Call the success callback passed from the parent including quantity and email info
-      await onSuccess(
-        item.id,
-        data.guestName,
-        data.quantity,
-        data.sendReminderEmail,
-        data.guestEmail,
-      );
+      // Call the success callback passed from the parent without email info
+      await onSuccess(item.id, data.guestName, data.quantity);
 
       // Toast is handled within the onSuccess callback in gift-list.tsx after mutation completes
       reset(); // Reset form fields
@@ -169,16 +142,12 @@ export default function SelectItemDialog({
       reset({
         guestName: "",
         quantity: 1,
-        sendReminderEmail: false,
-        guestEmail: "",
       }); // Ensure reset clears the field
     } else {
       // When opening, reset quantity to 1 if available
       reset({
         guestName: "",
         quantity: availableQuantity >= 1 ? 1 : 0,
-        sendReminderEmail: false,
-        guestEmail: "",
       });
     }
   }, [isOpen, reset, item, availableQuantity]); // Add item and availableQuantity dependency
@@ -275,57 +244,7 @@ export default function SelectItemDialog({
             </div>
           )}
 
-          {/* Email Reminder Section */}
-          <div className="col-span-4 grid grid-cols-subgrid gap-4 items-center">
-            {" "}
-            {/* Use subgrid if available or repeat grid-cols-4 */}
-            <div className="col-span-4 flex items-center space-x-2 justify-start pl-[calc(25%+1rem)]">
-              {" "}
-              {/* Align with input fields */}
-              <Checkbox
-                id="sendReminderEmail-select"
-                {...register("sendReminderEmail")}
-                disabled={isSubmitting}
-                aria-describedby="sendReminderEmail-select-label"
-              />
-              <Label
-                htmlFor="sendReminderEmail-select"
-                className="text-sm font-normal text-muted-foreground cursor-pointer"
-                id="sendReminderEmail-select-label"
-              >
-                Receber lembrete do presente por e-mail?
-              </Label>
-            </div>
-          </div>
-
-          {/* Conditional Guest Email Input */}
-          {watchSendReminder && (
-            <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
-              <Label htmlFor="guestEmail" className="text-right">
-                Seu E-mail
-              </Label>
-              <div className="col-span-3">
-                <Input
-                  id="guestEmail"
-                  type="email"
-                  placeholder="seuemail@exemplo.com"
-                  {...register("guestEmail")}
-                  className={`col-span-3 ${errors.guestEmail ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                  disabled={isSubmitting}
-                  aria-invalid={errors.guestEmail ? "true" : "false"}
-                  aria-describedby="guestEmail-error"
-                />
-                {errors.guestEmail && (
-                  <p
-                    id="guestEmail-error"
-                    className="text-sm text-destructive mt-1"
-                  >
-                    {errors.guestEmail.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Removed Email Reminder Section */}
 
           <DialogFooter className="mt-4">
             <DialogClose asChild>

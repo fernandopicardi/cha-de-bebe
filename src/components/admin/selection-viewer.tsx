@@ -106,6 +106,25 @@ export default function AdminSelectionViewer({
     }
   };
 
+  const formatDateTime = (isoString: string | null | undefined): string => {
+    if (!isoString) return "-";
+    try {
+      const date = new Date(isoString);
+      // Format as DD/MM/YYYY, HH:MM
+      return isNaN(date.getTime())
+        ? "-"
+        : date.toLocaleString("pt-BR", {
+            year: "numeric", // Changed from 2-digit
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+    } catch (e) {
+      return "-";
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="rounded-md border overflow-x-auto">
@@ -184,16 +203,7 @@ export default function AdminSelectionViewer({
                     </TableCell>
                     <TableCell>{item.selectedBy || "-"}</TableCell>
                     <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
-                      {item.selectionDate
-                        ? new Date(item.selectionDate).toLocaleDateString(
-                            "pt-BR",
-                            {
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                            },
-                          )
-                        : "-"}
+                      {formatDateTime(item.selectionDate)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button

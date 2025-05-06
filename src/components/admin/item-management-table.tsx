@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
-  addGift,
+  addGiftAdmin, // Use specific admin add function
   updateGift,
   deleteGift,
   revertSelection,
@@ -72,7 +72,7 @@ const ACCEPTED_IMAGE_TYPES = [
 ];
 
 // Validation Schema for the Add/Edit Form
-// Removed z.instanceof(FileList) to avoid SSR errors
+// Use z.any() for file to avoid SSR errors
 const giftFormSchema = z.object({
   name: z
     .string()
@@ -93,32 +93,7 @@ const giftFormSchema = z.object({
   // Holds existing URL, new data URI, or null for removal
   imageUrl: z.string().optional().nullable(),
   // Captures file input - Use z.any() or z.unknown() for SSR safety
-  imageFile: z
-    .any()
-    .refine((files) => {
-      // Validation happens primarily client-side in useEffect
-      if (!files || files.length === 0) return true; // Allow empty/null
-      const file = files[0];
-      // Basic check if it looks like a file object (on client)
-      if (typeof File !== "undefined" && file instanceof File) {
-        return ACCEPTED_IMAGE_TYPES.includes(file.type);
-      }
-      return true; // Pass validation on server if not a File
-    }, "Tipo de arquivo inválido.")
-    .refine(
-      (files) => {
-        if (!files || files.length === 0) return true; // Allow empty/null
-        const file = files[0];
-        // Basic check if it looks like a file object (on client)
-        if (typeof File !== "undefined" && file instanceof File) {
-          return file.size <= MAX_FILE_SIZE; // Validate size
-        }
-        return true; // Pass validation on server if not a File
-      },
-      `Tamanho máximo ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
-    )
-    .optional()
-    .nullable(),
+  imageFile: z.any().optional().nullable(), // Use z.any() for FileList
   // Quantity field - optional, must be a positive integer if provided
   totalQuantity: z.preprocess(
     (val) => (val === "" ? null : Number(val)), // Convert empty string to null, otherwise to number
@@ -377,12 +352,13 @@ export default function AdminItemManagementTable({
       errorDetails,
     );
     // Check for specific Firebase error messages
-    let description = `Falha ao ${operation.toLowerCase()} "${itemName}". Verifique console.`;
-    if (
-      errorDetails instanceof Error &&
-      errorDetails.message.includes("invalid data")
-    ) {
-      description = `Dados inválidos fornecidos para ${operation.toLowerCase()} "${itemName}". Verifique os campos.`;
+    let description = `Falha ao ${operation.toLowerCase()} o item "${itemName}". Verifique o console.`;
+    if (errorDetails instanceof Error) {
+      if (errorDetails.message.includes("invalid data")) {
+        description = `Dados inválidos fornecidos para ${operation.toLowerCase()} "${itemName}". Verifique os campos.`;
+      } else if (errorDetails.message.includes("PERMISSION_DENIED")) {
+        description = `Permissão negada para ${operation.toLowerCase()} "${itemName}". Verifique as regras do Firestore.`;
+      }
     } else if (errorDetails?.code === "permission-denied") {
       description = `Permissão negada para ${operation.toLowerCase()} "${itemName}". Verifique as regras do Firestore.`;
     }
@@ -428,7 +404,9 @@ export default function AdminItemManagementTable({
     const imageValue = data.imageUrl;
 
     // Create the payload
-    const finalPayload = {
+    const finalPayload: Partial<GiftItem> & {
+      imageDataUri?: string | null;
+    } = {
       name: data.name.trim(),
       description: data.description?.trim() || null,
       category: data.category,
@@ -440,7 +418,7 @@ export default function AdminItemManagementTable({
           ? data.selectedBy?.trim() || "Admin"
           : null,
       totalQuantity: isQuantityItem ? data.totalQuantity : null, // Include total quantity
-      // Determine how to pass image info based on operation and content of imageValue
+      // Pass image information based on operation and content of imageValue
       ...(editingItem
         ? { imageUrl: imageValue } // For updates, pass the current imageUrl (could be data URI, existing URL, or null)
         : { imageDataUri: imageValue }), // For adds, pass as imageDataUri (could be data URI or null)
@@ -450,22 +428,14 @@ export default function AdminItemManagementTable({
       if (editingItem) {
         console.log(
           `AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id}`,
+          finalPayload,
         );
-        // Pass the full payload for update
-        await updateGift(
-          editingItem.id,
-          finalPayload as Partial<GiftItem> & { imageDataUri?: string | null },
-        );
+        await updateGift(editingItem.id, finalPayload);
         handleSuccess(`Item "${finalPayload.name}" atualizado.`);
       } else {
-        console.log("AdminItemManagementTable: Calling addGift");
-        // Pass the payload with imageDataUri for adds
-        await addGift(
-          finalPayload as Omit<
-            GiftItem,
-            "id" | "createdAt" | "selectionDate" | "selectedQuantity"
-          > & { imageDataUri?: string | null },
-        );
+        console.log("AdminItemManagementTable: Calling addGiftAdmin");
+        // Use addGiftAdmin for adding items from the admin panel
+        await addGiftAdmin(finalPayload);
         handleSuccess(`Item "${finalPayload.name}" adicionado.`);
       }
     } catch (error) {
@@ -603,6 +573,25 @@ export default function AdminItemManagementTable({
     }
   };
 
+  const formatDateTime = (isoString: string | null | undefined): string => {
+    if (!isoString) return "-";
+    try {
+      const date = new Date(isoString);
+      // Format as DD/MM/YYYY, HH:MM
+      return isNaN(date.getTime())
+        ? "-"
+        : date.toLocaleString("pt-BR", {
+            year: "numeric", // Changed from 2-digit
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+    } catch (e) {
+      return "-";
+    }
+  };
+
   console.log(
     `AdminItemManagementTable: Rendering table. Number of safeGifts: ${safeGifts.length}`,
   );
@@ -655,11 +644,11 @@ export default function AdminItemManagementTable({
             ) : (
               safeGifts.map((item) => {
                 const isQuantityItem =
-                  (item.totalQuantity ?? 0) > 0 &&
-                  item.totalQuantity > 0;
+                  item.totalQuantity !== null && item.totalQuantity > 0;
                 const displayedStatus =
                   isQuantityItem &&
                   item.selectedQuantity !== undefined &&
+                  item.totalQuantity !== null && // Add null check for totalQuantity
                   item.selectedQuantity >= item.totalQuantity
                     ? "selected" // Show as selected if fully selected
                     : item.status; // Otherwise use stored status
@@ -715,7 +704,8 @@ export default function AdminItemManagementTable({
                     <TableCell className="text-center text-sm">
                       {isQuantityItem ? (
                         <span className="whitespace-nowrap">
-                          {item.selectedQuantity ?? 0} / {item.totalQuantity ?? 0}
+                          {item.selectedQuantity ?? 0} /{" "}
+                          {item.totalQuantity ?? 0}
                         </span>
                       ) : (
                         "-"
@@ -729,20 +719,12 @@ export default function AdminItemManagementTable({
                       item.selectedBy ? (
                         <>
                           {item.selectedBy}
-                          {item.selectionDate &&
-                            typeof item.selectionDate === "string" && (
-                              <div className="text-[10px]">
-                                (
-                                {new Date(
-                                  item.selectionDate,
-                                ).toLocaleDateString("pt-BR", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                })}
-                                )
-                              </div>
-                            )}
+                          {item.selectionDate && (
+                            <div className="text-[10px]">
+                              ({formatDateTime(item.selectionDate)}){" "}
+                              {/* Format date here */}
+                            </div>
+                          )}
                         </>
                       ) : (
                         "-"
