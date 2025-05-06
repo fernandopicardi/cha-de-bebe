@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -12,10 +13,10 @@ import {
   RefreshCcw,
   AlertCircle,
   LoaderCircle,
-  ListChecks,
+  ListChecks, // Will be replaced or re-purposed
   ListX,
-  PartyPopper,
-  UserCheck,
+  PartyPopper, // Icon for "Sugestões Disponíveis"
+  UserCheck, // Icon for "Presentes Já Escolhidos"
   Users, // Icon for Confirmation
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -314,70 +315,47 @@ export default function Home() {
           <SuggestItemButton onSuggestionAdded={fetchData} />
         </div>
 
-        <Tabs defaultValue='all' className='w-full'>
-          <TabsList className='mb-6 md:mb-8'>
-            {' '}
-            {/* Applied mb-6 and md:mb-8 */}
+        <Tabs defaultValue='available' className='w-full'> {/* Default to "Sugestões Disponíveis" */}
+          <TabsList className='mb-6 md:mb-8 grid w-full grid-cols-1 sm:grid-cols-3'>
             <TabsTrigger
-              value='all'
+              value='available' // Corresponds to 'Sugestões Disponíveis'
               className='data-[state=active]:bg-background data-[state=active]:shadow-sm flex-1 sm:flex-none'
             >
-              {' '}
-              {/* Added flex-1 sm:flex-none */}
-              <ListChecks className='mr-1 h-4 w-4' /> Todos
+              <PartyPopper className='mr-1 h-4 w-4' /> Sugestões Disponíveis
             </TabsTrigger>
             <TabsTrigger
-              value='available'
+              value='selected' // Corresponds to 'Presentes Já Escolhidos'
               className='data-[state=active]:bg-background data-[state=active]:shadow-sm flex-1 sm:flex-none'
             >
-              {' '}
-              {/* Added flex-1 sm:flex-none */}
-              <PartyPopper className='mr-1 h-4 w-4' /> Disponíveis
+              <UserCheck className='mr-1 h-4 w-4' /> Presentes Já Escolhidos
             </TabsTrigger>
             <TabsTrigger
-              value='selected'
+              value='not_needed' // Corresponds to 'Preferimos Não Utilizar'
               className='data-[state=active]:bg-background data-[state=active]:shadow-sm flex-1 sm:flex-none'
             >
-              {' '}
-              {/* Added flex-1 sm:flex-none */}
-              <UserCheck className='mr-1 h-4 w-4' /> Selecionados
-            </TabsTrigger>
-            <TabsTrigger
-              value='not_needed'
-              className='data-[state=active]:bg-background data-[state=active]:shadow-sm flex-1 sm:flex-none'
-            >
-              {' '}
-              {/* Added flex-1 sm:flex-none */}
-              <ListX className='mr-1 h-4 w-4' /> Não Precisa
+              <ListX className='mr-1 h-4 w-4' /> Preferimos Não Utilizar
             </TabsTrigger>
           </TabsList>
 
           {/* Pass fetched gifts (which is now guaranteed to be an array or empty array) */}
-          <TabsContent value='all' className='mt-6'>
-            <GiftList
-              items={gifts}
-              filterStatus='all'
-              onItemAction={fetchData}
-            />
-          </TabsContent>
           <TabsContent value='available' className='mt-6'>
             <GiftList
               items={gifts}
-              filterStatus='available'
+              filterStatus='available' // 'available' maps to "Sugestões Disponíveis"
               onItemAction={fetchData}
             />
           </TabsContent>
           <TabsContent value='selected' className='mt-6'>
             <GiftList
               items={gifts}
-              filterStatus='selected'
+              filterStatus='selected' // 'selected' maps to "Presentes Já Escolhidos"
               onItemAction={fetchData}
             />
           </TabsContent>
           <TabsContent value='not_needed' className='mt-6'>
             <GiftList
               items={gifts}
-              filterStatus='not_needed'
+              filterStatus='not_needed' // 'not_needed' maps to "Preferimos Não Utilizar"
               onItemAction={fetchData}
             />
           </TabsContent>

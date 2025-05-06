@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -14,10 +15,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Gift,
-  Check,
-  X,
+  Check, // Icon for "Sugestões Disponíveis" badge
+  X, // Icon for "Preferimos Não Utilizar" badge
   Hourglass,
-  User,
+  User, // Icon for "Presentes Já Escolhidos" badge
   Tag,
   Loader2,
   ImageIcon, // Placeholder icon
@@ -30,14 +31,14 @@ import { useToast } from '@/hooks/use-toast';
 
 interface GiftListProps {
   items: GiftItem[] | null;
-  filterStatus?: 'all' | 'available' | 'selected' | 'not_needed';
+  filterStatus?: 'available' | 'selected' | 'not_needed'; // Aligned with new categories
   filterCategory?: string;
   onItemAction?: () => void;
 }
 
 export default function GiftList({
   items,
-  filterStatus = 'all',
+  filterStatus = 'available', // Default to 'available' for "Sugestões Disponíveis"
   filterCategory,
   onItemAction,
 }: GiftListProps) {
@@ -86,41 +87,26 @@ export default function GiftList({
       }
       const effectiveStatus = getEffectiveStatus(item);
 
-      const statusMatch =
-        filterStatus === 'all' || effectiveStatus === filterStatus;
+      const statusMatch = effectiveStatus === filterStatus; // Direct match with the new categories
       const categoryMatch =
         !filterCategory ||
         item.category?.toLowerCase() === filterCategory.toLowerCase();
       return statusMatch && categoryMatch;
     });
 
-    // Sort only if the filter is 'all'
-    if (filterStatus === 'all') {
-        initiallyFiltered.sort((a, b) => {
-            const statusA = getEffectiveStatus(a);
-            const statusB = getEffectiveStatus(b);
+    // Sort items: "Sugestões Disponíveis" (available) first, then by name for other categories
+    initiallyFiltered.sort((a, b) => {
+        const statusA = getEffectiveStatus(a);
+        const statusB = getEffectiveStatus(b);
 
-            // Prioritize 'available' items
-            if (statusA === 'available' && statusB !== 'available') {
-                return -1; // a comes first
-            }
-            if (statusA !== 'available' && statusB === 'available') {
-                return 1; // b comes first
-            }
-
-             // Secondary sort: 'selected' before 'not_needed'
-             if (statusA === 'selected' && statusB === 'not_needed') {
-                return -1; // a comes first
-             }
-             if (statusA === 'not_needed' && statusB === 'selected') {
-                 return 1; // b comes first
-             }
-
-            // Optional: Add further sorting if statuses are the same (e.g., by name)
-            // return a.name.localeCompare(b.name);
-            return 0; // Keep original relative order if statuses are the same
-        });
-    }
+        // Prioritize 'available' items for "Sugestões Disponíveis" tab
+        if (filterStatus === 'available') {
+            if (statusA === 'available' && statusB !== 'available') return -1;
+            if (statusA !== 'available' && statusB === 'available') return 1;
+        }
+        // For other tabs, or within status groups, sort by name
+        return a.name.localeCompare(b.name);
+    });
 
 
     console.log(
@@ -234,7 +220,7 @@ export default function GiftList({
             variant='secondary'
             className='bg-secondary text-secondary-foreground'
           >
-            <User className='mr-1 h-3 w-3' /> Selecionado {quantityText}
+            <User className='mr-1 h-3 w-3' /> Escolhido {quantityText}
           </Badge>
         );
       case 'not_needed':
@@ -243,7 +229,7 @@ export default function GiftList({
             variant='destructive'
             className='bg-destructive/80 text-destructive-foreground'
           >
-            <X className='mr-1 h-3 w-3' /> Não Precisa
+            <X className='mr-1 h-3 w-3' /> Não Utilizar
           </Badge>
         );
       default:
@@ -314,11 +300,11 @@ export default function GiftList({
   if (isFilteredListEmpty) {
     let emptyMessage = 'Nenhum item encontrado para esta seleção.';
     if (filterStatus === 'available')
-      emptyMessage = 'Oba! Todos os presentes disponíveis já foram escolhidos.';
+      emptyMessage = 'Nenhuma sugestão disponível no momento.';
     if (filterStatus === 'selected')
-      emptyMessage = 'Nenhum presente foi selecionado ainda.';
+      emptyMessage = 'Nenhum presente foi escolhido ainda.';
     if (filterStatus === 'not_needed')
-      emptyMessage = "Nenhum item marcado como 'Não Precisa' nesta lista.";
+      emptyMessage = "Nenhum item marcado como 'Preferimos Não Utilizar'.";
     console.log(
       `GiftList (${filterStatus}): Rendering specific empty message: ${emptyMessage}`
     );
@@ -355,13 +341,11 @@ export default function GiftList({
                     fill
                     style={{ objectFit: 'cover' }}
                     sizes='(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw' // Adjusted sizes
-                    priority={filterStatus === 'all'} // Prioritize images in 'all' tab might help LCP
-                    // unoptimized={item.imageUrl.startsWith("data:")} // Keep for data URIs if used
+                    priority={filterStatus === 'available'} // Prioritize images in "Sugestões Disponíveis" tab
                     data-ai-hint='baby gift item'
                     onError={(e) => {
                       console.warn(`Failed to load image: ${item.imageUrl}`);
                       (e.target as HTMLImageElement).style.display = 'none';
-                      // Optionally display a placeholder or icon in the parent div
                       const parent = (e.target as HTMLImageElement).parentElement;
                       if(parent && !parent.querySelector('.placeholder-icon')) {
                           const placeholder = document.createElement('div');
