@@ -1,13 +1,13 @@
-"use server";
+'use server';
 
-import { storage } from "@/firebase/config";
+import { storage } from '@/firebase/config';
 import {
   ref,
   uploadString,
   getDownloadURL,
   deleteObject,
-} from "firebase/storage";
-import { v4 as uuidv4 } from "uuid"; // For generating unique filenames
+} from 'firebase/storage';
+import { v4 as uuidv4 } from 'uuid'; // For generating unique filenames
 
 /**
  * Uploads an image (provided as a data URI) to Firebase Storage.
@@ -21,22 +21,22 @@ import { v4 as uuidv4 } from "uuid"; // For generating unique filenames
 export async function uploadImage(
   dataUri: string,
   folder: string,
-  filenamePrefix?: string,
+  filenamePrefix?: string
 ): Promise<string> {
   console.log(
-    `Storage Service: Uploading image to folder: ${folder}, Prefix: ${filenamePrefix}`,
+    `Storage Service: Uploading image to folder: ${folder}, Prefix: ${filenamePrefix}`
   );
 
-  if (!dataUri.startsWith("data:image/")) {
-    console.error("Storage Service: Invalid data URI provided.");
-    throw new Error("Invalid image data format.");
+  if (!dataUri.startsWith('data:image/')) {
+    console.error('Storage Service: Invalid data URI provided.');
+    throw new Error('Invalid image data format.');
   }
 
   // Extract mime type and base64 data
   const matches = dataUri.match(/^data:(image\/(.+));base64,(.*)$/);
   if (!matches || matches.length !== 4) {
-    console.error("Storage Service: Could not parse data URI.");
-    throw new Error("Could not parse image data URI.");
+    console.error('Storage Service: Could not parse data URI.');
+    throw new Error('Could not parse image data URI.');
   }
 
   const mimeType = matches[1];
@@ -55,24 +55,24 @@ export async function uploadImage(
 
   try {
     // Upload the base64 string
-    const snapshot = await uploadString(storageRef, base64Data, "base64", {
+    const snapshot = await uploadString(storageRef, base64Data, 'base64', {
       contentType: mimeType,
     });
     console.log(
-      "Storage Service: Image uploaded successfully. Snapshot:",
-      snapshot.metadata.fullPath,
+      'Storage Service: Image uploaded successfully. Snapshot:',
+      snapshot.metadata.fullPath
     );
 
     // Get the public download URL
     const downloadURL = await getDownloadURL(snapshot.ref);
-    console.log("Storage Service: Download URL retrieved:", downloadURL);
+    console.log('Storage Service: Download URL retrieved:', downloadURL);
 
     return downloadURL;
   } catch (error) {
-    console.error("Storage Service: Error uploading image:", error);
+    console.error('Storage Service: Error uploading image:', error);
     // Consider more specific error handling (e.g., permissions)
     throw new Error(
-      `Failed to upload image: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to upload image: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }
@@ -86,11 +86,11 @@ export async function uploadImage(
  */
 export async function deleteImage(downloadURL: string): Promise<void> {
   console.log(
-    `Storage Service: Attempting to delete image with URL: ${downloadURL}`,
+    `Storage Service: Attempting to delete image with URL: ${downloadURL}`
   );
-  if (!downloadURL || !downloadURL.includes("firebasestorage.googleapis.com")) {
+  if (!downloadURL || !downloadURL.includes('firebasestorage.googleapis.com')) {
     console.warn(
-      "Storage Service: Invalid or non-Firebase Storage URL provided for deletion.",
+      'Storage Service: Invalid or non-Firebase Storage URL provided for deletion.'
     );
     // Decide if this should be an error or just ignored
     // throw new Error('Invalid Firebase Storage URL for deletion.');
@@ -100,18 +100,18 @@ export async function deleteImage(downloadURL: string): Promise<void> {
     const storageRef = ref(storage, downloadURL);
     await deleteObject(storageRef);
     console.log(
-      "Storage Service: Image deleted successfully from URL:",
-      downloadURL,
+      'Storage Service: Image deleted successfully from URL:',
+      downloadURL
     );
   } catch (error: any) {
     // Firebase Storage throws 'storage/object-not-found' if the file doesn't exist.
     // We can often safely ignore this specific error, especially if trying to clean up old URLs.
-    if (error.code === "storage/object-not-found") {
+    if (error.code === 'storage/object-not-found') {
       console.warn(
-        `Storage Service: Image not found for deletion (URL: ${downloadURL}). It might have already been deleted.`,
+        `Storage Service: Image not found for deletion (URL: ${downloadURL}). It might have already been deleted.`
       );
     } else {
-      console.error("Storage Service: Error deleting image:", error);
+      console.error('Storage Service: Error deleting image:', error);
       // Re-throw other errors
       throw new Error(`Failed to delete image: ${error.message}`);
     }

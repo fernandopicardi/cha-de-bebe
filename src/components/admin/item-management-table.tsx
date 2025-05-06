@@ -136,13 +136,12 @@ export default function AdminItemManagementTable({
   }, [gifts]);
 
   // Ensure gifts is always an array before using it
-  const safeGifts = useMemo(() => {
-    const result = Array.isArray(gifts) ? gifts : [];
-    console.log(
-      `AdminItemManagementTable: Memoized safeGifts. Count: ${result.length}`,
-    );
-    return result;
-  }, [gifts]);
+  const safeGifts = gifts.map(item => ({
+    ...item,
+    totalQuantity: item.totalQuantity ?? null, // Convert undefined to null
+  }));
+  
+  
 
   const {
     control,
@@ -499,7 +498,7 @@ export default function AdminItemManagementTable({
     if (actionLoading) return;
     if (item.status !== "selected" && item.status !== "not_needed") return;
     // Disable revert for quantity items for now
-    if (item.totalQuantity !== null && item.totalQuantity > 0) {
+    if (item.totalQuantity != null && item.totalQuantity > 0) {
       toast({
         title: "Ação Indisponível",
         description:
@@ -650,23 +649,23 @@ export default function AdminItemManagementTable({
                 </TableCell>
               </TableRow>
             ) : (
-              safeGifts.map((item) => {
+              safeGifts.map((item) => {               
                 const isQuantityItem =
                   item.totalQuantity !== null && item.totalQuantity > 0;
-                const displayedStatus =
+                  const displayedStatus =
                   isQuantityItem &&
                   item.selectedQuantity !== undefined &&
-                  item.totalQuantity !== null && // Add null check for totalQuantity
+                  item.totalQuantity != null &&
                   item.selectedQuantity >= item.totalQuantity
-                    ? "selected" // Show as selected if fully selected
-                    : item.status; // Otherwise use stored status
+                    ? "selected" : item.status;
                 const canRevert =
                   !isQuantityItem &&
                   (displayedStatus === "selected" ||
                     displayedStatus === "not_needed");
-                 // Ensure no whitespace before/after TableRow or between TableCells
+                
                 return (
-                  <TableRow
+                 
+                   <TableRow
                     key={item.id}
                     className={
                       actionLoading?.endsWith(item.id)
@@ -697,18 +696,20 @@ export default function AdminItemManagementTable({
                       </div>
                     </TableCell><TableCell className="font-medium whitespace-nowrap">
                       {item.name}
-                    </TableCell><TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate">
+                    </TableCell><TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate" >
                       {item.description || "-"}
-                    </TableCell><TableCell className="hidden md:table-cell">
+                    </TableCell><TableCell className="hidden md:table-cell" >
                       {item.category}
-                    </TableCell><TableCell>{getStatusBadge(displayedStatus)}</TableCell><TableCell className="text-center text-sm">
+                    </TableCell><TableCell >{getStatusBadge(displayedStatus)}</TableCell><TableCell className="text-center text-sm" >
                       {isQuantityItem ? (
                         <span className="whitespace-nowrap">
                           {item.selectedQuantity ?? 0} /{" "}
                           {item.totalQuantity ?? 0}
                         </span>
                       ) : (
-                        "-"
+                        item.totalQuantity != null && item.totalQuantity > 0 ? (item.selectedQuantity ?? 0) + ' / '+ item.totalQuantity : 
+                         "-"
+                        
                       )}
                     </TableCell><TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
                       {/* Show selectedBy only if NOT a quantity item or if fully selected */}
@@ -724,7 +725,7 @@ export default function AdminItemManagementTable({
                           )}
                         </>
                       ) : (
-                        "-"
+                         "-"
                       )}
                     </TableCell><TableCell className="text-right space-x-1 whitespace-nowrap">
                       {actionLoading?.endsWith(item.id) ? (
@@ -781,7 +782,7 @@ export default function AdminItemManagementTable({
                           </Button>
                         </>
                       )}
-                    </TableCell></TableRow>
+                    </TableCell></TableRow> 
                 );
               })
             )}

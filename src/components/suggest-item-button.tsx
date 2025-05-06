@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
-import SuggestItemDialog from "./suggest-item-dialog"; // Import the new dialog component
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { PlusCircle } from 'lucide-react';
+import SuggestItemDialog from './suggest-item-dialog'; // Import the new dialog component
 
 interface SuggestItemButtonProps {
   onSuggestionAdded?: () => void; // Callback to notify parent (passed down to dialog)
@@ -30,11 +30,11 @@ export default function SuggestItemButton({
   return (
     <>
       <Button
-        variant="outline"
-        className="border-accent text-accent-foreground hover:bg-accent/10"
+        variant='outline'
+        className='border-accent text-accent-foreground hover:bg-accent/10'
         onClick={handleOpenDialog}
       >
-        <PlusCircle className="mr-2 h-4 w-4" /> Adicionar um Item
+        <PlusCircle className='mr-2 h-4 w-4' /> Adicionar um Item
       </Button>
 
       <SuggestItemDialog

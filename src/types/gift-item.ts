@@ -1,11 +1,11 @@
-import { FieldValue } from "firebase/firestore";
+import { FieldValue } from 'firebase/firestore';
 
 export interface GiftItem {
   id: string;
   name: string;
   description: string | null;
   category: string;
-  status: "available" | "selected" | "not_needed";
+  status: 'available' | 'selected' | 'not_needed';
   selectedBy: string | null;
   selectionDate: string | FieldValue | null;
   createdAt: string | FieldValue | null;

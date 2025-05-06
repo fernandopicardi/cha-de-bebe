@@ -1,6 +1,6 @@
-"use client"; // This hook uses client-side state and effects
+'use client'; // This hook uses client-side state and effects
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from 'react';
 import {
   getAuth,
   onAuthStateChanged,
@@ -11,8 +11,8 @@ import {
   initializeAuth,
   // Import persistence if needed, e.g., indexedDBLocalPersistence for web
   // indexedDBLocalPersistence
-} from "firebase/auth";
-import { initializeApp, getApps, FirebaseApp } from "firebase/app";
+} from 'firebase/auth';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 
 // Firebase config - needed here to initialize app if not already done
 const firebaseConfig = {
@@ -29,10 +29,10 @@ const firebaseConfig = {
 let app: FirebaseApp;
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
-  console.log("useAuth: Firebase App initialized.");
+  console.log('useAuth: Firebase App initialized.');
 } else {
   app = getApps()[0];
-  console.log("useAuth: Using existing Firebase App instance.");
+  console.log('useAuth: Using existing Firebase App instance.');
 }
 
 // Initialize Firebase Auth specifically for the client
@@ -56,7 +56,7 @@ export default function useAuth(): AuthState {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("useAuth: Setting up onAuthStateChanged listener.");
+    console.log('useAuth: Setting up onAuthStateChanged listener.');
     setLoading(true); // Ensure loading is true when listener setup starts
     setError(null); // Clear previous errors
 
@@ -65,8 +65,8 @@ export default function useAuth(): AuthState {
       auth,
       (currentUser) => {
         console.log(
-          "useAuth: onAuthStateChanged triggered. User:",
-          currentUser?.uid,
+          'useAuth: onAuthStateChanged triggered. User:',
+          currentUser?.uid
         );
         setUser(currentUser);
         setLoading(false); // Auth state confirmed, stop loading
@@ -75,35 +75,35 @@ export default function useAuth(): AuthState {
       (authError: AuthError) => {
         // Handle errors during initial listener setup or subsequent changes
         console.error(
-          "useAuth: Error in onAuthStateChanged listener:",
-          authError,
+          'useAuth: Error in onAuthStateChanged listener:',
+          authError
         );
         setError(
-          authError.message || "Erro ao verificar o estado de autenticação.",
+          authError.message || 'Erro ao verificar o estado de autenticação.'
         );
         setUser(null); // Ensure user is null on error
         setLoading(false); // Stop loading even on error
-      },
+      }
     );
 
     // Cleanup listener on component unmount
     return () => {
-      console.log("useAuth: Cleaning up onAuthStateChanged listener.");
+      console.log('useAuth: Cleaning up onAuthStateChanged listener.');
       unsubscribe();
     };
   }, []); // Empty dependency array ensures this runs only once on mount/unmount
 
   const logout = useCallback(async () => {
-    console.log("useAuth: Attempting logout...");
+    console.log('useAuth: Attempting logout...');
     setLoading(true); // Indicate loading during logout
     setError(null);
     try {
       await signOut(auth);
-      console.log("useAuth: Logout successful.");
+      console.log('useAuth: Logout successful.');
       setUser(null); // Explicitly set user to null
     } catch (err: any) {
-      console.error("useAuth: Error during logout:", err);
-      setError(err.message || "Erro ao fazer logout.");
+      console.error('useAuth: Error during logout:', err);
+      setError(err.message || 'Erro ao fazer logout.');
       setUser(null); // Ensure user is null on error
     } finally {
       setLoading(false); // Stop loading after logout attempt
@@ -113,37 +113,37 @@ export default function useAuth(): AuthState {
   // Function to handle email/password login
   const loginWithEmail = useCallback(
     async (email: string, password: string): Promise<User | null> => {
-      console.log("useAuth: Attempting login with email:", email);
+      console.log('useAuth: Attempting login with email:', email);
       setLoading(true);
       setError(null);
       try {
         const userCredential = await signInWithEmailAndPassword(
           auth,
           email,
-          password,
+          password
         );
         console.log(
-          "useAuth: Email/Password login successful. User:",
-          userCredential.user.uid,
+          'useAuth: Email/Password login successful. User:',
+          userCredential.user.uid
         );
         // No need to setUser here, onAuthStateChanged will handle it
         return userCredential.user;
       } catch (err: any) {
-        console.error("useAuth: Error during email/password login:", err);
+        console.error('useAuth: Error during email/password login:', err);
         // Set specific error messages based on Firebase error codes
         let errorMessage =
-          "Falha no login. Verifique suas credenciais ou tente novamente.";
+          'Falha no login. Verifique suas credenciais ou tente novamente.';
         if (
-          err.code === "auth/invalid-credential" ||
-          err.code === "auth/wrong-password" ||
-          err.code === "auth/user-not-found"
+          err.code === 'auth/invalid-credential' ||
+          err.code === 'auth/wrong-password' ||
+          err.code === 'auth/user-not-found'
         ) {
-          errorMessage = "E-mail ou senha inválidos.";
-        } else if (err.code === "auth/invalid-email") {
-          errorMessage = "Formato de e-mail inválido.";
-        } else if (err.code === "auth/too-many-requests") {
+          errorMessage = 'E-mail ou senha inválidos.';
+        } else if (err.code === 'auth/invalid-email') {
+          errorMessage = 'Formato de e-mail inválido.';
+        } else if (err.code === 'auth/too-many-requests') {
           errorMessage =
-            "Muitas tentativas de login. Tente novamente mais tarde.";
+            'Muitas tentativas de login. Tente novamente mais tarde.';
         }
         setError(errorMessage);
         setUser(null); // Ensure user is null on login failure
@@ -152,7 +152,7 @@ export default function useAuth(): AuthState {
         setLoading(false);
       }
     },
-    [],
+    []
   );
 
   return { user, loading, error, logout, loginWithEmail };
