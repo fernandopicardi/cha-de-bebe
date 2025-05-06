@@ -1,3 +1,15 @@
+/**
+ * Manages gift items within the admin panel, allowing for CRUD operations.
+ * Features:
+ * - Displays a table of existing gift items.
+ * - Allows adding new items via a dialog.
+ * - Allows editing existing items via a dialog.
+ * - Handles image upload/preview/removal for items.
+ * - Supports quantity-based items and single items.
+ * - Provides actions to delete, revert selection, or mark items as not needed.
+ * - Uses Zod for form validation and React Hook Form for form management.
+ * - Communicates with `gift-store.ts` for data persistence.
+ */
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react"; // Added useEffect and useMemo
@@ -104,7 +116,7 @@ const giftFormSchema = z.object({
       .int()
       .positive("Quantidade deve ser um número positivo.")
       .nullable()
-      .optional(), // Allow null or positive int
+      .optional() // Allow null or positive int
   ),
 });
 
@@ -133,17 +145,25 @@ export default function AdminItemManagementTable({
   // Log received gifts when the prop changes
   useEffect(() => {
     console.log(
-      `AdminItemManagementTable: Received gifts prop update. Count: ${gifts?.length ?? 0}`,
+      `AdminItemManagementTable: Received gifts prop update. Count: ${
+        gifts?.length ?? 0
+      }`
     );
   }, [gifts]);
 
   // Ensure gifts is always an array before using it
-  const safeGifts = gifts.map(item => ({
-    ...item,
-    totalQuantity: item.totalQuantity ?? null, // Convert undefined to null
-  }));
-  
-  
+  const safeGifts = useMemo(() => {
+    const result = Array.isArray(gifts)
+      ? gifts.map((item) => ({
+          ...item,
+          totalQuantity: item.totalQuantity ?? null, // Ensure totalQuantity is null if undefined
+        }))
+      : [];
+    console.log(
+      `AdminItemManagementTable: Memoized safeGifts. Count: ${result.length}`
+    );
+    return result;
+  }, [gifts]);
 
   const {
     control,
@@ -177,29 +197,46 @@ export default function AdminItemManagementTable({
   // Handle image preview updates
   useEffect(() => {
     // Ensure this runs only on the client where FileList and File are defined
-    if (!isClient || !watchedImageFile) return;
+    if (!isClient) return;
 
     // Safely check if watchedImageFile is a FileList
     let fileList: FileList | null = null;
-    if (typeof FileList !== "undefined" && watchedImageFile instanceof FileList) {
+    if (
+      typeof FileList !== "undefined" &&
+      watchedImageFile instanceof FileList
+    ) {
       fileList = watchedImageFile;
-    } else {
-      // If not a FileList (could be null, undefined, or something else), clear relevant fields
-      console.warn("Watched imageFile is not a FileList:", watchedImageFile);
-       // Clear only if the current value is a data URI (meaning a preview was staged)
+    } else if (watchedImageFile === null || watchedImageFile === undefined) {
+      // If imageFile is null or undefined (e.g., cleared or never selected),
+      // ensure dataUri and preview reflect the initial state or lack of image.
       const initialUrl = editingItem?.imageUrl || null;
       const currentRHFUrl = getValues("imageUrl");
-       if (currentRHFUrl && currentRHFUrl.startsWith("data:")) {
-         console.log(
-           "AdminItemManagementTable Dialog: Non-FileList watched, reverting preview/URL to initial state:",
-           initialUrl,
-         );
-         setValue("imageUrl", initialUrl);
-         setImagePreview(initialUrl);
-       }
+      if (currentRHFUrl && currentRHFUrl.startsWith("data:")) {
+        // Only revert if a file *was* staged (RHF imageUrl is a data URI)
+        console.log(
+          "AdminItemManagementTable Dialog: imageFile cleared, reverting preview/URL to initial state:",
+          initialUrl
+        );
+        setValue("imageUrl", initialUrl);
+        setImagePreview(initialUrl);
+      } else if (!currentRHFUrl && !initialUrl) {
+        // No file, no initial URL. Ensure preview is null.
+        setImagePreview(null);
+        setValue("imageUrl", null);
+      }
       return; // Don't proceed if it's not a valid FileList
+    } else {
+      console.warn(
+        "AdminItemManagementTable Dialog: Watched imageFile is not a FileList, null, or undefined:",
+        watchedImageFile
+      );
+      // Attempt to reset to initial state if it's some other unexpected value
+      const initialUrl = editingItem?.imageUrl || null;
+      setValue("imageFile", null); // Clear the invalid RHF imageFile value
+      setValue("imageUrl", initialUrl);
+      setImagePreview(initialUrl);
+      return;
     }
-
 
     const file = fileList?.[0];
 
@@ -208,7 +245,7 @@ export default function AdminItemManagementTable({
       if (!(file instanceof File)) {
         console.warn(
           "AdminItemManagementTable Dialog: Watched imageFile is not a File object:",
-          file,
+          file
         );
         setValue("imageFile", null); // Clear if not a File
         const initialUrl = editingItem?.imageUrl || null;
@@ -233,7 +270,7 @@ export default function AdminItemManagementTable({
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({
           title: "Erro de Arquivo",
-          description: "Tipo inválido (JPG, PNG, GIF, WebP).",
+          description: "Tipo inválido (JPG, PNG, GIF, WebP, MP4, MOV).",
           variant: "destructive",
         });
         setValue("imageFile", null);
@@ -248,32 +285,27 @@ export default function AdminItemManagementTable({
       reader.onloadend = () => {
         const result = reader.result as string;
         console.log(
-          "AdminItemManagementTable Dialog: Generated data URI preview.",
+          "AdminItemManagementTable Dialog: Generated data URI preview."
         );
         setValue("imageUrl", result); // Store data URI
         setImagePreview(result);
-        // Trigger validation for the field after setting value (optional, as validation moved here)
-        // trigger("imageFile");
       };
-      reader.onerror = (err) => console.error("FileReader error:", err);
-      reader.readAsDataURL(file);
-    } else if (
-      fileList === null ||
-      (typeof fileList === "object" && fileList?.length === 0)
-    ) {
-      // File cleared, revert preview/URL to initial state if a file *was* staged
-      const initialUrl = editingItem?.imageUrl || null;
-      const currentRHFUrl = getValues("imageUrl");
-      if (currentRHFUrl && currentRHFUrl.startsWith("data:")) {
-        console.log(
-          "AdminItemManagementTable Dialog: File selection cleared, reverting preview/URL to initial state:",
-          initialUrl,
-        );
+      reader.onerror = (err) => {
+        console.error("FileReader error:", err);
+        toast({
+          title: "Erro ao Ler Arquivo",
+          description: "Não foi possível carregar a prévia.",
+          variant: "destructive",
+        });
+        // Revert to initial state on reader error
+        const initialUrl = editingItem?.imageUrl || null;
+        setValue("imageFile", null);
         setValue("imageUrl", initialUrl);
         setImagePreview(initialUrl);
-        // trigger("imageFile"); // Re-validate after clearing (optional)
-      }
+      };
+      reader.readAsDataURL(file);
     }
+    // No 'else if' for fileList === null here as it's handled at the top of the useEffect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     watchedImageFile,
@@ -306,7 +338,7 @@ export default function AdminItemManagementTable({
   const handleOpenEditDialog = (item: GiftItem) => {
     console.log(
       `AdminItemManagementTable: Opening EDIT dialog for item ID: ${item.id}`,
-      item,
+      item
     );
     setEditingItem(item);
     reset({
@@ -348,7 +380,7 @@ export default function AdminItemManagementTable({
     setValue("imageUrl", null); // Set URL to null for removal signal
     setImagePreview(null); // Clear preview state
     const fileInput = document.getElementById(
-      "imageFile-dialog",
+      "imageFile-dialog"
     ) as HTMLInputElement | null;
     if (fileInput) fileInput.value = "";
     // trigger("imageFile"); // Re-validate after removing (optional)
@@ -357,7 +389,7 @@ export default function AdminItemManagementTable({
   // Show toast and trigger parent refresh after data store mutation completes
   const handleSuccess = (message: string) => {
     console.log(
-      `AdminItemManagementTable: Operation successful - ${message}. Triggering onDataChange.`,
+      `AdminItemManagementTable: Operation successful - ${message}. Triggering onDataChange.`
     );
     toast({ title: "Sucesso!", description: message });
     onDataChange?.();
@@ -367,11 +399,11 @@ export default function AdminItemManagementTable({
   const handleError = (
     operation: string,
     itemName: string,
-    errorDetails?: any,
+    errorDetails?: any
   ) => {
     console.error(
       `AdminItemManagementTable: Error during ${operation} for "${itemName}":`,
-      errorDetails,
+      errorDetails
     );
     // Check for specific Firebase error messages
     let description = `Falha ao ${operation.toLowerCase()} o item "${itemName}". Verifique o console.`;
@@ -393,7 +425,7 @@ export default function AdminItemManagementTable({
     const itemName =
       data.name || (editingItem ? editingItem.name : "Novo Item");
     console.log(
-      `AdminItemManagementTable: Submitting form to ${operation} item: ${itemName}`,
+      `AdminItemManagementTable: Submitting form to ${operation} item: ${itemName}`
     );
 
     const isQuantityItem =
@@ -417,7 +449,7 @@ export default function AdminItemManagementTable({
     // The status will be derived based on selected vs total quantities in the backend/display
     if (isQuantityItem && data.status === "selected") {
       console.warn(
-        "AdminItemManagementTable: Cannot manually set status to 'selected' for quantity items via admin form. Status will be derived.",
+        "AdminItemManagementTable: Cannot manually set status to 'selected' for quantity items via admin form. Status will be derived."
       );
       data.status = "available"; // Force status to available for quantity items added/edited via admin
     }
@@ -437,8 +469,8 @@ export default function AdminItemManagementTable({
       selectedBy: isQuantityItem
         ? null
         : data.status === "selected"
-          ? data.selectedBy?.trim() || "Admin"
-          : null,
+        ? data.selectedBy?.trim() || "Admin"
+        : null,
       totalQuantity: isQuantityItem ? data.totalQuantity : null, // Include total quantity
       // Pass image information based on operation and content of imageValue
       ...(editingItem
@@ -450,7 +482,7 @@ export default function AdminItemManagementTable({
       if (editingItem) {
         console.log(
           `AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id}`,
-          finalPayload,
+          finalPayload
         );
         await updateGift(editingItem.id, finalPayload);
         handleSuccess(`Item "${finalPayload.name}" atualizado.`);
@@ -469,7 +501,7 @@ export default function AdminItemManagementTable({
   const handleDelete = async (item: GiftItem) => {
     if (actionLoading) return;
     console.log(
-      `AdminItemManagementTable: Attempting to delete item ID: ${item.id}`,
+      `AdminItemManagementTable: Attempting to delete item ID: ${item.id}`
     );
     if (confirm(`Excluir "${item.name}"? Ação irreversível.`)) {
       setActionLoading(`delete-${item.id}`);
@@ -488,7 +520,7 @@ export default function AdminItemManagementTable({
       }
     } else {
       console.log(
-        `AdminItemManagementTable: Delete cancelled for item ID: ${item.id}`,
+        `AdminItemManagementTable: Delete cancelled for item ID: ${item.id}`
       );
     }
   };
@@ -514,11 +546,11 @@ export default function AdminItemManagementTable({
       item.status === "selected" ? "reverter seleção" : 'remover "Não Precisa"';
     const guestNameInfo = item.selectedBy ? ` por ${item.selectedBy}` : "";
     console.log(
-      `AdminItemManagementTable: Attempting to revert item ID: ${item.id}`,
+      `AdminItemManagementTable: Attempting to revert item ID: ${item.id}`
     );
     if (
       confirm(
-        `Tem certeza que deseja ${actionText} de "${item.name}"${guestNameInfo}?`,
+        `Tem certeza que deseja ${actionText} de "${item.name}"${guestNameInfo}?`
       )
     ) {
       setActionLoading(`revert-${item.id}`);
@@ -532,7 +564,7 @@ export default function AdminItemManagementTable({
       }
     } else {
       console.log(
-        `AdminItemManagementTable: Revert cancelled for item ID: ${item.id}`,
+        `AdminItemManagementTable: Revert cancelled for item ID: ${item.id}`
       );
     }
   };
@@ -542,7 +574,7 @@ export default function AdminItemManagementTable({
     if (actionLoading) return;
     if (item.status === "not_needed") return;
     console.log(
-      `AdminItemManagementTable: Attempting to mark item ID: ${item.id} as not needed.`,
+      `AdminItemManagementTable: Attempting to mark item ID: ${item.id} as not needed.`
     );
     if (confirm(`Marcar "${item.name}" como "Não Precisa"?`)) {
       setActionLoading(`mark-${item.id}`);
@@ -556,7 +588,7 @@ export default function AdminItemManagementTable({
       }
     } else {
       console.log(
-        `AdminItemManagementTable: Mark as not needed cancelled for item ID: ${item.id}`,
+        `AdminItemManagementTable: Mark as not needed cancelled for item ID: ${item.id}`
       );
     }
   };
@@ -569,7 +601,7 @@ export default function AdminItemManagementTable({
             variant="default"
             className="bg-success text-success-foreground"
           >
-            Disponível
+            Sugestão Disponível
           </Badge>
         );
       case "selected":
@@ -578,7 +610,7 @@ export default function AdminItemManagementTable({
             variant="secondary"
             className="bg-secondary text-secondary-foreground"
           >
-            Selecionado
+            Já Escolhido
           </Badge>
         );
       case "not_needed":
@@ -587,7 +619,7 @@ export default function AdminItemManagementTable({
             variant="destructive"
             className="bg-destructive/80 text-destructive-foreground"
           >
-            Não Precisa
+            Preferimos Não Utilizar
           </Badge>
         );
       default:
@@ -615,7 +647,7 @@ export default function AdminItemManagementTable({
   };
 
   console.log(
-    `AdminItemManagementTable: Rendering table. Number of safeGifts: ${safeGifts.length}`,
+    `AdminItemManagementTable: Rendering table. Number of safeGifts: ${safeGifts.length}`
   );
 
   return (
@@ -639,42 +671,47 @@ export default function AdminItemManagementTable({
               <TableHead className="hidden md:table-cell">Categoria</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Quantidade</TableHead> {/* New Quantity Column */}
-              <TableHead className="hidden xl:table-cell">Selecionado Por</TableHead>
+              <TableHead className="hidden xl:table-cell">
+                Selecionado Por
+              </TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {safeGifts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center"> {/* Updated colSpan */}
+                <TableCell colSpan={8} className="h-24 text-center">
+                  {" "}
+                  {/* Updated colSpan */}
                   Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
               </TableRow>
             ) : (
-              safeGifts.map((item) => {               
+              safeGifts.map((item) => {
                 const isQuantityItem =
                   item.totalQuantity !== null && item.totalQuantity > 0;
-                  const displayedStatus =
+                const displayedStatus =
                   isQuantityItem &&
                   item.selectedQuantity !== undefined &&
                   item.totalQuantity != null &&
                   item.selectedQuantity >= item.totalQuantity
-                    ? "selected" : item.status;
+                    ? "selected"
+                    : item.status;
                 const canRevert =
                   !isQuantityItem &&
                   (displayedStatus === "selected" ||
                     displayedStatus === "not_needed");
-                
+
                 return (
-                 
-                   <TableRow
+                  <TableRow
                     key={item.id}
                     className={
                       actionLoading?.endsWith(item.id)
                         ? "opacity-50 pointer-events-none"
                         : ""
                     }
-                  ><TableCell>
+                  >
+                    <TableCell>
                       <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50 flex-shrink-0">
                         {item.imageUrl ? (
                           <Image
@@ -696,24 +733,33 @@ export default function AdminItemManagementTable({
                           </div>
                         )}
                       </div>
-                    </TableCell><TableCell className="font-medium whitespace-nowrap">
+                    </TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">
                       {item.name}
-                    </TableCell><TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate" >
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate">
                       {item.description || "-"}
-                    </TableCell><TableCell className="hidden md:table-cell" >
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {item.category}
-                    </TableCell><TableCell >{getStatusBadge(displayedStatus)}</TableCell><TableCell className="text-center text-sm" >
+                    </TableCell>
+                    <TableCell>{getStatusBadge(displayedStatus)}</TableCell>
+                    <TableCell className="text-center text-sm">
                       {isQuantityItem ? (
                         <span className="whitespace-nowrap">
                           {item.selectedQuantity ?? 0} /{" "}
                           {item.totalQuantity ?? 0}
                         </span>
+                      ) : item.totalQuantity != null &&
+                        item.totalQuantity > 0 ? (
+                        (item.selectedQuantity ?? 0) +
+                        " / " +
+                        item.totalQuantity
                       ) : (
-                        item.totalQuantity != null && item.totalQuantity > 0 ? (item.selectedQuantity ?? 0) + ' / '+ item.totalQuantity : 
-                         "-"
-                        
+                        "-"
                       )}
-                    </TableCell><TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
                       {/* Show selectedBy only if NOT a quantity item or if fully selected */}
                       {(!isQuantityItem || displayedStatus === "selected") &&
                       item.selectedBy ? (
@@ -727,9 +773,10 @@ export default function AdminItemManagementTable({
                           )}
                         </>
                       ) : (
-                         "-"
+                        "-"
                       )}
-                    </TableCell><TableCell className="text-right space-x-1 whitespace-nowrap">
+                    </TableCell>
+                    <TableCell className="text-right space-x-1 whitespace-nowrap">
                       {actionLoading?.endsWith(item.id) ? (
                         <Loader2 className="h-4 w-4 animate-spin inline-block text-muted-foreground" />
                       ) : (
@@ -784,7 +831,8 @@ export default function AdminItemManagementTable({
                           </Button>
                         </>
                       )}
-                    </TableCell></TableRow> 
+                    </TableCell>
+                  </TableRow>
                 );
               })
             )}
@@ -951,12 +999,17 @@ export default function AdminItemManagementTable({
                       type="file"
                       accept={ACCEPTED_IMAGE_TYPES.join(",")}
                       {...register("imageFile")} // Register directly
-                      className={`${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
+                      className={`${
+                        errors.imageFile ? "border-destructive" : ""
+                      } file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
                       disabled={isSubmitting}
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      JPG, PNG, GIF, WebP (Máx 5MB).
-                    </p><p className="text-xs text-muted-foreground mt-1">Videos and gifs are also accepted.</p>
+                      JPG, PNG, GIF, WebP (Máx 50MB).
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Vídeos (MP4, MOV) também são aceitos.
+                    </p>
                     {errors.imageFile &&
                       typeof errors.imageFile.message === "string" && (
                         <p className="text-sm text-destructive mt-1">
@@ -1012,9 +1065,9 @@ export default function AdminItemManagementTable({
                               watchedTotalQuantity > 0
                             }
                           >
-                            {stat === "available" && "Disponível"}
-                            {stat === "selected" && "Selecionado"}
-                            {stat === "not_needed" && "Não Precisa"}
+                            {stat === "available" && "Sugestão Disponível"}
+                            {stat === "selected" && "Já Escolhido"}
+                            {stat === "not_needed" && "Preferimos Não Utilizar"}
                           </SelectItem>
                         ))}
                       </SelectContent>
