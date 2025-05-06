@@ -13,7 +13,7 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: 'Chá de Bebê', // Update App Name
-  description: 'Lista de presentes para o Chá de Bebê', // Update description
+  description: 'Confirme sua presença no Chá de Bebê', // Update description
 };
 
 export default function RootLayout({

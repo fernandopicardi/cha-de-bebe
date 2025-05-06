@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Login Admin - Chá de Bebê", // Changed title for login context
+  title: "Admin - Chá de Bebê", // Changed title for login context
   description: "Acesso ao painel de administração da lista de presentes.",
 };
 
