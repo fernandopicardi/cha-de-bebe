@@ -178,7 +178,28 @@ export default function AdminItemManagementTable({
     // Ensure this runs only on the client where FileList and File are defined
     if (!isClient || !watchedImageFile) return;
 
-    const fileList = watchedImageFile as FileList | null; // Type cast is safe here
+    // Safely check if watchedImageFile is a FileList
+    let fileList: FileList | null = null;
+    if (typeof FileList !== "undefined" && watchedImageFile instanceof FileList) {
+      fileList = watchedImageFile;
+    } else {
+      // If not a FileList (could be null, undefined, or something else), clear relevant fields
+      console.warn("Watched imageFile is not a FileList:", watchedImageFile);
+       // Clear only if the current value is a data URI (meaning a preview was staged)
+      const initialUrl = editingItem?.imageUrl || null;
+      const currentRHFUrl = getValues("imageUrl");
+       if (currentRHFUrl && currentRHFUrl.startsWith("data:")) {
+         console.log(
+           "AdminItemManagementTable Dialog: Non-FileList watched, reverting preview/URL to initial state:",
+           initialUrl,
+         );
+         setValue("imageUrl", initialUrl);
+         setImagePreview(initialUrl);
+       }
+      return; // Don't proceed if it's not a valid FileList
+    }
+
+
     const file = fileList?.[0];
 
     if (file) {
@@ -478,7 +499,7 @@ export default function AdminItemManagementTable({
     if (actionLoading) return;
     if (item.status !== "selected" && item.status !== "not_needed") return;
     // Disable revert for quantity items for now
-    if ((item.totalQuantity ?? 0) > 0) {
+    if (item.totalQuantity !== null && item.totalQuantity > 0) {
       toast({
         title: "Ação Indisponível",
         description:
@@ -608,36 +629,23 @@ export default function AdminItemManagementTable({
         </Button>
       </div>
       <div className="rounded-md border overflow-x-auto">
-        {" "}
-        {/* Added overflow-x-auto */}
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[60px]"></TableHead> {/* Image col */}
               <TableHead>Nome</TableHead>
-              <TableHead className="hidden lg:table-cell">
-                Descrição
-              </TableHead>{" "}
-              {/* Changed breakpoint */}
-              <TableHead className="hidden md:table-cell">
-                Categoria
-              </TableHead>{" "}
-              {/* Changed breakpoint */}
+              <TableHead className="hidden lg:table-cell">Descrição</TableHead>
+              <TableHead className="hidden md:table-cell">Categoria</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Quantidade</TableHead> {/* New Quantity Column */}
-              <TableHead className="hidden xl:table-cell">
-                Selecionado Por
-              </TableHead>{" "}
-              {/* Changed breakpoint */}
+              <TableHead className="hidden xl:table-cell">Selecionado Por</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {safeGifts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center">
-                  {" "}
-                  {/* Updated colSpan */}
+                <TableCell colSpan={8} className="h-24 text-center"> {/* Updated colSpan */}
                   Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
               </TableRow>
@@ -656,6 +664,7 @@ export default function AdminItemManagementTable({
                   !isQuantityItem &&
                   (displayedStatus === "selected" ||
                     displayedStatus === "not_needed");
+                 // Ensure no whitespace before/after TableRow or between TableCells
                 return (
                   <TableRow
                     key={item.id}
@@ -687,21 +696,13 @@ export default function AdminItemManagementTable({
                           </div>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell className="font-medium whitespace-nowrap">
+                    </TableCell><TableCell className="font-medium whitespace-nowrap">
                       {item.name}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate">
+                    </TableCell><TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate">
                       {item.description || "-"}
-                    </TableCell>{" "}
-                    {/* Changed breakpoint */}
-                    <TableCell className="hidden md:table-cell">
+                    </TableCell><TableCell className="hidden md:table-cell">
                       {item.category}
-                    </TableCell>{" "}
-                    {/* Changed breakpoint */}
-                    <TableCell>{getStatusBadge(displayedStatus)}</TableCell>
-                    {/* Quantity Display */}
-                    <TableCell className="text-center text-sm">
+                    </TableCell><TableCell>{getStatusBadge(displayedStatus)}</TableCell><TableCell className="text-center text-sm">
                       {isQuantityItem ? (
                         <span className="whitespace-nowrap">
                           {item.selectedQuantity ?? 0} /{" "}
@@ -710,10 +711,7 @@ export default function AdminItemManagementTable({
                       ) : (
                         "-"
                       )}
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
-                      {" "}
-                      {/* Changed breakpoint */}
+                    </TableCell><TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
                       {/* Show selectedBy only if NOT a quantity item or if fully selected */}
                       {(!isQuantityItem || displayedStatus === "selected") &&
                       item.selectedBy ? (
@@ -729,8 +727,7 @@ export default function AdminItemManagementTable({
                       ) : (
                         "-"
                       )}
-                    </TableCell>
-                    <TableCell className="text-right space-x-1 whitespace-nowrap">
+                    </TableCell><TableCell className="text-right space-x-1 whitespace-nowrap">
                       {actionLoading?.endsWith(item.id) ? (
                         <Loader2 className="h-4 w-4 animate-spin inline-block text-muted-foreground" />
                       ) : (

@@ -134,8 +134,7 @@ export default function AdminSelectionViewer({
               <TableHead className="w-[60px]"></TableHead> {/* Image Column */}
               <TableHead>Item</TableHead>
               <TableHead>
-                <Package className="inline-block mr-1 h-4 w-4" />{" "}
-                {/* Icon for Quantity */}
+                <Package className="inline-block mr-1 h-4 w-4" /> {/* Icon for Quantity */}
                 Qtd. Selec.
               </TableHead>
               <TableHead>
@@ -153,8 +152,6 @@ export default function AdminSelectionViewer({
             {actuallySelectedItems.length === 0 ? ( // Use filtered list
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
-                  {" "}
-                  {/* Updated colSpan */}
                   Nenhum item selecionado ainda.
                 </TableCell>
               </TableRow>
@@ -166,6 +163,7 @@ export default function AdminSelectionViewer({
                   item.totalQuantity > 0;
                 const canRevert = !isQuantityItem; // Disable revert for quantity items
 
+                // Ensure no whitespace before/after TableRow or between TableCells
                 return (
                   <TableRow
                     key={item.id}
@@ -193,19 +191,13 @@ export default function AdminSelectionViewer({
                           </div>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell className="font-medium">{item.name}</TableCell>
-                    {/* Quantity Display */}
-                    <TableCell className="text-center">
+                    </TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-center">
                       {isQuantityItem
                         ? `${item.selectedQuantity ?? 0} / ${item.totalQuantity}`
                         : "1 / 1"}
-                    </TableCell>
-                    <TableCell>{item.selectedBy || "-"}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
+                    </TableCell><TableCell>{item.selectedBy || "-"}</TableCell><TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
                       {formatDateTime(item.selectionDate)}
-                    </TableCell>
-                    <TableCell className="text-right">
+                    </TableCell><TableCell className="text-right">
                       <Button
                         variant="outline"
                         size="sm"

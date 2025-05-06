@@ -88,12 +88,10 @@ export default function AdminConfirmationsList({
               </TableRow>
             ) : (
               individualAttendees.map((attendee) => (
-                <TableRow key={attendee.id}>
-                  <TableCell className="font-medium">{attendee.name}</TableCell>
-                  <TableCell className="text-right text-muted-foreground text-xs">
+                // Ensure no whitespace before/after TableRow or between TableCells
+                <TableRow key={attendee.id}><TableCell className="font-medium">{attendee.name}</TableCell><TableCell className="text-right text-muted-foreground text-xs">
                     {formatDateTime(attendee.confirmedAt)}
-                  </TableCell>
-                </TableRow>
+                  </TableCell></TableRow>
               ))
             )}
           </TableBody>
