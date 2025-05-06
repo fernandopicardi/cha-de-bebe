@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
@@ -71,6 +72,8 @@ export default function Home() {
 
     try {
       console.log("Home Page: Calling getEventSettings and getGifts...");
+      // Initialize Firestore data if needed (run once concept)
+      // await initializeFirestoreData(); // Consider if this is the right place
       const eventDataPromise = getEventSettings();
       const giftsDataPromise = getGifts();
 
@@ -82,6 +85,8 @@ export default function Home() {
 
       console.log("Home Page: Fetched Event Settings:", eventData ? "Data received" : "Null/Undefined");
       console.log("Home Page: Fetched Gifts Count:", giftsData?.length ?? 0);
+      // console.log("Home Page: Sample gifts:", giftsData?.slice(0, 3));
+
 
       // Update state, ensuring defaults/empty arrays are used if data is null/undefined
       setEventDetails(eventData ?? defaultEventSettings);
@@ -124,15 +129,24 @@ export default function Home() {
 
   if (eventDetails && eventDetails.date && eventDetails.time) {
     try {
-      const dateTimeString = eventDetails.date.includes('T')
-        ? eventDetails.date
-        : `${eventDetails.date}T${eventDetails.time}:00`;
+      // Try parsing first assuming YYYY-MM-DD format
+      let eventDate = new Date(`${eventDetails.date}T${eventDetails.time}:00`);
 
-      const eventDate = new Date(dateTimeString);
+      // If parsing fails, try adding T00:00:00 (common issue if time is missing/invalid)
+      if (isNaN(eventDate.getTime())) {
+          console.warn("Home Page: Initial date/time parse failed, trying fallback.");
+          eventDate = new Date(`${eventDetails.date}T00:00:00`);
+      }
 
       if (!isNaN(eventDate.getTime())) {
         formattedDate = eventDate.toLocaleDateString("pt-BR", { year: "numeric", month: "long", day: "numeric" });
-        formattedTime = eventDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", hour12: false });
+        // Only format time if the original time string looks valid
+        if (/^\d{2}:\d{2}$/.test(eventDetails.time)) {
+             formattedTime = eventDetails.time; // Display the input time directly if valid format
+        } else {
+            console.warn("Home Page: Invalid time format, using placeholder:", eventDetails.time);
+            formattedTime = "Hora a confirmar"; // Fallback if time format is wrong
+        }
       } else {
         console.warn("Home Page: Could not parse event date/time:", eventDetails.date, eventDetails.time);
       }
@@ -140,6 +154,7 @@ export default function Home() {
       console.error("Home Page: Error formatting date/time:", e);
     }
   }
+
 
   // Construct Page Title and Welcome Message
   const pageTitle = eventDetails?.babyName
@@ -190,7 +205,7 @@ export default function Home() {
       {/* Page Header */}
       <header className="text-center space-y-4 pt-16">
         {/* Display Header Image or Placeholder */}
-        <div className="relative mx-auto w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden shadow-lg mb-6 border-4 border-secondary">
+         <div className="relative mx-auto w-40 h-40 md:w-56 md:h-56 rounded-full overflow-hidden shadow-lg mb-6 border-4 border-secondary"> {/* Increased size */}
           {eventDetails?.headerImageUrl ? (
             <Image
               src={eventDetails.headerImageUrl}
@@ -198,14 +213,14 @@ export default function Home() {
               fill
               style={{ objectFit: "cover" }}
               priority // Load header image sooner
-              sizes="(max-width: 768px) 128px, 160px"
+              sizes="(max-width: 768px) 160px, 224px" // Adjusted sizes
               data-ai-hint="baby celebration banner"
               // No need for unoptimized if using Firebase Storage URLs
             />
           ) : (
              // Placeholder if no image is set
             <div className="flex items-center justify-center h-full w-full bg-muted">
-                 <Baby className="h-16 w-16 text-secondary" />
+                 <Baby className="h-20 w-20 md:h-24 md:w-24 text-secondary" /> {/* Increased icon size */}
              </div>
           )}
         </div>
@@ -248,12 +263,20 @@ export default function Home() {
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1 mb-6 md:mb-8 px-1 py-1.5 h-auto"> {/* Adjusted grid-cols */}
-            <TabsTrigger value="all"><ListChecks className="mr-1 h-4 w-4" /> Todos</TabsTrigger>
-            <TabsTrigger value="available"><PartyPopper className="mr-1 h-4 w-4" /> Disponíveis</TabsTrigger>
-            <TabsTrigger value="selected"><UserCheck className="mr-1 h-4 w-4" /> Selecionados</TabsTrigger>
-             <TabsTrigger value="not_needed"><ListX className="mr-1 h-4 w-4" /> Não Precisa</TabsTrigger> {/* Show "Não Precisa" again */}
-          </TabsList>
+          <TabsList className="mb-6 md:mb-8"> {/* Applied mb-6 and md:mb-8 */}
+                <TabsTrigger value="all" className="data-[state=active]:bg-background data-[state=active]:shadow-sm flex-1 sm:flex-none"> {/* Added flex-1 sm:flex-none */}
+                <ListChecks className="mr-1 h-4 w-4" /> Todos
+                </TabsTrigger>
+                <TabsTrigger value="available" className="data-[state=active]:bg-background data-[state=active]:shadow-sm flex-1 sm:flex-none"> {/* Added flex-1 sm:flex-none */}
+                <PartyPopper className="mr-1 h-4 w-4" /> Disponíveis
+                </TabsTrigger>
+                <TabsTrigger value="selected" className="data-[state=active]:bg-background data-[state=active]:shadow-sm flex-1 sm:flex-none"> {/* Added flex-1 sm:flex-none */}
+                <UserCheck className="mr-1 h-4 w-4" /> Selecionados
+                </TabsTrigger>
+                <TabsTrigger value="not_needed" className="data-[state=active]:bg-background data-[state=active]:shadow-sm flex-1 sm:flex-none"> {/* Added flex-1 sm:flex-none */}
+                <ListX className="mr-1 h-4 w-4" /> Não Precisa
+                </TabsTrigger>
+            </TabsList>
 
           {/* Pass fetched gifts (which is now guaranteed to be an array or empty array) */}
           <TabsContent value="all" className="mt-6">

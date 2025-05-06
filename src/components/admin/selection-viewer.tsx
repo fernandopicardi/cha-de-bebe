@@ -12,12 +12,12 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RotateCcw, User, CalendarDays, Loader2 } from "lucide-react"; // Added Loader2
+import { RotateCcw, User, CalendarDays, Loader2, Package } from "lucide-react"; // Added Loader2 and Package
 import { revertSelection, type GiftItem } from "@/data/gift-store"; // Import store function
 import { useToast } from "@/hooks/use-toast";
 
 interface AdminSelectionViewerProps {
-  selectedItems: GiftItem[]; // Items with 'selected' status
+  selectedItems: GiftItem[]; // Items with 'selected' status OR quantity > 0
   onDataChange?: () => void; // Optional: Keep if parent needs immediate UI feedback before revalidation finishes
 }
 
@@ -35,18 +35,31 @@ export default function AdminSelectionViewer({
   }, [selectedItems]);
 
 
-  // Ensure selectedItems is always an array before using it
-  const safeSelectedItems = useMemo(() => (Array.isArray(selectedItems) ? selectedItems : []), [selectedItems]);
+  // Filter items that are actually selected (status='selected' or have selectedQuantity > 0)
+  // AND are NOT marked as 'not_needed'
+   const actuallySelectedItems = useMemo(() => {
+       const safeItems = Array.isArray(selectedItems) ? selectedItems : [];
+       return safeItems.filter(item =>
+           item &&
+           item.status !== 'not_needed' &&
+           (item.status === 'selected' || (typeof item.selectedQuantity === 'number' && item.selectedQuantity > 0))
+       );
+   }, [selectedItems]);
 
 
   const handleRevert = async (item: GiftItem) => {
     if (loadingItemId) return; // Prevent multiple actions
-    if (!item.selectedBy) return; // Should always have selectedBy, but check anyway
+    // Disable revert for quantity items for now
+    if (item.totalQuantity !== null && item.totalQuantity > 0) {
+        toast({ title: "Ação Indisponível", description: "Reversão de itens com quantidade não suportada nesta versão.", variant: "default" });
+        return;
+    }
+    if (!item.selectedBy && item.status !== 'not_needed') return; // Should always have selectedBy if selected, but check anyway
 
     console.log(`SelectionViewer: Attempting to revert item ID: ${item.id}`);
     if (
       confirm(
-        `Tem certeza que deseja reverter a seleção de "${item.name}" por ${item.selectedBy}? O item voltará a ficar disponível.`,
+        `Tem certeza que deseja reverter a seleção de "${item.name}"${item.selectedBy ? ` por ${item.selectedBy}` : ''}? O item voltará a ficar disponível.`,
       )
     ) {
       setLoadingItemId(item.id); // Set loading state for this item
@@ -78,68 +91,81 @@ export default function AdminSelectionViewer({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Item</TableHead>
               <TableHead>
+                <Package className="inline-block mr-1 h-4 w-4" /> {/* Icon for Quantity */}
+                Qtd. Selec.
+              </TableHead>
+              <TableHead>
                 <User className="inline-block mr-1 h-4 w-4" />
-                Selecionado Por
+                Selecionado Por (Último)
               </TableHead>
               <TableHead className="hidden sm:table-cell">
                 <CalendarDays className="inline-block mr-1 h-4 w-4" />
-                Data
+                Data (Última)
               </TableHead>
               <TableHead className="text-right">Ação</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {safeSelectedItems.length === 0 ? ( // Use safeSelectedItems
+            {actuallySelectedItems.length === 0 ? ( // Use filtered list
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center"> {/* Updated colSpan */}
                   Nenhum item selecionado ainda.
                 </TableCell>
               </TableRow>
             ) : (
-              safeSelectedItems.map((item) => ( // Use safeSelectedItems
-                <TableRow
-                  key={item.id}
-                  className={loadingItemId === item.id ? "opacity-50" : ""}
-                >
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>{item.selectedBy || "Desconhecido"}</TableCell>
-                  <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
-                    {item.selectionDate
-                      ? new Date(item.selectionDate).toLocaleDateString(
-                          "pt-BR",
-                          {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                          },
-                        )
-                      : "-"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRevert(item)}
-                      title="Reverter Seleção"
-                      className="border-orange-500 text-orange-600 hover:bg-orange-500/10"
-                      disabled={loadingItemId === item.id} // Disable button while loading this item
+              actuallySelectedItems.map((item) => { // Use filtered list
+                 const isQuantityItem = typeof item.totalQuantity === 'number' && item.totalQuantity > 0;
+                 const canRevert = !isQuantityItem; // Disable revert for quantity items
+
+                 return (
+                    <TableRow
+                    key={item.id}
+                    className={loadingItemId === item.id ? "opacity-50" : ""}
                     >
-                      {loadingItemId === item.id ? (
-                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="mr-1 h-4 w-4" />
-                      )}
-                      Reverter
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                     {/* Quantity Display */}
+                     <TableCell className="text-center">
+                         {isQuantityItem ? `${item.selectedQuantity ?? 0} / ${item.totalQuantity}` : '1 / 1'}
+                    </TableCell>
+                    <TableCell>{item.selectedBy || "-"}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
+                        {item.selectionDate
+                        ? new Date(item.selectionDate).toLocaleDateString(
+                            "pt-BR",
+                            {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                            },
+                            )
+                        : "-"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                        <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRevert(item)}
+                        title={canRevert ? "Reverter Seleção" : "Reversão Indisponível para Itens com Quantidade"}
+                        className={canRevert ? "border-orange-500 text-orange-600 hover:bg-orange-500/10" : ""}
+                        disabled={loadingItemId === item.id || !canRevert} // Disable button while loading or if not revertible
+                        >
+                        {loadingItemId === item.id ? (
+                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                            <RotateCcw className="mr-1 h-4 w-4" />
+                        )}
+                        Reverter
+                        </Button>
+                    </TableCell>
+                    </TableRow>
+                 );
+                 })
             )}
           </TableBody>
         </Table>
@@ -147,3 +173,5 @@ export default function AdminSelectionViewer({
     </div>
   );
 }
+
+```

@@ -21,6 +21,7 @@ import {
   Tag,
   Loader2,
   ImageIcon, // Placeholder icon
+  Package, // Icon for quantity
 } from "lucide-react";
 import SelectItemDialog from "./select-item-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,7 +59,15 @@ export default function GiftList({
         console.warn(`GiftList (${filterStatus}): Skipping invalid item during filtering:`, item);
         return false;
       }
-      const statusMatch = filterStatus === "all" || item.status === filterStatus;
+      // Determine the effective status, considering quantity
+      const isQuantityItem = typeof item.totalQuantity === 'number' && item.totalQuantity > 0;
+      let effectiveStatus = item.status;
+      if (isQuantityItem && item.status !== 'not_needed') {
+        effectiveStatus = (item.selectedQuantity ?? 0) >= item.totalQuantity ? 'selected' : 'available';
+      }
+
+
+      const statusMatch = filterStatus === "all" || effectiveStatus === filterStatus;
       const categoryMatch = !filterCategory || item.category?.toLowerCase() === filterCategory.toLowerCase();
       return statusMatch && categoryMatch;
     });
@@ -66,57 +75,90 @@ export default function GiftList({
     return result;
   }, [items, filterStatus, filterCategory]);
 
+
   const handleSelectItemClick = (item: GiftItem) => {
     if (loadingItemId) return;
-    setSelectedItem(item);
-    setIsDialogOpen(true);
+    // Ensure item is actually available before opening dialog
+    const isQuantityItem = typeof item.totalQuantity === 'number' && item.totalQuantity > 0;
+    const isAvailable = isQuantityItem
+        ? (item.selectedQuantity ?? 0) < item.totalQuantity
+        : item.status === 'available';
+
+    if (isAvailable && item.status !== 'not_needed') {
+        setSelectedItem(item);
+        setIsDialogOpen(true);
+    } else {
+        console.warn(`GiftList: Attempted to select unavailable item ${item.id}`);
+        toast({title: "Item Indisponível", description: "Este item não está mais disponível para seleção.", variant: "destructive"});
+        // Optionally refresh data if status might be stale
+        // onItemAction?.();
+    }
   };
+
 
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setSelectedItem(null);
   };
 
-  const handleItemSelectionSuccess = async (itemId: string, guestName: string) => {
-    console.log(`GiftList (${filterStatus}): Attempting to select item ${itemId} for ${guestName}...`);
+  const handleItemSelectionSuccess = async (itemId: string, guestName: string, quantity: number, sendReminder: boolean, email?: string) => {
+    console.log(`GiftList (${filterStatus}): Attempting to select item ${itemId} for ${guestName}, Qty: ${quantity}, Email: ${email ? 'Yes' : 'No'}...`);
     setLoadingItemId(itemId);
     try {
-      const updatedItem = await selectGift(itemId, guestName);
-      if (updatedItem) {
-        console.log(`GiftList (${filterStatus}): Item ${itemId} selected successfully. Triggering onItemAction.`);
-        toast({
-          title: "Sucesso!",
-          description: `Obrigado, ${guestName}! "${updatedItem.name}" foi reservado!`,
-          variant: "default",
-        });
-        onItemAction?.(); // Refresh UI from parent
-      } else {
-        console.warn(`GiftList (${filterStatus}): Failed to select item ${itemId}. Triggering refresh.`);
-        toast({ title: "Ops!", description: "Item não disponível. Atualizando lista.", variant: "destructive" });
-        onItemAction?.(); // Refresh UI from parent
-      }
-    } catch (error) {
-      console.error(`GiftList (${filterStatus}): Error during selectGift call for item ${itemId}:`, error);
-      toast({ title: "Erro!", description: "Não foi possível selecionar.", variant: "destructive" });
-    } finally {
-      setLoadingItemId(null);
-      handleDialogClose();
-      console.log(`GiftList (${filterStatus}): Selection process finished for item ${itemId}.`);
-    }
-  };
+        // Pass quantity, email flag, and email address to selectGift
+        const updatedItem = await selectGift(itemId, guestName, quantity, sendReminder, email);
 
-  const getStatusBadge = (status: GiftItem["status"]) => {
-    switch (status) {
+        if (updatedItem) {
+            console.log(`GiftList (${filterStatus}): Item ${itemId} selected successfully. Triggering onItemAction.`);
+            toast({
+            title: "Sucesso!",
+            description: `Obrigado, ${guestName}! ${quantity > 1 ? `${quantity} unidades de` : ''} "${updatedItem.name}" ${quantity > 1 ? 'foram reservadas' : 'foi reservado'}!`,
+            variant: "default",
+            className: "bg-success text-success-foreground border-success",
+            });
+            onItemAction?.(); // Refresh UI from parent
+        } else {
+            console.warn(`GiftList (${filterStatus}): Failed to select item ${itemId} (likely unavailable). Triggering refresh.`);
+            toast({ title: "Ops!", description: "Item não disponível ou quantidade insuficiente. Atualizando lista.", variant: "destructive" });
+            onItemAction?.(); // Refresh UI from parent
+        }
+    } catch (error: any) {
+        console.error(`GiftList (${filterStatus}): Error during selectGift call for item ${itemId}:`, error);
+        toast({ title: "Erro!", description: error.message || "Não foi possível selecionar.", variant: "destructive" });
+    } finally {
+        setLoadingItemId(null);
+        handleDialogClose();
+        console.log(`GiftList (${filterStatus}): Selection process finished for item ${itemId}.`);
+    }
+};
+
+
+  const getStatusBadge = (item: GiftItem) => {
+     const isQuantityItem = typeof item.totalQuantity === 'number' && item.totalQuantity > 0;
+     let displayStatus: GiftItem["status"] = item.status;
+     let quantityText = "";
+
+     if (item.status === 'not_needed') {
+         displayStatus = 'not_needed';
+     } else if (isQuantityItem) {
+        const selected = item.selectedQuantity ?? 0;
+        const total = item.totalQuantity ?? 0;
+        displayStatus = selected >= total ? 'selected' : 'available';
+        quantityText = `(${selected}/${total})`; // Add quantity text
+     }
+
+    switch (displayStatus) {
       case "available":
-        return <Badge variant="default" className="bg-success text-success-foreground"><Check className="mr-1 h-3 w-3" /> Disponível</Badge>;
+        return <Badge variant="default" className="bg-success text-success-foreground"><Check className="mr-1 h-3 w-3" /> Disponível {quantityText}</Badge>;
       case "selected":
-        return <Badge variant="secondary" className="bg-secondary text-secondary-foreground"><User className="mr-1 h-3 w-3" /> Selecionado</Badge>;
+        return <Badge variant="secondary" className="bg-secondary text-secondary-foreground"><User className="mr-1 h-3 w-3" /> Selecionado {quantityText}</Badge>;
       case "not_needed":
         return <Badge variant="destructive" className="bg-destructive/80 text-destructive-foreground"><X className="mr-1 h-3 w-3" /> Não Precisa</Badge>;
       default:
         return <Badge variant="outline"><Hourglass className="mr-1 h-3 w-3" /> Indefinido</Badge>;
     }
   };
+
 
   const isInitialLoad = items === null;
   const hasLoadedItems = Array.isArray(items);
@@ -176,73 +218,81 @@ export default function GiftList({
     <>
       {/* Responsive grid layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {filteredItems.map((item) => (
-            <Card key={item.id} className="flex flex-col justify-between shadow-md rounded-lg overflow-hidden animate-fade-in bg-card transition-transform duration-200 hover:scale-[1.02]">
-                 {/* Image Section - Takes significant portion */}
-                 <div className="relative aspect-[4/3] w-full bg-muted/50 overflow-hidden">
-                     {item.imageUrl ? (
-                         <Image
-                             src={item.imageUrl}
-                             alt={`Imagem de ${item.name}`}
-                             fill
-                             style={{ objectFit: 'cover' }}
-                             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw" // Adjusted sizes
-                             priority={filterStatus === 'all'} // Prioritize images in 'all' tab might help LCP
-                             unoptimized={item.imageUrl.startsWith('data:')} // Keep for data URIs if used
-                             data-ai-hint="baby gift item"
-                             onError={(e) => { console.warn(`Failed to load image: ${item.imageUrl}`); (e.target as HTMLImageElement).style.display = 'none'; }} // Hide broken image icon
-                         />
-                     ) : (
-                         <div className="flex items-center justify-center h-full w-full">
-                             <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
-                         </div>
-                     )}
-                 </div>
+        {filteredItems.map((item) => {
+            const isQuantityItem = typeof item.totalQuantity === 'number' && item.totalQuantity > 0;
+            const effectiveStatus = isQuantityItem && item.status !== 'not_needed'
+                ? ((item.selectedQuantity ?? 0) >= item.totalQuantity ? 'selected' : 'available')
+                : item.status;
+             const isAvailableForSelection = effectiveStatus === 'available';
 
-                {/* Content Section */}
-                <div className="flex flex-col flex-grow p-4"> {/* Use flex-grow */}
-                     <CardHeader className="p-0 mb-2"> {/* Remove default padding */}
-                         <CardTitle className="text-lg font-semibold leading-tight">{item.name}</CardTitle>
-                         {item.description && (
-                             <CardDescription className="text-sm text-muted-foreground mt-1 line-clamp-2"> {/* Limit description lines */}
-                                {item.description}
-                             </CardDescription>
-                         )}
-                     </CardHeader>
-                     <CardContent className="p-0 flex-grow"> {/* Remove padding, let flex handle space */}
-                         <div className="flex items-center text-xs text-muted-foreground pt-1">
-                             <Tag className="mr-1 h-3 w-3" /> {item.category}
-                         </div>
-                     </CardContent>
-                 </div>
+            return (
+                <Card key={item.id} className="flex flex-col justify-between shadow-md rounded-lg overflow-hidden animate-fade-in bg-card transition-transform duration-200 hover:scale-[1.02]">
+                    {/* Image Section - Takes significant portion */}
+                    <div className="relative aspect-[4/3] w-full bg-muted/50 overflow-hidden">
+                        {item.imageUrl ? (
+                            <Image
+                                src={item.imageUrl}
+                                alt={`Imagem de ${item.name}`}
+                                fill
+                                style={{ objectFit: 'cover' }}
+                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw" // Adjusted sizes
+                                priority={filterStatus === 'all'} // Prioritize images in 'all' tab might help LCP
+                                unoptimized={item.imageUrl.startsWith('data:')} // Keep for data URIs if used
+                                data-ai-hint="baby gift item"
+                                onError={(e) => { console.warn(`Failed to load image: ${item.imageUrl}`); (e.target as HTMLImageElement).style.display = 'none'; }} // Hide broken image icon
+                            />
+                        ) : (
+                            <div className="flex items-center justify-center h-full w-full">
+                                <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
+                            </div>
+                        )}
+                    </div>
 
-                {/* Footer Section */}
-                 <CardFooter className="flex items-center justify-between gap-2 p-4 border-t mt-auto"> {/* Ensure footer is at bottom */}
-                    {getStatusBadge(item.status)}
-                    {item.status === "available" && (
-                        <Button
-                            size="sm"
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 transition-transform duration-150 hover:scale-105"
-                            onClick={() => handleSelectItemClick(item)}
-                            aria-label={`Selecionar ${item.name}`}
-                            disabled={!!loadingItemId}
-                            >
-                            {loadingItemId === item.id ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                                <Gift className="mr-2 h-4 w-4" />
+                    {/* Content Section */}
+                    <div className="flex flex-col flex-grow p-4"> {/* Use flex-grow */}
+                        <CardHeader className="p-0 mb-2"> {/* Remove default padding */}
+                            <CardTitle className="text-lg font-semibold leading-tight">{item.name}</CardTitle>
+                            {item.description && (
+                                <CardDescription className="text-sm text-muted-foreground mt-1 line-clamp-2"> {/* Limit description lines */}
+                                    {item.description}
+                                </CardDescription>
                             )}
-                            Escolher
-                        </Button>
-                    )}
-                </CardFooter>
-            </Card>
-        ))}
+                        </CardHeader>
+                        <CardContent className="p-0 flex-grow"> {/* Remove padding, let flex handle space */}
+                            <div className="flex items-center text-xs text-muted-foreground pt-1">
+                                <Tag className="mr-1 h-3 w-3" /> {item.category}
+                            </div>
+                        </CardContent>
+                    </div>
+
+                    {/* Footer Section */}
+                    <CardFooter className="flex items-center justify-between gap-2 p-4 border-t mt-auto"> {/* Ensure footer is at bottom */}
+                        {getStatusBadge(item)}
+                        {isAvailableForSelection && (
+                            <Button
+                                size="sm"
+                                className="bg-primary text-primary-foreground hover:bg-primary/90 transition-transform duration-150 hover:scale-105"
+                                onClick={() => handleSelectItemClick(item)}
+                                aria-label={`Selecionar ${item.name}`}
+                                disabled={!!loadingItemId}
+                                >
+                                {loadingItemId === item.id ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Gift className="mr-2 h-4 w-4" />
+                                )}
+                                Escolher
+                            </Button>
+                        )}
+                    </CardFooter>
+                </Card>
+            );
+        })}
       </div>
 
-      {selectedItem && selectedItem.status === "available" && (
+      {selectedItem && isDialogOpen && (
         <SelectItemDialog
-          item={selectedItem}
+          item={selectedItem} // Pass the full item including quantity info
           isOpen={isDialogOpen}
           onClose={handleDialogClose}
           onSuccess={handleItemSelectionSuccess}

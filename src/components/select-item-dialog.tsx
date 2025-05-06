@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,11 +13,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, PartyPopper, Send } from "lucide-react";
+import { Loader2, Send, Minus, Plus } from "lucide-react"; // Added Minus, Plus
 import type { GiftItem } from "@/data/gift-store"; // Import type
 
 // Interface now uses the imported type
@@ -25,16 +26,32 @@ interface SelectItemDialogProps {
   item: GiftItem; // Use imported type
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (itemId: string, guestName: string) => Promise<void>; // Callback now expected to be async
+  // Updated onSuccess to include quantity, email flag, and optional email
+  onSuccess: (
+      itemId: string,
+      guestName: string,
+      quantity: number,
+      sendReminder: boolean,
+      guestEmail?: string
+    ) => Promise<void>;
 }
 
-// Define validation schema
+// Define validation schema including quantity and conditional email
 const FormSchema = z.object({
   guestName: z
     .string()
     .min(2, { message: "Por favor, insira seu nome (mínimo 2 caracteres)." })
     .max(50, { message: "Nome muito longo (máximo 50 caracteres)." }),
+  // Quantity is required, minimum 1
+  quantity: z.number().min(1, "Selecione pelo menos 1 unidade."),
+  sendReminderEmail: z.boolean().default(false),
+  guestEmail: z.string().email("Formato de e-mail inválido.").optional().or(z.literal("")),
+}).refine(data => !data.sendReminderEmail || (data.sendReminderEmail && data.guestEmail && data.guestEmail.length > 0), {
+    // If sendReminderEmail is true, guestEmail must be provided
+    message: "E-mail é obrigatório para receber o lembrete.",
+    path: ["guestEmail"], // Specify the path of the error
 });
+
 
 type FormData = z.infer<typeof FormSchema>;
 
@@ -46,31 +63,74 @@ export default function SelectItemDialog({
 }: SelectItemDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const isQuantityItem = typeof item.totalQuantity === 'number' && item.totalQuantity > 0;
+  const availableQuantity = isQuantityItem ? (item.totalQuantity ?? 0) - (item.selectedQuantity ?? 0) : 1;
+
   const {
     register,
     handleSubmit,
+    watch, // Watch form values
+    setValue, // Set form values programmatically
     formState: { errors },
     reset,
   } = useForm<FormData>({
     resolver: zodResolver(FormSchema),
+    defaultValues: {
+        guestName: "",
+        quantity: 1, // Default quantity to 1
+        sendReminderEmail: false,
+        guestEmail: "",
+    }
   });
+
+  // Watch relevant fields
+  const watchQuantity = watch("quantity");
+  const watchSendReminder = watch("sendReminderEmail");
+
+  // Adjust quantity based on available amount
+  useEffect(() => {
+      if (watchQuantity > availableQuantity) {
+          setValue("quantity", availableQuantity); // Adjust if exceeds available
+      }
+      if (watchQuantity < 1 && availableQuantity >= 1) {
+          setValue("quantity", 1); // Ensure minimum is 1 if available
+      }
+  }, [watchQuantity, availableQuantity, setValue]);
+
+  const incrementQuantity = () => {
+      if (watchQuantity < availableQuantity) {
+          setValue("quantity", watchQuantity + 1);
+      }
+  };
+
+  const decrementQuantity = () => {
+      if (watchQuantity > 1) {
+          setValue("quantity", watchQuantity - 1);
+      }
+  };
+
 
   const onSubmit: SubmitHandler<FormData> = async (data) => {
     setIsSubmitting(true);
+    // Validate quantity again just before submitting
+    if (data.quantity > availableQuantity) {
+        toast({ title: "Erro", description: `Quantidade selecionada (${data.quantity}) excede a disponível (${availableQuantity}).`, variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+    }
+
     try {
-      // Call the success callback passed from the parent (which now handles the async logic)
-      // Revalidation is triggered inside the data store mutation called by onSuccess
-      await onSuccess(item.id, data.guestName);
+      // Call the success callback passed from the parent including quantity and email info
+      await onSuccess(item.id, data.guestName, data.quantity, data.sendReminderEmail, data.guestEmail);
 
       // Toast is handled within the onSuccess callback in gift-list.tsx after mutation completes
       reset(); // Reset form fields
       onClose(); // Close the dialog
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao selecionar item:", error);
       toast({
         title: "Ops! Algo deu errado.",
-        description:
-          "Não foi possível registrar sua seleção. Pode ser que alguém já tenha escolhido. Tente atualizar a página ou escolher outro item.", // More informative error
+        description: error.message || "Não foi possível registrar sua seleção. Pode ser que alguém já tenha escolhido. Tente atualizar a página ou escolher outro item.", // More informative error
         variant: "destructive",
       });
       // Keep dialog open on error? Optional. onClose(); could be removed from finally.
@@ -82,9 +142,13 @@ export default function SelectItemDialog({
   // Reset form when dialog closes or item changes
   React.useEffect(() => {
     if (!isOpen) {
-      reset({ guestName: "" }); // Ensure reset clears the field
+      reset({ guestName: "", quantity: 1, sendReminderEmail: false, guestEmail: "" }); // Ensure reset clears the field
+    } else {
+        // When opening, reset quantity to 1 if available
+        reset({ guestName: "", quantity: availableQuantity >= 1 ? 1 : 0, sendReminderEmail: false, guestEmail: "" });
     }
-  }, [isOpen, reset]);
+  }, [isOpen, reset, item, availableQuantity]); // Add item and availableQuantity dependency
+
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -92,11 +156,13 @@ export default function SelectItemDialog({
         <DialogHeader>
           <DialogTitle>Confirmar Seleção</DialogTitle>
           <DialogDescription>
-            Você escolheu o presente: <strong>{item.name}</strong>. Por favor,
-            insira seu nome para confirmar.
+            Você escolheu o presente: <strong>{item.name}</strong>.
+            {isQuantityItem && ` (${availableQuantity} disponíveis)`}
+             Por favor, insira seu nome e a quantidade desejada para confirmar.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
+          {/* Guest Name */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="guestName" className="text-right">
               Seu Nome
@@ -120,7 +186,88 @@ export default function SelectItemDialog({
               )}
             </div>
           </div>
-          <DialogFooter>
+
+          {/* Quantity Selector (only if isQuantityItem) */}
+          {isQuantityItem && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="quantity" className="text-right">
+                Quantidade
+              </Label>
+              <div className="col-span-3 flex items-center gap-2">
+                 <Button type="button" size="icon" variant="outline" onClick={decrementQuantity} disabled={watchQuantity <= 1 || isSubmitting}>
+                    <Minus className="h-4 w-4" />
+                 </Button>
+                 {/* Hidden input to register the value with react-hook-form */}
+                 <Input
+                   id="quantity"
+                   type="number" // Keep as number for validation
+                   {...register("quantity", { valueAsNumber: true })} // Register with valueAsNumber
+                   className="w-16 text-center"
+                   disabled={true} // Visually disabled, value managed by state/buttons
+                   aria-invalid={errors.quantity ? "true" : "false"}
+                   aria-describedby="quantity-error"
+                 />
+                 {/* Display the watched value visually */}
+                 {/* <span className="w-16 text-center border rounded-md px-3 py-2">{watchQuantity}</span> */}
+                 <Button type="button" size="icon" variant="outline" onClick={incrementQuantity} disabled={watchQuantity >= availableQuantity || isSubmitting}>
+                     <Plus className="h-4 w-4" />
+                 </Button>
+                  <span className="text-sm text-muted-foreground">de {availableQuantity}</span>
+              </div>
+               {/* Display quantity error message below the controls */}
+               {errors.quantity && (
+                 <div className="col-start-2 col-span-3">
+                     <p id="quantity-error" className="text-sm text-destructive mt-1">
+                         {errors.quantity.message}
+                     </p>
+                 </div>
+                )}
+            </div>
+          )}
+
+           {/* Email Reminder Section */}
+           <div className="col-span-4 grid grid-cols-subgrid gap-4 items-center"> {/* Use subgrid if available or repeat grid-cols-4 */}
+              <div className="col-span-4 flex items-center space-x-2 justify-start pl-[calc(25%+1rem)]"> {/* Align with input fields */}
+                <Checkbox
+                  id="sendReminderEmail-select"
+                  {...register("sendReminderEmail")}
+                  disabled={isSubmitting}
+                  aria-describedby="sendReminderEmail-select-label"
+                />
+                <Label htmlFor="sendReminderEmail-select" className="text-sm font-normal text-muted-foreground cursor-pointer" id="sendReminderEmail-select-label">
+                  Receber lembrete do presente por e-mail?
+                </Label>
+              </div>
+            </div>
+
+          {/* Conditional Guest Email Input */}
+          {watchSendReminder && (
+             <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
+              <Label htmlFor="guestEmail" className="text-right">
+                Seu E-mail
+              </Label>
+              <div className="col-span-3">
+                <Input
+                  id="guestEmail"
+                  type="email"
+                  placeholder="seuemail@exemplo.com"
+                  {...register("guestEmail")}
+                  className={`col-span-3 ${errors.guestEmail ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  disabled={isSubmitting}
+                  aria-invalid={errors.guestEmail ? "true" : "false"}
+                  aria-describedby="guestEmail-error"
+                />
+                 {errors.guestEmail && (
+                  <p id="guestEmail-error" className="text-sm text-destructive mt-1">
+                    {errors.guestEmail.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+
+          <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isSubmitting}>
                 Cancelar
@@ -128,7 +275,8 @@ export default function SelectItemDialog({
             </DialogClose>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              // Disable if trying to select 0 or less
+              disabled={isSubmitting || watchQuantity <= 0}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
               {isSubmitting ? (
@@ -139,7 +287,7 @@ export default function SelectItemDialog({
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Confirmar Presente
+                   Confirmar {isQuantityItem ? `${watchQuantity} Unidade(s)` : 'Presente'}
                 </>
               )}
             </Button>

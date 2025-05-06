@@ -34,6 +34,7 @@ import {
   Loader2,
   Image as ImageIcon, // Import Image icon
   XCircle, // Import XCircle for remove button
+  Package, // Icon for quantity
 } from "lucide-react";
 import {
   Table,
@@ -92,7 +93,12 @@ const giftFormSchema = z.object({
   // Holds existing URL, new data URI, or null for removal
   imageUrl: z.string().optional().nullable(),
   // Captures file input
-  imageFile: z.any().optional().nullable(),
+  imageFile: z.instanceof(FileList).optional().nullable(),
+  // Quantity field - optional, must be a positive integer if provided
+  totalQuantity: z.preprocess(
+    (val) => (val === "" ? null : Number(val)), // Convert empty string to null, otherwise to number
+    z.number().int().positive("Quantidade deve ser um número positivo.").nullable().optional() // Allow null or positive int
+  ),
 });
 
 type GiftFormData = z.infer<typeof giftFormSchema>;
@@ -151,18 +157,20 @@ export default function AdminItemManagementTable({
       selectedBy: "", // Default empty
       imageUrl: null,
       imageFile: null,
+      totalQuantity: null, // Default quantity
     },
   });
 
   // Watch status to conditionally show/require selectedBy
   const watchedStatus = watch("status");
   const watchedImageFile = watch("imageFile");
+  const watchedTotalQuantity = watch("totalQuantity"); // Watch quantity changes
 
   // Handle image preview updates
   useEffect(() => {
-    if (!isClient) return; // Only run client-side
+    if (!isClient || !(watchedImageFile instanceof FileList)) return; // Only run client-side and if it's a FileList
 
-    const fileList = watchedImageFile as FileList | null | undefined;
+    const fileList = watchedImageFile;
     const file = fileList?.[0];
 
     if (file) {
@@ -218,6 +226,7 @@ export default function AdminItemManagementTable({
       selectedBy: "",
       imageUrl: null,
       imageFile: null,
+      totalQuantity: null, // Reset quantity
     });
     setEditingItem(null);
     setImagePreview(null);
@@ -235,6 +244,7 @@ export default function AdminItemManagementTable({
       selectedBy: item.selectedBy || "",
       imageUrl: item.imageUrl || null, // Set initial image URL
       imageFile: null, // Reset file input
+      totalQuantity: item.totalQuantity ?? null, // Set initial quantity
     });
     setImagePreview(item.imageUrl || null); // Set initial preview
     setIsAddEditDialogOpen(true);
@@ -247,7 +257,7 @@ export default function AdminItemManagementTable({
     setImagePreview(null);
     reset({
         name: "", description: "", category: "", status: "available",
-        selectedBy: "", imageUrl: null, imageFile: null,
+        selectedBy: "", imageUrl: null, imageFile: null, totalQuantity: null
       });
   };
 
@@ -280,26 +290,20 @@ export default function AdminItemManagementTable({
     const itemName = data.name || (editingItem ? editingItem.name : 'Novo Item');
     console.log(`AdminItemManagementTable: Submitting form to ${operation} item: ${itemName}`);
 
-    // Validate that 'selectedBy' is provided if status is 'selected'
-    if (data.status === "selected" && (!data.selectedBy || data.selectedBy.trim() === "")) {
+    const isQuantityItem = typeof data.totalQuantity === 'number' && data.totalQuantity > 0;
+
+    // Validate that 'selectedBy' is provided if status is 'selected' AND it's NOT a quantity item
+    if (!isQuantityItem && data.status === "selected" && (!data.selectedBy || data.selectedBy.trim() === "")) {
       toast({ title: "Erro de Validação", description: "Informe quem selecionou.", variant: "destructive" });
       return;
     }
 
-    // Prepare data for the store functions
-    // Pass data.imageUrl directly - it contains existing URL, new data URI, or null
-    const giftPayload = {
-        name: data.name.trim(),
-        description: data.description?.trim() || null,
-        category: data.category,
-        status: data.status,
-        selectedBy: data.status === "selected" ? (data.selectedBy?.trim() || "Admin") : null,
-        // Pass the image data (data URI or null) or the existing URL
-        // For updates, pass the imageUrl field from the form.
-        // For adds, pass the imageDataUri field (which is stored in imageUrl by the useEffect).
-        [editingItem ? 'imageUrl' : 'imageDataUri']: data.imageUrl, // Use correct field name based on operation
-    };
-
+    // If it's a quantity item, don't allow 'selected' status directly in the form
+    // The status will be derived based on selected vs total quantities in the backend/display
+    if (isQuantityItem && data.status === 'selected') {
+        console.warn("AdminItemManagementTable: Cannot manually set status to 'selected' for quantity items via admin form. Status will be derived.");
+        data.status = 'available'; // Force status to available for quantity items added/edited via admin
+    }
 
     // Remove the imageFile property before sending to backend
      const { imageFile, ...storeData } = data;
@@ -309,7 +313,9 @@ export default function AdminItemManagementTable({
         ...storeData,
         name: storeData.name.trim(),
         description: storeData.description?.trim() || null,
-        selectedBy: storeData.status === 'selected' ? (storeData.selectedBy?.trim() || "Admin") : null,
+        // SelectedBy is only relevant for non-quantity items or is set by user selection
+        selectedBy: isQuantityItem ? null : (storeData.status === 'selected' ? (storeData.selectedBy?.trim() || "Admin") : null),
+        totalQuantity: isQuantityItem ? storeData.totalQuantity : null, // Include total quantity
         // imageUrl now holds either existing URL, data URI, or null
         ...(editingItem ? { imageUrl: storeData.imageUrl } : { imageDataUri: storeData.imageUrl }),
      };
@@ -331,7 +337,7 @@ export default function AdminItemManagementTable({
       } else {
         console.log("AdminItemManagementTable: Calling addGift");
         // Pass the payload with imageDataUri for adds
-        await addGift(finalPayload as Omit<GiftItem, "id" | "createdAt" | "selectionDate"> & { imageDataUri?: string | null });
+        await addGift(finalPayload as Omit<GiftItem, "id" | "createdAt" | "selectionDate" | "selectedQuantity"> & { imageDataUri?: string | null });
         handleSuccess(`Item "${finalPayload.name}" adicionado.`);
       }
     } catch (error) {
@@ -364,9 +370,17 @@ export default function AdminItemManagementTable({
   };
 
   // Row Action: Revert to Available
+  // Note: Reverting quantity items needs more complex logic (e.g., tracking individual selections)
+  // For now, disable revert for quantity items in the UI.
   const handleRevert = async (item: GiftItem) => {
     if (actionLoading) return;
     if (item.status !== "selected" && item.status !== "not_needed") return;
+    // Disable revert for quantity items for now
+    if (item.totalQuantity !== null && item.totalQuantity > 0) {
+       toast({ title: "Ação Indisponível", description: "Reversão de itens com quantidade não suportada nesta versão.", variant: "default" });
+       return;
+    }
+
     const actionText = item.status === "selected" ? "reverter seleção" : 'remover "Não Precisa"';
     const guestNameInfo = item.selectedBy ? ` por ${item.selectedBy}` : "";
      console.log(`AdminItemManagementTable: Attempting to revert item ID: ${item.id}`);
@@ -427,89 +441,117 @@ export default function AdminItemManagementTable({
           <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Novo Item
         </Button>
       </div>
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto"> {/* Added overflow-x-auto */}
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[60px]"></TableHead> {/* Image col */}
               <TableHead>Nome</TableHead>
-              <TableHead className="hidden md:table-cell">Descrição</TableHead>
-              <TableHead className="hidden sm:table-cell">Categoria</TableHead>
+              <TableHead className="hidden lg:table-cell">Descrição</TableHead> {/* Changed breakpoint */}
+              <TableHead className="hidden md:table-cell">Categoria</TableHead> {/* Changed breakpoint */}
               <TableHead>Status</TableHead>
-              <TableHead className="hidden lg:table-cell">Selecionado Por</TableHead>
+              <TableHead>Quantidade</TableHead> {/* New Quantity Column */}
+              <TableHead className="hidden xl:table-cell">Selecionado Por</TableHead> {/* Changed breakpoint */}
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {safeGifts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center"> {/* Updated colSpan */}
+                <TableCell colSpan={8} className="h-24 text-center"> {/* Updated colSpan */}
                   Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
               </TableRow>
             ) : (
-              safeGifts.map((item) => (
-                <TableRow
-                  key={item.id}
-                  className={actionLoading?.endsWith(item.id) ? "opacity-50 pointer-events-none" : ""}
-                >
-                  <TableCell>
-                    <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50">
-                      {item.imageUrl ? (
-                        <Image
-                          src={item.imageUrl}
-                          alt={`Imagem de ${item.name}`}
-                          fill
-                          style={{ objectFit: "cover" }}
-                          sizes="40px"
-                          unoptimized={item.imageUrl.startsWith('data:')} // Still needed if data URIs are used for previews
-                          onError={(e) => { (e.target as HTMLImageElement).src = ''; (e.target as HTMLImageElement).style.display='none'; }} // Basic error handling
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center h-full w-full">
-                          <ImageIcon className="h-5 w-5 text-muted-foreground" />
+              safeGifts.map((item) => {
+                 const isQuantityItem = typeof item.totalQuantity === 'number' && item.totalQuantity > 0;
+                 const displayedStatus = isQuantityItem && item.selectedQuantity !== undefined && item.selectedQuantity >= item.totalQuantity
+                    ? 'selected' // Show as selected if fully selected
+                    : item.status; // Otherwise use stored status
+                 const canRevert = !isQuantityItem && (displayedStatus === "selected" || displayedStatus === "not_needed");
+                return (
+                    <TableRow
+                    key={item.id}
+                    className={actionLoading?.endsWith(item.id) ? "opacity-50 pointer-events-none" : ""}
+                    >
+                    <TableCell>
+                        <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50 flex-shrink-0">
+                        {item.imageUrl ? (
+                            <Image
+                            src={item.imageUrl}
+                            alt={`Imagem de ${item.name}`}
+                            fill
+                            style={{ objectFit: "cover" }}
+                            sizes="40px"
+                            unoptimized={item.imageUrl.startsWith('data:')} // Still needed if data URIs are used for previews
+                            onError={(e) => { (e.target as HTMLImageElement).src = ''; (e.target as HTMLImageElement).style.display='none'; }} // Basic error handling
+                            />
+                        ) : (
+                            <div className="flex items-center justify-center h-full w-full">
+                            <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                        )}
                         </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{item.description || "-"}</TableCell>
-                  <TableCell className="hidden sm:table-cell">{item.category}</TableCell>
-                  <TableCell>{getStatusBadge(item.status)}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
-                    {item.selectedBy || "-"}
-                    {item.selectionDate && typeof item.selectionDate === 'string' && (
-                      <div className="text-[10px]">
-                        ({new Date(item.selectionDate).toLocaleDateString("pt-BR", { day: '2-digit', month: '2-digit', year: 'numeric' })})
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right space-x-1">
-                    {actionLoading?.endsWith(item.id) ? (
-                      <Loader2 className="h-4 w-4 animate-spin inline-block text-muted-foreground" />
-                    ) : (
-                      <>
-                        <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(item)} title="Editar Item" disabled={!!actionLoading} aria-label={`Editar ${item.name}`}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {(item.status === "selected" || item.status === "not_needed") && (
-                          <Button variant="ghost" size="icon" onClick={() => handleRevert(item)} title="Reverter para Disponível" disabled={!!actionLoading} aria-label={`Reverter ${item.name}`}>
-                            <RotateCcw className="h-4 w-4 text-orange-600" />
-                          </Button>
+                    </TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{item.name}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate">{item.description || "-"}</TableCell> {/* Changed breakpoint */}
+                    <TableCell className="hidden md:table-cell">{item.category}</TableCell> {/* Changed breakpoint */}
+                    <TableCell>{getStatusBadge(displayedStatus)}</TableCell>
+                    {/* Quantity Display */}
+                    <TableCell className="text-center text-sm">
+                        {isQuantityItem ? (
+                        <span className="whitespace-nowrap">
+                            {item.selectedQuantity ?? 0} / {item.totalQuantity}
+                        </span>
+                        ) : (
+                        "-"
                         )}
-                         {(item.status === "available" || item.status === "selected") && (
-                          <Button variant="ghost" size="icon" onClick={() => handleMarkNotNeeded(item)} title="Marcar como Não Precisa" disabled={!!actionLoading} aria-label={`Marcar ${item.name} como não precisa`}>
-                            <Ban className="h-4 w-4 text-yellow-600" />
-                          </Button>
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell text-xs text-muted-foreground"> {/* Changed breakpoint */}
+                        {/* Show selectedBy only if NOT a quantity item or if fully selected */}
+                        {(!isQuantityItem || displayedStatus === 'selected') && item.selectedBy ? (
+                        <>
+                            {item.selectedBy}
+                            {item.selectionDate && typeof item.selectionDate === 'string' && (
+                            <div className="text-[10px]">
+                                ({new Date(item.selectionDate).toLocaleDateString("pt-BR", { day: '2-digit', month: '2-digit', year: 'numeric' })})
+                            </div>
+                            )}
+                        </>
+                        ) : (
+                        "-"
                         )}
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(item)} title="Excluir Item" disabled={!!actionLoading} aria-label={`Excluir ${item.name}`}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell className="text-right space-x-1 whitespace-nowrap">
+                        {actionLoading?.endsWith(item.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin inline-block text-muted-foreground" />
+                        ) : (
+                        <>
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(item)} title="Editar Item" disabled={!!actionLoading} aria-label={`Editar ${item.name}`}>
+                            <Edit className="h-4 w-4" />
+                            </Button>
+                            {/* Revert Button - Disabled for quantity items */}
+                             {canRevert && (
+                            <Button variant="ghost" size="icon" onClick={() => handleRevert(item)} title="Reverter para Disponível" disabled={!!actionLoading} aria-label={`Reverter ${item.name}`}>
+                                <RotateCcw className="h-4 w-4 text-orange-600" />
+                            </Button>
+                            )}
+                            {/* Mark as Not Needed Button */}
+                            {(displayedStatus === "available" || displayedStatus === "selected") && (
+                            <Button variant="ghost" size="icon" onClick={() => handleMarkNotNeeded(item)} title="Marcar como Não Precisa" disabled={!!actionLoading} aria-label={`Marcar ${item.name} como não precisa`}>
+                                <Ban className="h-4 w-4 text-yellow-600" />
+                            </Button>
+                            )}
+                            {/* Delete Button */}
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(item)} title="Excluir Item" disabled={!!actionLoading} aria-label={`Excluir ${item.name}`}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                        </>
+                        )}
+                    </TableCell>
+                    </TableRow>
+                );
+            })
             )}
           </TableBody>
         </Table>
@@ -562,6 +604,24 @@ export default function AdminItemManagementTable({
               </div>
             </div>
 
+            {/* Total Quantity */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="totalQuantity-dialog" className="text-right">Qtd. Total</Label>
+              <div className="col-span-3">
+                <Input
+                    id="totalQuantity-dialog"
+                    type="number"
+                    placeholder="Deixe vazio para item único"
+                    {...register("totalQuantity")}
+                    className={errors.totalQuantity ? "border-destructive" : ""}
+                    min="1" // HTML5 validation for positive number
+                    disabled={isSubmitting || watchedStatus === 'selected'} // Disable if status is selected
+                />
+                 {errors.totalQuantity && <p className="text-sm text-destructive mt-1">{errors.totalQuantity.message}</p>}
+                 {watchedStatus === 'selected' && <p className="text-xs text-muted-foreground mt-1">Status 'Selecionado' não pode ter quantidade.</p>}
+              </div>
+            </div>
+
             {/* Image Upload */}
             <div className="grid grid-cols-4 items-start gap-4">
               <Label htmlFor="imageFile-dialog" className="text-right pt-2">Imagem</Label>
@@ -611,22 +671,37 @@ export default function AdminItemManagementTable({
                   defaultValue={editingItem?.status || "available"}
                   rules={{ required: "Status é obrigatório." }}
                   render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value || "available"} disabled={isSubmitting}>
+                    <Select
+                        onValueChange={field.onChange}
+                        value={field.value || "available"}
+                        // Disable 'selected' if it's a quantity item
+                        disabled={isSubmitting || (!!watchedTotalQuantity && watchedTotalQuantity > 0)}
+                    >
                       <SelectTrigger id="status-dialog" className={errors.status ? "border-destructive" : ""}>
                         <SelectValue placeholder="Selecione um status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {statuses.map((stat) => (<SelectItem key={stat} value={stat}>{stat === "available" && "Disponível"}{stat === "selected" && "Selecionado"} {stat === "not_needed" && "Não Precisa"}</SelectItem>))}
+                        {statuses.map((stat) => (<SelectItem
+                            key={stat}
+                            value={stat}
+                            // Disable 'selected' option for quantity items
+                            disabled={stat === 'selected' && !!watchedTotalQuantity && watchedTotalQuantity > 0}
+                            >
+                                {stat === "available" && "Disponível"}
+                                {stat === "selected" && "Selecionado"}
+                                {stat === "not_needed" && "Não Precisa"}
+                         </SelectItem>))}
                       </SelectContent>
                     </Select>
                   )}
                 />
                  {errors.status && <p id="status-error" className="text-sm text-destructive mt-1">{errors.status.message}</p>}
+                 {!!watchedTotalQuantity && watchedTotalQuantity > 0 && <p className="text-xs text-muted-foreground mt-1">Status é definido automaticamente para itens com quantidade.</p>}
               </div>
             </div>
 
-            {/* Selected By - Conditionally shown */}
-            {watchedStatus === "selected" && (
+            {/* Selected By - Conditionally shown only for non-quantity items */}
+             {watchedStatus === "selected" && (!watchedTotalQuantity || watchedTotalQuantity <= 0) && (
               <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
                 <Label htmlFor="selectedBy-dialog" className="text-right">Selecionado Por*</Label>
                 <div className="col-span-3">
@@ -648,3 +723,4 @@ export default function AdminItemManagementTable({
     </div>
   );
 }
+```
