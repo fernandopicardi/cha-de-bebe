@@ -33,7 +33,7 @@ import {
   type EventSettings,
   type Confirmation,
 } from "@/data/gift-store"; // Ensure correct path
-import AdminItemManagementTable from "@/components/admin/item-management-table";
+import AdminItemManagementTable from "@/components/admin/item-management-table"; // Import the missing component
 import AdminSelectionViewer from "@/components/admin/selection-viewer";
 import AdminEventSettingsForm from "@/components/admin/event-settings-form";
 import AdminConfirmationsList from "@/components/admin/confirmations-list"; // Import new component
@@ -228,11 +228,8 @@ export default function AdminPage() {
         <p className="text-xl text-muted-foreground mb-6">
           Esta página não pôde ser encontrada.
         </p>
-        {authError && ( // Optionally log the auth error internally but don't show it to the user
-          <p className="text-xs text-destructive/70 mb-4">
-            (Erro de autenticação: {authError})
-          </p>
-        )}
+        {authError && // Optionally log the auth error internally but don't show it to the user
+          console.error("Auth Error:", authError) /* Log auth error */}
         <Link href="/admin/login">
           <Button variant="default">Ir para Login</Button>
         </Link>

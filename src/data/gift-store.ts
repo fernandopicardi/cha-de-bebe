@@ -313,7 +313,7 @@ export async function initializeFirestoreData(): Promise<void> {
         const docRef = doc(giftsCollectionRef); // Generate a new doc reference
         // Initialize selectedQuantity to 0 for all items
         batch.set(docRef, {
-          ...item,
+          ...item,          
           createdAt: serverTimestamp(),
           selectedQuantity: 0,
         });
@@ -720,8 +720,8 @@ export async function addSuggestion(
       createdAt: serverTimestamp(),
       imageUrl: uploadedImageUrl, // Store the uploaded image URL or null
       selectedQuantity: 1, // Suggestion implies selecting 1 unit
-      totalQuantity: 1, // Default total quantity to 1 for suggested items
-    };
+      totalQuantity: 1, // Default total quantity to 1 for suggested items      
+    };    
 
     // Validate essential fields before adding
     if (!newItemData.name || !newItemData.selectedBy) {
@@ -808,13 +808,13 @@ export async function addGift(
 ): Promise<GiftItem | null> {
   console.log("Firestore ADD_GIFT: Adding new gift item...");
   const { imageDataUri, totalQuantity, ...itemDetails } = giftData; // Extract totalQuantity
-  let uploadedImageUrl: string | null = null;
+  let uploadedImageUrl: string | null = null;  
 
-  try {
+    try {
     // 1. Upload image if data URI provided
     if (imageDataUri) {
       console.log(
-        "Firestore ADD_GIFT: Image data URI found. Uploading image...",
+        "Firestore ADD_GIFT: Image data URI found. Uploading image...",        
       );
       uploadedImageUrl = await uploadImage(imageDataUri, "gifts", "admin_add");
       console.log("Firestore ADD_GIFT: Image uploaded. URL:", uploadedImageUrl);
@@ -824,40 +824,11 @@ export async function addGift(
     const isQuantityItem =
       typeof totalQuantity === "number" && totalQuantity > 0;
 
-    // 2. Prepare data for Firestore
-    const dataToAdd: Omit<GiftItem, "id"> & {
-      createdAt: any;
-      selectionDate: any;
-    } = {
-      name: itemDetails.name.trim(),
-      description: itemDetails.description?.trim() || null,
-      category: itemDetails.category,
-      // Set status and selectedBy based on quantity or admin input
-      status:
-        itemDetails.status === "not_needed"
-          ? "not_needed"
-          : isQuantityItem
-            ? "available"
-            : itemDetails.status,
-      selectedBy:
-        itemDetails.status === "selected" && !isQuantityItem
-          ? itemDetails.selectedBy?.trim() || "Admin"
-          : null,
-      selectionDate:
-        itemDetails.status === "selected" && !isQuantityItem
-          ? serverTimestamp()
-          : null,
-      createdAt: serverTimestamp(),
-      imageUrl: uploadedImageUrl, // Use uploaded URL or null
-      // Quantity fields
-      totalQuantity: isQuantityItem ? totalQuantity : null,
-      selectedQuantity: 0, // Initialize selected quantity to 0
-    };
-
-    // Validate required fields
-    if (!dataToAdd.name || !dataToAdd.category || !dataToAdd.status) {
+    let finalImageUrl: string | null = uploadedImageUrl;    
+    // Validate required fields   
+    if (!itemDetails.name || !itemDetails.category || !itemDetails.status) {
       console.error(
-        "Firestore ADD_GIFT: Missing required fields (name, category, status).",
+        "Firestore ADD_GIFT: Missing required fields (name, category, status).",        
       );
       if (uploadedImageUrl)
         await deleteImage(uploadedImageUrl).catch((e) =>
@@ -865,38 +836,75 @@ export async function addGift(
         );
       return null;
     }
+
+    let finalDataToAdd: Omit<GiftItem, "id"> & {
+      createdAt: any;
+      selectionDate: any;
+    };
+
+    if (itemDetails.id) {
+      console.log("Firestore ADD_GIFT: gift being updated, item data:", itemDetails);
+      const itemDocRef = doc(db, "gifts", itemDetails.id);
+      const itemSnap = await getDoc(itemDocRef);
+      const item = itemSnap.exists() ? giftFromDoc(itemSnap) : null;
+      if (!item) return null;
+      finalDataToAdd = {
+        name: itemDetails.name.trim(),
+        description: itemDetails.description?.trim() || null,
+        category: itemDetails.category,
+        // Set status and selectedBy based on quantity or admin input
+        status: itemDetails.status === "not_needed" ? "not_needed" : isQuantityItem ? "available" : itemDetails.status,
+        selectedBy: itemDetails.status === "selected" && !isQuantityItem ? itemDetails.selectedBy?.trim() || "Admin" : null,
+        selectionDate: itemDetails.status === "selected" && !isQuantityItem ? serverTimestamp() : null,
+        createdAt: item.createdAt,
+        imageUrl: finalImageUrl, // Use uploaded URL or null
+        // Quantity fields
+        totalQuantity: isQuantityItem ? totalQuantity : null,
+        selectedQuantity: 0, // Initialize selected quantity to 0,
+      };
+    } else {
+      console.log("Firestore ADD_GIFT: gift being added");
+      finalDataToAdd = {
+        name: itemDetails.name.trim(),
+        description: itemDetails.description?.trim() || null,
+        category: itemDetails.category,
+        // Set status and selectedBy based on quantity or admin input
+        status: itemDetails.status === "not_needed" ? "not_needed" : isQuantityItem ? "available" : itemDetails.status,
+        selectedBy: itemDetails.status === "selected" && !isQuantityItem ? itemDetails.selectedBy?.trim() || "Admin" : null,
+        selectionDate: itemDetails.status === "selected" && !isQuantityItem ? serverTimestamp() : null,
+        createdAt: serverTimestamp(),
+        imageUrl: finalImageUrl, // Use uploaded URL or null
+        // Quantity fields
+        totalQuantity: isQuantityItem ? totalQuantity : null,
+        selectedQuantity: 0, // Initialize selected quantity to 0,
+      };
+    }
+
     // If status is 'selected' (for non-quantity items), selectedBy must not be null or undefined
-    if (
-      dataToAdd.status === "selected" &&
-      !isQuantityItem &&
-      !dataToAdd.selectedBy
-    ) {
-      console.warn(
-        "Firestore ADD_GIFT: Status is 'selected' but 'selectedBy' is missing. Defaulting to 'Admin'.",
-      );
-      dataToAdd.selectedBy = "Admin";
+    if (finalDataToAdd.status === "selected" && !isQuantityItem && !finalDataToAdd.selectedBy) {
+      console.warn("Firestore ADD_GIFT: Status is 'selected' but 'selectedBy' is missing. Defaulting to 'Admin'.");
+      finalDataToAdd.selectedBy = "Admin";
     }
     // If status is 'not_needed', clear selection fields
-    if (dataToAdd.status === "not_needed") {
-      dataToAdd.selectedBy = null;
-      dataToAdd.selectionDate = null;
-      dataToAdd.selectedQuantity = 0; // Ensure selected quantity is 0
-    }
+    if (finalDataToAdd.status === "not_needed") {
+      finalDataToAdd.selectedBy = null;
+      finalDataToAdd.selectionDate = null;
+      finalDataToAdd.selectedQuantity = 0; // Ensure selected quantity is 0
+    }    
 
     // Remove undefined fields manually before sending to Firestore
-    const finalDataToAdd: Record<string, any> = {};
-    for (const key in dataToAdd) {
+    
+    for (const key in finalDataToAdd) {
       // Check for both undefined and null for fields like description, selectedBy, etc.
-      if (dataToAdd[key as keyof typeof dataToAdd] !== undefined) {
-        finalDataToAdd[key] = dataToAdd[key as keyof typeof dataToAdd];
+      if (finalDataToAdd[key as keyof typeof finalDataToAdd] === undefined) {
+        delete finalDataToAdd[key];
       }
-    }
+    }   
 
+    
     // 3. Add document to Firestore
     const docRef = await addFirestoreDoc(giftsCollectionRef, finalDataToAdd);
-    console.log(
-      `Firestore ADD_GIFT: Gift added successfully with ID: ${docRef.id}`,
-    );
+    console.log(`Firestore ADD_GIFT: Gift added successfully with ID: ${docRef.id}`);
     forceRevalidation("/admin"); // Revalidate admin page
 
     // 4. Fetch and return the new item
@@ -908,7 +916,7 @@ export async function addGift(
       console.error(
         "Firestore ADD_GIFT: Cleaning up potentially uploaded image due to error.",
       );
-      await deleteImage(uploadedImageUrl).catch((e) =>
+      await deleteImage(uploadedImageUrl).catch((e) =>        
         console.error("Cleanup failed for image:", uploadedImageUrl, e),
       );
     }
@@ -916,8 +924,7 @@ export async function addGift(
       console.error(
         "Firestore: PERMISSION DENIED adding gift. Check Firestore rules.",
       );
-    } else if (
-      error instanceof Error &&
+    } else if (error instanceof Error &&
       error.message.includes("Unsupported field value")
     ) {
       console.error(
@@ -926,9 +933,9 @@ export async function addGift(
       );
       // You might want to log dataToAdd here for debugging
       console.log("Data attempted to add:", finalDataToAdd);
-    }
-    throw error; // Re-throw the error for the calling component
-  }
+    }    
+    throw error;// Re-throw the error for the calling component
+  }    
 }
 
 /**
@@ -965,7 +972,7 @@ export async function updateGift(
         ? currentItemData.totalQuantity
         : null;
     const currentSelectedQuantity =
-      typeof currentItemData?.selectedQuantity === "number"
+      typeof currentItemData?.selectedQuantity === "number"      
         ? currentItemData.selectedQuantity
         : 0;
 
@@ -1022,7 +1029,7 @@ export async function updateGift(
     const isQuantityItem = newTotalQuantity !== null && newTotalQuantity > 0;
 
     // Reset selectedQuantity if totalQuantity is removed or set to 0
-    if (!isQuantityItem) {
+    if (!isQuantityItem) {      
       dataToUpdate.selectedQuantity = 0;
     } else if (
       newTotalQuantity !== null &&
@@ -1218,7 +1225,7 @@ export async function revertSelection(
       selectionDate: null, // Clear selectionDate
       selectedQuantity: 0, // Reset selected quantity regardless of item type
     };
-    // Update the document
+    // Update the document    
     await updateDoc(itemDocRef, updateData);
     console.log(
       `Firestore REVERT_SELECTION: Selection/status for gift ${itemId} reverted successfully.`,
@@ -1401,8 +1408,8 @@ export async function exportGiftsToCSV(): Promise<string> {
         const description = item.description ?? "";
         const selectedBy = item.selectedBy ?? "";
         const imageUrl = item.imageUrl ?? "";
-        const totalQuantity = item.totalQuantity ?? ""; // Empty string if null
-        const selectedQuantity = item.selectedQuantity ?? 0;
+        const totalQuantity = item.totalQuantity ?? null; // Empty string if null
+        const selectedQuantity = item.selectedQuantity ?? null;
 
         // Create CSV row array and join with commas
         return [

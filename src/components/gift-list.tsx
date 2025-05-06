@@ -68,8 +68,9 @@ export default function GiftList({
       }
       // Determine the effective status, considering quantity
       const isQuantityItem =
-        typeof item.totalQuantity === "number" && item.totalQuantity > 0;
+        (item.totalQuantity ?? 0) > 0;
       let effectiveStatus = item.status;
+
       if (isQuantityItem && item.status !== "not_needed") {
         effectiveStatus =
           (item.selectedQuantity ?? 0) >= item.totalQuantity
@@ -94,7 +95,7 @@ export default function GiftList({
     if (loadingItemId) return;
     // Ensure item is actually available before opening dialog
     const isQuantityItem =
-      typeof item.totalQuantity === "number" && item.totalQuantity > 0;
+      (item.totalQuantity ?? 0) > 0;
     const isAvailable = isQuantityItem
       ? (item.selectedQuantity ?? 0) < item.totalQuantity
       : item.status === "available";
@@ -184,7 +185,7 @@ export default function GiftList({
 
   const getStatusBadge = (item: GiftItem) => {
     const isQuantityItem =
-      typeof item.totalQuantity === "number" && item.totalQuantity > 0;
+      (item.totalQuantity ?? 0) > 0;
     let displayStatus: GiftItem["status"] = item.status;
     let quantityText = "";
 
@@ -193,7 +194,7 @@ export default function GiftList({
     } else if (isQuantityItem) {
       const selected = item.selectedQuantity ?? 0;
       const total = item.totalQuantity ?? 0;
-      displayStatus = selected >= total ? "selected" : "available";
+      displayStatus = selected >= (item.totalQuantity ?? 0) ? "selected" : "available";
       quantityText = `(${selected}/${total})`; // Add quantity text
     }
 
@@ -317,7 +318,7 @@ export default function GiftList({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredItems.map((item) => {
           const isQuantityItem =
-            typeof item.totalQuantity === "number" && item.totalQuantity > 0;
+            (item.totalQuantity ?? 0) > 0;
           const effectiveStatus =
             isQuantityItem && item.status !== "not_needed"
               ? (item.selectedQuantity ?? 0) >= item.totalQuantity
