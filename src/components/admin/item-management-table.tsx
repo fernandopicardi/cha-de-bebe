@@ -65,6 +65,7 @@ import {
   markGiftAsNotNeeded,
   type GiftItem,
 } from "@/data/gift-store";
+import { getGifts } from "@/data/gift-store";
 import * as z from "zod";
 import { useForm, Controller } from "react-hook-form";
 
@@ -72,7 +73,6 @@ interface AdminItemManagementTableProps {
   gifts: GiftItem[]; // Expecting gifts array
   onDataChange?: () => void; // Callback for parent component refresh
 }
-
 // Constants for file validation (used client-side) - Updated to 50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ACCEPTED_IMAGE_TYPES = [
@@ -128,12 +128,15 @@ const categories = ["Roupas", "Higiene", "Brinquedos", "Alimentação", "Outros"
 const statuses: GiftItem["status"][] = ["available", "selected", "not_needed"];
 
 export default function AdminItemManagementTable({
-  gifts, // Receive gifts directly
+
   onDataChange,
 }: AdminItemManagementTableProps) {
+    
+  const [gifts, setGifts] = useState<GiftItem[]>([]);
+  
   const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<GiftItem | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null); // Track loading state for row actions
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { toast } = useToast();
   const [imagePreview, setImagePreview] = useState<string | null>(null); // State for image preview in dialog
   const [isClient, setIsClient] = useState(false); // Track client mount
@@ -142,28 +145,13 @@ export default function AdminItemManagementTable({
     setIsClient(true); // Component has mounted
   }, []);
 
-  // Log received gifts when the prop changes
   useEffect(() => {
-    console.log(
-      `AdminItemManagementTable: Received gifts prop update. Count: ${
-        gifts?.length ?? 0
-      }`
-    );
-  }, [gifts]);
-
-  // Ensure gifts is always an array before using it
-  const safeGifts = useMemo(() => {
-    const result = Array.isArray(gifts)
-      ? gifts.map((item) => ({
-          ...item,
-          totalQuantity: item.totalQuantity ?? null, // Ensure totalQuantity is null if undefined
-        }))
-      : [];
-    console.log(
-      `AdminItemManagementTable: Memoized safeGifts. Count: ${result.length}`
-    );
-    return result;
-  }, [gifts]);
+    const fetchData = async () => {
+      const result = await getGifts();
+      setGifts(result);
+    };
+    fetchData();
+  }, []);
 
   const {
     control,
@@ -393,12 +381,19 @@ export default function AdminItemManagementTable({
     );
     toast({ title: "Sucesso!", description: message });
     onDataChange?.();
+    
+    const fetchData = async () => {
+      const result = await getGifts();
+      setGifts(result);
+    };
+    fetchData();
+    
     handleDialogClose();
   };
 
   const handleError = (
     operation: string,
-    itemName: string,
+    itemName: string, 
     errorDetails?: any
   ) => {
     console.error(
@@ -486,10 +481,18 @@ export default function AdminItemManagementTable({
         );
         await updateGift(editingItem.id, finalPayload);
         handleSuccess(`Item "${finalPayload.name}" atualizado.`);
+        
+        setGifts((prevGifts) =>
+          prevGifts.map((g) => (g.id === editingItem.id ? { ...g, ...finalPayload } : g))
+        );
+        
       } else {
         console.log("AdminItemManagementTable: Calling addGiftAdmin");
         // Use addGiftAdmin for adding items from the admin panel
-        await addGiftAdmin(finalPayload);
+        const newItem = await addGiftAdmin(finalPayload);
+        setGifts((prevGifts) => [...prevGifts, newItem]);
+
+        
         handleSuccess(`Item "${finalPayload.name}" adicionado.`);
       }
     } catch (error) {
@@ -508,10 +511,15 @@ export default function AdminItemManagementTable({
       try {
         // deleteGift now handles image deletion and revalidation
         const success = await deleteGift(item.id);
+
         if (success) {
+          setGifts((prevGifts) => prevGifts.filter((g) => g.id !== item.id));
           handleSuccess(`Item "${item.name}" excluído.`);
         } else {
           handleError("excluir", item.name, "Delete operation failed.");
+          
+          
+          
         }
       } catch (error) {
         handleError("excluir", item.name, error);
@@ -557,6 +565,9 @@ export default function AdminItemManagementTable({
       try {
         await revertSelection(item.id);
         handleSuccess(`Item "${item.name}" revertido para disponível.`);
+        setGifts((prevGifts) =>
+          prevGifts.map((g) => (g.id === item.id ? { ...g, status: 'available', selectedBy:null } : g))
+        );
       } catch (error) {
         handleError("reverter", item.name, error);
       } finally {
@@ -581,6 +592,10 @@ export default function AdminItemManagementTable({
       try {
         await markGiftAsNotNeeded(item.id);
         handleSuccess(`Item "${item.name}" marcado como "Não Precisa".`);
+        setGifts((prevGifts) =>
+          prevGifts.map((g) => (g.id === item.id ? { ...g, status: 'not_needed' } : g))
+        );
+        
       } catch (error) {
         handleError('marcar como "Não Precisa"', item.name, error);
       } finally {
@@ -647,7 +662,7 @@ export default function AdminItemManagementTable({
   };
 
   console.log(
-    `AdminItemManagementTable: Rendering table. Number of safeGifts: ${safeGifts.length}`
+    `AdminItemManagementTable: Rendering table. Number of safeGifts: ${gifts.length}`
   );
 
   return (
@@ -678,10 +693,10 @@ export default function AdminItemManagementTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {safeGifts.length === 0 ? (
+            {gifts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="h-24 text-center">
-                  {" "}
+                  
                   {/* Updated colSpan */}
                   Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
@@ -703,7 +718,7 @@ export default function AdminItemManagementTable({
                     displayedStatus === "not_needed");
 
                 return (
-                  <TableRow
+                  <TableRow                
                     key={item.id}
                     className={
                       actionLoading?.endsWith(item.id)
@@ -738,7 +753,7 @@ export default function AdminItemManagementTable({
                       {item.name}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate">
-                      {item.description || "-"}
+                      {item.description || "-"} 
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {item.category}

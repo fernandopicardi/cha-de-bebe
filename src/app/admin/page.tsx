@@ -310,7 +310,6 @@ export default function AdminPage() {
       </div>
       {/* Single Column Layout */}
       <div className="space-y-6 lg:space-y-8 max-w-4xl mx-auto">
-        {" "}
         {/* Center content */}
         {/* 1. Event Settings Card */}
         <Card className="bg-card shadow-sm">
@@ -363,7 +362,7 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <AdminSelectionViewer
-              key={`selection-viewer-${gifts.filter((g) => g && g.status === "selected").length}`}
+              key={`selection-viewer-${gifts.filter((g) => g && g.status === "selected").length}-${confirmations.length}`}
               selectedItems={gifts.filter(
                 (g) =>
                   (g && g.status === "selected") ||
@@ -386,9 +385,8 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <AdminItemManagementTable
-              key={`item-table-${gifts.length}-${gifts[0]?.id || "no-items"}`}
-              gifts={gifts} // Pass the fetched gifts
-              onDataChange={() => refreshData("item table change")} // More specific source
+              key={`item-table-${gifts.length}-${gifts[0]?.id || "no-items"}-${confirmations.length}`}
+              onDataChange={() => refreshData("item table change")}
             />
           </CardContent>
         </Card>
@@ -420,7 +418,7 @@ export default function AdminPage() {
             </Button>
           </CardContent>
         </Card>
-      </div>{" "}
+      </div>
       {/* End of Single Column Layout */}
     </div>
   );

@@ -167,9 +167,11 @@ export default function AdminSelectionViewer({
                 return (
                   <TableRow
                     key={item.id}
-                    className={loadingItemId === item.id ? "opacity-50" : ""}
-                  ><TableCell>
-                      <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50 flex-shrink-0">
+                    className={
+                      loadingItemId === item.id ? "opacity-50" : ""
+                    }
+                  >
+                    <TableCell><div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50 flex-shrink-0">
                         {item.imageUrl ? (
                           <Image
                             src={item.imageUrl}
@@ -190,11 +192,15 @@ export default function AdminSelectionViewer({
                           </div>
                         )}
                       </div>
-                    </TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-center">
+                    </TableCell>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="text-center">
                       {isQuantityItem
                         ? `${item.selectedQuantity ?? 0} / ${item.totalQuantity}`
                         : "1 / 1"}
-                    </TableCell><TableCell>{item.selectedBy || "-"}</TableCell><TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
+                    </TableCell>
+                    <TableCell>{item.selectedBy || "-"}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
                       {formatDateTime(item.selectionDate)}
                     </TableCell><TableCell className="text-right">
                       <Button
@@ -220,7 +226,9 @@ export default function AdminSelectionViewer({
                         )}
                         Reverter
                       </Button>
-                    </TableCell></TableRow>
+                    </TableCell>
+                  </TableRow>
+
                 );
               })
             )}
