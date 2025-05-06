@@ -261,197 +261,180 @@ export default function SuggestItemDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[480px] bg-card">
+      <DialogContent className="sm:max-w-lg bg-card p-6"> {/* Adjusted max-width and padding */}
         <DialogHeader>
           <DialogTitle>Adicionar Novo Item</DialogTitle>
           <DialogDescription>
             Adicione um item à lista. Ele será marcado como escolhido por você.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
+        {/* Use space-y for vertical spacing */}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
           {/* Item Name */}
-          <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="itemName-suggest" className="text-right pt-2">
-              Nome*
-            </Label>
-            <div className="col-span-3">
-              <Input
-                id="itemName-suggest"
-                {...register("itemName")}
-                className={`${errors.itemName ? "border-destructive" : ""}`}
-                disabled={isSubmitting}
-              />
-              {errors.itemName && (
-                <p className="text-sm text-destructive mt-1">
-                  {errors.itemName.message}
-                </p>
-              )}
-            </div>
+          <div className="grid gap-2"> {/* Simplified grid for single column */}
+            <Label htmlFor="itemName-suggest">Nome*</Label>
+            <Input
+              id="itemName-suggest"
+              {...register("itemName")}
+              className={`${errors.itemName ? "border-destructive" : ""}`}
+              disabled={isSubmitting}
+            />
+            {errors.itemName && (
+              <p className="text-sm text-destructive mt-1">
+                {errors.itemName.message}
+              </p>
+            )}
           </div>
 
           {/* Item Description */}
-          <div className="grid grid-cols-4 items-start gap-4">
-            <Label
-              htmlFor="itemDescription-suggest"
-              className="text-right pt-2"
-            >
-              Descrição
-            </Label>
-            <div className="col-span-3">
-              <Textarea
-                id="itemDescription-suggest"
-                placeholder="Ex: Marca, cor, link..."
-                {...register("itemDescription")}
-                className={`${errors.itemDescription ? "border-destructive" : ""}`}
-                disabled={isSubmitting}
-              />
-              {errors.itemDescription && (
-                <p className="text-sm text-destructive mt-1">
-                  {errors.itemDescription.message}
-                </p>
-              )}
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="itemDescription-suggest">Descrição</Label>
+            <Textarea
+              id="itemDescription-suggest"
+              placeholder="Ex: Marca, cor, link..."
+              {...register("itemDescription")}
+              className={`${errors.itemDescription ? "border-destructive" : ""}`}
+              disabled={isSubmitting}
+              rows={3} // Reduced rows
+            />
+            {errors.itemDescription && (
+              <p className="text-sm text-destructive mt-1">
+                {errors.itemDescription.message}
+              </p>
+            )}
           </div>
 
           {/* Image Upload */}
-          <div className="grid grid-cols-4 items-start gap-4">
-            <Label htmlFor="imageFile-suggest" className="text-right pt-2">
-              Imagem (Opc.)
-            </Label>
-            <div className="col-span-3">
-              <div className="flex items-center gap-4">
-                {imagePreview && (
-                  <div className="relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0">
-                    <Image
-                      key={imagePreview}
-                      src={imagePreview}
-                      alt="Prévia"
-                      fill
-                      style={{ objectFit: "cover" }}
-                      sizes="64px"
-                      unoptimized
-                      onError={() => setImagePreview(null)}
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100"
-                      onClick={removeImage}
-                      title="Remover"
-                      disabled={isSubmitting}
-                    >
-                      <XCircle className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
-                <div className="flex-1">
-                  <Input
-                    id="imageFile-suggest"
-                    type="file"
-                    accept={ACCEPTED_IMAGE_TYPES.join(",")}
-                    {...register("imageFile")} // Register file input
-                    className={` ${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
-                    disabled={isSubmitting}
+          <div className="grid gap-2">
+            <Label htmlFor="imageFile-suggest">Imagem (Opc.)</Label>
+            <div className="flex items-center gap-4">
+              {imagePreview && (
+                <div className="relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0">
+                  <Image
+                    key={imagePreview}
+                    src={imagePreview}
+                    alt="Prévia"
+                    fill
+                    style={{ objectFit: "cover" }}
+                    sizes="64px"
+                    unoptimized // Data URIs don't need optimization
+                    onError={() => setImagePreview(null)}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    JPG, PNG, etc (Máx 5MB).
-                  </p>
-                  {errors.imageFile &&
-                    typeof errors.imageFile.message === "string" && (
-                      <p className="text-sm text-destructive mt-1">
-                        {errors.imageFile.message}
-                      </p>
-                    )}
-                  {/* Error for imageDataUri is less likely needed as it's derived */}
-                  {errors.imageDataUri && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100"
+                    onClick={removeImage}
+                    title="Remover"
+                    disabled={isSubmitting}
+                  >
+                    <XCircle className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+              <div className="flex-1">
+                <Input
+                  id="imageFile-suggest"
+                  type="file"
+                  accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                  {...register("imageFile")} // Register file input
+                  className={` ${errors.imageFile ? "border-destructive" : ""} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
+                  disabled={isSubmitting}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  JPG, PNG, etc (Máx 5MB).
+                </p>
+                {errors.imageFile &&
+                  typeof errors.imageFile.message === "string" && (
                     <p className="text-sm text-destructive mt-1">
-                      {errors.imageDataUri.message}
+                      {errors.imageFile.message}
                     </p>
                   )}
-                </div>
+                {errors.imageDataUri && (
+                  <p className="text-sm text-destructive mt-1">
+                    {errors.imageDataUri.message}
+                  </p>
+                )}
               </div>
             </div>
           </div>
 
           {/* Suggester Name */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="suggesterName-suggest" className="text-right">
-              Seu Nome*
-            </Label>
-            <div className="col-span-3">
-              <Input
-                id="suggesterName-suggest"
-                {...register("suggesterName")}
-                className={`${errors.suggesterName ? "border-destructive" : ""}`}
-                disabled={isSubmitting}
-              />
-              {errors.suggesterName && (
-                <p className="text-sm text-destructive mt-1">
-                  {errors.suggesterName.message}
-                </p>
-              )}
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="suggesterName-suggest">Seu Nome*</Label>
+            <Input
+              id="suggesterName-suggest"
+              {...register("suggesterName")}
+              className={`${errors.suggesterName ? "border-destructive" : ""}`}
+              disabled={isSubmitting}
+            />
+            {errors.suggesterName && (
+              <p className="text-sm text-destructive mt-1">
+                {errors.suggesterName.message}
+              </p>
+            )}
           </div>
 
           {/* Email Reminder Section */}
-          <div className="col-span-4 grid grid-cols-subgrid gap-4 items-center">
-            <div className="col-span-4 flex items-center space-x-2 justify-start pl-[calc(25%+1rem)]">
-              <Checkbox
-                id="sendReminderEmail-suggest"
-                {...register("sendReminderEmail")}
-                disabled={isSubmitting}
-                aria-describedby="sendReminderEmail-suggest-label"
-              />
+          <div className="items-top flex space-x-2 pt-2"> {/* Added padding-top */}
+            <Checkbox
+              id="sendReminderEmail-suggest"
+              {...register("sendReminderEmail")}
+              disabled={isSubmitting}
+              aria-describedby="sendReminderEmail-suggest-label"
+            />
+            <div className="grid gap-1.5 leading-none">
               <Label
                 htmlFor="sendReminderEmail-suggest"
-                className="text-sm font-normal text-muted-foreground cursor-pointer"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                 id="sendReminderEmail-suggest-label"
               >
                 Receber lembrete deste presente por e-mail?
               </Label>
+              <p className="text-xs text-muted-foreground">
+                 Enviaremos um e-mail para você com os detalhes do presente.
+              </p>
             </div>
           </div>
 
+
           {/* Conditional Guest Email Input */}
           {watchSendReminder && (
-            <div className="grid grid-cols-4 items-center gap-4 animate-fade-in">
-              <Label htmlFor="guestEmail-suggest" className="text-right">
-                Seu E-mail*
-              </Label>
-              <div className="col-span-3">
-                <Input
-                  id="guestEmail-suggest"
-                  type="email"
-                  placeholder="seuemail@exemplo.com"
-                  {...register("guestEmail")}
-                  className={`col-span-3 ${errors.guestEmail ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                  disabled={isSubmitting}
-                  aria-invalid={errors.guestEmail ? "true" : "false"}
-                  aria-describedby="guestEmail-suggest-error"
-                />
-                {errors.guestEmail && (
-                  <p
-                    id="guestEmail-suggest-error"
-                    className="text-sm text-destructive mt-1"
-                  >
-                    {errors.guestEmail.message}
-                  </p>
-                )}
-              </div>
+            <div className="grid gap-2 animate-fade-in"> {/* Adjusted fade-in */}
+              <Label htmlFor="guestEmail-suggest">Seu E-mail*</Label>
+              <Input
+                id="guestEmail-suggest"
+                type="email"
+                placeholder="seuemail@exemplo.com"
+                {...register("guestEmail")}
+                className={`${errors.guestEmail ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                disabled={isSubmitting}
+                aria-invalid={errors.guestEmail ? "true" : "false"}
+                aria-describedby="guestEmail-suggest-error"
+              />
+              {errors.guestEmail && (
+                <p
+                  id="guestEmail-suggest-error"
+                  className="text-sm text-destructive mt-1"
+                >
+                  {errors.guestEmail.message}
+                </p>
+              )}
             </div>
           )}
 
-          <DialogFooter className="mt-4">
+          {/* Footer buttons */}
+          <DialogFooter className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0"> {/* Adjust footer layout */}
             <DialogClose asChild>
-              <Button type="button" variant="outline" disabled={isSubmitting}>
+              <Button type="button" variant="outline" disabled={isSubmitting} className="w-full sm:w-auto">
                 Cancelar
               </Button>
             </DialogClose>
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-accent text-accent-foreground hover:bg-accent/90"
+              className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto"
             >
               {isSubmitting ? (
                 <>
@@ -470,3 +453,5 @@ export default function SuggestItemDialog({
     </Dialog>
   );
 }
+
+    
