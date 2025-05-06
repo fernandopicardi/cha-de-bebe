@@ -92,8 +92,23 @@ const giftFormSchema = z.object({
     .or(z.literal("")), // Allow selectedBy editing, map to null later
   // Holds existing URL, new data URI, or null for removal
   imageUrl: z.string().optional().nullable(),
-  // Captures file input
-  imageFile: z.instanceof(FileList).optional().nullable(),
+  // Captures file input - adjusted validation
+   imageFile: z
+    .union([
+      z.instanceof(FileList).optional().nullable(), // Accept FileList (from input type="file")
+      z.null(),                                   // Accept null
+      z.undefined(),                              // Accept undefined
+    ])
+    .refine((files) => {
+      if (!files || files.length === 0) return true; // Allow empty/null
+      const file = files[0];
+      return ACCEPTED_IMAGE_TYPES.includes(file.type); // Validate type
+    }, "Tipo de arquivo inválido.")
+    .refine((files) => {
+      if (!files || files.length === 0) return true; // Allow empty/null
+      const file = files[0];
+      return file.size <= MAX_FILE_SIZE; // Validate size
+    }, `Tamanho máximo ${MAX_FILE_SIZE / 1024 / 1024}MB.`),
   // Quantity field - optional, must be a positive integer if provided
   totalQuantity: z.preprocess(
     (val) => (val === "" ? null : Number(val)), // Convert empty string to null, otherwise to number
@@ -146,6 +161,7 @@ export default function AdminItemManagementTable({
     watch,
     setValue,
     getValues,
+    trigger, // Add trigger for manual validation
     formState: { errors, isSubmitting },
   } = useForm<GiftFormData>({
     resolver: zodResolver(giftFormSchema),
@@ -168,13 +184,23 @@ export default function AdminItemManagementTable({
 
   // Handle image preview updates
   useEffect(() => {
-    if (!isClient || !(watchedImageFile instanceof FileList)) return; // Only run client-side and if it's a FileList
+    if (!isClient || !watchedImageFile) return; // Exit if not client or no file input value
 
-    const fileList = watchedImageFile;
-    const file = fileList?.[0];
+     const fileList = watchedImageFile as FileList | null; // Type cast
+     const file = fileList?.[0];
 
     if (file) {
-      // Client-side validation
+       // Ensure it's a File object before proceeding
+      if (!(file instanceof File)) {
+          console.warn("AdminItemManagementTable Dialog: Watched imageFile is not a File object:", file);
+          setValue("imageFile", null); // Clear if not a File
+          const initialUrl = editingItem?.imageUrl || null;
+          setValue("imageUrl", initialUrl);
+          setImagePreview(initialUrl);
+          return;
+      }
+
+      // Manual Client-side validation (redundant with Zod, but safe fallback)
       if (file.size > MAX_FILE_SIZE) {
         toast({ title: "Erro de Arquivo", description: `Máx ${MAX_FILE_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
         setValue("imageFile", null); // Clear invalid file
@@ -197,8 +223,10 @@ export default function AdminItemManagementTable({
       reader.onloadend = () => {
         const result = reader.result as string;
         console.log("AdminItemManagementTable Dialog: Generated data URI preview.");
-        setValue("imageUrl", result, { shouldValidate: true }); // Store data URI
+        setValue("imageUrl", result); // Store data URI
         setImagePreview(result);
+        // Trigger validation for the field after setting value
+        trigger("imageFile");
       };
       reader.onerror = (err) => console.error("FileReader error:", err);
       reader.readAsDataURL(file);
@@ -210,10 +238,11 @@ export default function AdminItemManagementTable({
              console.log("AdminItemManagementTable Dialog: File selection cleared, reverting preview/URL to initial state:", initialUrl);
              setValue("imageUrl", initialUrl);
              setImagePreview(initialUrl);
+             trigger("imageFile"); // Re-validate after clearing
          }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchedImageFile, isClient, setValue, toast, editingItem, getValues]);
+  }, [watchedImageFile, isClient, setValue, toast, editingItem, getValues, trigger]);
 
 
   const handleOpenAddDialog = () => {
@@ -269,7 +298,8 @@ export default function AdminItemManagementTable({
     setImagePreview(null); // Clear preview state
     const fileInput = document.getElementById("imageFile-dialog") as HTMLInputElement | null;
     if (fileInput) fileInput.value = "";
-  }, [setValue]);
+    trigger("imageFile"); // Re-validate after removing
+  }, [setValue, trigger]);
 
   // Show toast and trigger parent refresh after data store mutation completes
   const handleSuccess = (message: string) => {
@@ -279,10 +309,17 @@ export default function AdminItemManagementTable({
      handleDialogClose();
   };
 
-  const handleError = (operation: string, itemName: string, errorDetails?: any) => {
+ const handleError = (operation: string, itemName: string, errorDetails?: any) => {
     console.error(`AdminItemManagementTable: Error during ${operation} for "${itemName}":`, errorDetails);
-    toast({ title: "Erro!", description: `Falha ao ${operation.toLowerCase()} "${itemName}". Verifique console.`, variant: "destructive" });
-  };
+    // Check for specific Firebase error messages
+    let description = `Falha ao ${operation.toLowerCase()} "${itemName}". Verifique console.`;
+    if (errorDetails instanceof Error && errorDetails.message.includes("invalid data")) {
+        description = `Dados inválidos fornecidos para ${operation.toLowerCase()} "${itemName}". Verifique os campos.`;
+    } else if (errorDetails?.code === 'permission-denied') {
+        description = `Permissão negada para ${operation.toLowerCase()} "${itemName}". Verifique as regras do Firestore.`;
+    }
+    toast({ title: "Erro!", description: description, variant: "destructive" });
+};
 
   // Form submission for Add/Edit
   const onSubmit = async (data: GiftFormData) => {
@@ -305,33 +342,30 @@ export default function AdminItemManagementTable({
         data.status = 'available'; // Force status to available for quantity items added/edited via admin
     }
 
-    // Remove the imageFile property before sending to backend
-     const { imageFile, ...storeData } = data;
+     // The imageUrl field now holds either existing URL, data URI, or null
+     const imageValue = data.imageUrl;
 
-     // Create the payload with potentially the imageDataUri for adds, or imageUrl for updates
+     // Create the payload
      const finalPayload = {
-        ...storeData,
-        name: storeData.name.trim(),
-        description: storeData.description?.trim() || null,
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        category: data.category,
+        status: data.status,
         // SelectedBy is only relevant for non-quantity items or is set by user selection
-        selectedBy: isQuantityItem ? null : (storeData.status === 'selected' ? (storeData.selectedBy?.trim() || "Admin") : null),
-        totalQuantity: isQuantityItem ? storeData.totalQuantity : null, // Include total quantity
-        // imageUrl now holds either existing URL, data URI, or null
-        ...(editingItem ? { imageUrl: storeData.imageUrl } : { imageDataUri: storeData.imageUrl }),
+        selectedBy: isQuantityItem ? null : (data.status === 'selected' ? (data.selectedBy?.trim() || "Admin") : null),
+        totalQuantity: isQuantityItem ? data.totalQuantity : null, // Include total quantity
+        // Determine how to pass image info based on operation and content of imageValue
+        ...(editingItem
+            ? { imageUrl: imageValue } // For updates, pass the current imageUrl (could be data URI, existing URL, or null)
+            : { imageDataUri: imageValue } // For adds, pass as imageDataUri (could be data URI or null)
+          ),
      };
-
-     // Remove the other unnecessary image field depending on the operation
-     if (editingItem) {
-       delete (finalPayload as any).imageDataUri;
-     } else {
-       delete (finalPayload as any).imageUrl; // Remove imageUrl for adds, pass imageDataUri
-     }
 
 
     try {
       if (editingItem) {
         console.log(`AdminItemManagementTable: Calling updateGift for ID: ${editingItem.id}`);
-        // Pass the full payload for update, including the potentially new imageUrl (data URI or null)
+        // Pass the full payload for update
         await updateGift(editingItem.id, finalPayload as Partial<GiftItem> & { imageDataUri?: string | null });
         handleSuccess(`Item "${finalPayload.name}" atualizado.`);
       } else {
@@ -723,4 +757,4 @@ export default function AdminItemManagementTable({
     </div>
   );
 }
-```
+    
