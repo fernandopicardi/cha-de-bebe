@@ -673,8 +673,7 @@ export default function AdminItemManagementTable({
                         ? "opacity-50 pointer-events-none"
                         : ""
                     }
-                  >
-                    <TableCell>
+                  ><TableCell>
                       <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50 flex-shrink-0">
                         {item.imageUrl ? (
                           <Image
@@ -782,8 +781,7 @@ export default function AdminItemManagementTable({
                           </Button>
                         </>
                       )}
-                    </TableCell>
-                  </TableRow>
+                    </TableCell></TableRow>
                 );
               })
             )}

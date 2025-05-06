@@ -163,13 +163,12 @@ export default function AdminSelectionViewer({
                   item.totalQuantity > 0;
                 const canRevert = !isQuantityItem; // Disable revert for quantity items
 
-                // Ensure no whitespace before/after TableRow or between TableCells
+                // Ensure no whitespace is introduced before or between TableCells
                 return (
                   <TableRow
                     key={item.id}
                     className={loadingItemId === item.id ? "opacity-50" : ""}
-                  >
-                    <TableCell>
+                  ><TableCell>
                       <div className="relative h-10 w-10 rounded-md overflow-hidden border bg-muted/50 flex-shrink-0">
                         {item.imageUrl ? (
                           <Image
@@ -221,8 +220,7 @@ export default function AdminSelectionViewer({
                         )}
                         Reverter
                       </Button>
-                    </TableCell>
-                  </TableRow>
+                    </TableCell></TableRow>
                 );
               })
             )}
