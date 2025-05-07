@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import React from "react";
+import React from 'react';
 import {
   Table,
   TableBody,
@@ -8,10 +8,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area"; // For potential large lists
-import { CalendarDays, User } from "lucide-react";
-import type { Confirmation } from "@/data/gift-store"; // Import the type
+} from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area'; // For potential large lists
+import { CalendarDays, User } from 'lucide-react';
+import type { Confirmation } from '@/data/gift-store'; // Import the type
 
 interface AdminConfirmationsListProps {
   confirmations: Confirmation[];
@@ -27,7 +27,7 @@ export default function AdminConfirmationsList({
         id: `${confirmation.id}-${name}`, // Create a unique-ish key
         name: name,
         confirmedAt: confirmation.confirmedAt,
-      })),
+      }))
     )
     .sort((a, b) => {
       // Sort by date descending primarily, then by name alphabetically
@@ -40,41 +40,41 @@ export default function AdminConfirmationsList({
     });
 
   const formatDateTime = (isoString: string | null | undefined): string => {
-    if (!isoString) return "-";
+    if (!isoString) return '-';
     try {
       const date = new Date(isoString);
       // Format as DD/MM/YYYY, HH:MM
       return isNaN(date.getTime())
-        ? "-"
-        : date.toLocaleString("pt-BR", {
-            year: "numeric", // Changed from 2-digit
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
+        ? '-'
+        : date.toLocaleString('pt-BR', {
+            year: 'numeric', // Changed from 2-digit
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
           });
     } catch (e) {
-      return "-";
+      return '-';
     }
   };
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
+    <div className='space-y-4'>
+      <p className='text-sm text-muted-foreground'>
         Total de convidados confirmados: {individualAttendees.length}
       </p>
-      <ScrollArea className="h-72 rounded-md border">
-        {" "}
+      <ScrollArea className='h-72 rounded-md border'>
+        {' '}
         {/* Added ScrollArea */}
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>
-                <User className="inline-block mr-1 h-4 w-4" />
+                <User className='inline-block mr-1 h-4 w-4' />
                 Nome do Convidado
               </TableHead>
-              <TableHead className="text-right">
-                <CalendarDays className="inline-block mr-1 h-4 w-4" />
+              <TableHead className='text-right'>
+                <CalendarDays className='inline-block mr-1 h-4 w-4' />
                 Data da Confirmação
               </TableHead>
             </TableRow>
@@ -82,16 +82,19 @@ export default function AdminConfirmationsList({
           <TableBody>
             {individualAttendees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={2} className="h-24 text-center">
+                <TableCell colSpan={2} className='h-24 text-center'>
                   Nenhuma presença confirmada ainda.
                 </TableCell>
               </TableRow>
             ) : (
               individualAttendees.map((attendee) => (
                 // Ensure no whitespace before/after TableRow or between TableCells
-                <TableRow key={attendee.id}><TableCell className="font-medium">{attendee.name}</TableCell><TableCell className="text-right text-muted-foreground text-xs">
+                <TableRow key={attendee.id}>
+                  <TableCell className='font-medium'>{attendee.name}</TableCell>
+                  <TableCell className='text-right text-muted-foreground text-xs'>
                     {formatDateTime(attendee.confirmedAt)}
-                  </TableCell></TableRow>
+                  </TableCell>
+                </TableRow>
               ))
             )}
           </TableBody>

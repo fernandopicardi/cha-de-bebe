@@ -2,22 +2,22 @@ const js = require('@eslint/js');
 const jsxA11y = require('eslint-plugin-jsx-a11y');
 const react = require('eslint-plugin-react');
 const typescriptEslint = require('@typescript-eslint/parser');
-const typescriptEslintPlugin = require('@typescript-eslint/eslint-plugin')
+const typescriptEslintPlugin = require('@typescript-eslint/eslint-plugin');
 
 module.exports = [
   js.configs.recommended,
   {
     files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
     languageOptions: {
-        parser: typescriptEslint,
+      parser: typescriptEslint,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
         ecmaFeatures: {
           jsx: true,
         },
-          project: ['./tsconfig.json']
-        }
+        project: ['./tsconfig.json'],
+      },
     },
     plugins: {
       'jsx-a11y': jsxA11y,

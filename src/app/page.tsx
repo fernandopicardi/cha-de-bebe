@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -315,7 +314,9 @@ export default function Home() {
           <SuggestItemButton onSuggestionAdded={fetchData} />
         </div>
 
-        <Tabs defaultValue='available' className='w-full'> {/* Default to "Sugestões Disponíveis" */}
+        <Tabs defaultValue='available' className='w-full'>
+          {' '}
+          {/* Default to "Sugestões Disponíveis" */}
           <TabsList className='mb-6 md:mb-8 grid w-full grid-cols-1 sm:grid-cols-3'>
             <TabsTrigger
               value='available' // Corresponds to 'Sugestões Disponíveis'
@@ -336,7 +337,6 @@ export default function Home() {
               <ListX className='mr-1 h-4 w-4' /> Preferimos Não Utilizar
             </TabsTrigger>
           </TabsList>
-
           {/* Pass fetched gifts (which is now guaranteed to be an array or empty array) */}
           <TabsContent value='available' className='mt-6'>
             <GiftList

@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from '@/components/ui/card';
 import {
   Gift,
   Users,
@@ -18,223 +18,183 @@ import {
   Loader2,
   LogOut,
   Home,
-  AlertTriangle, // Import AlertTriangle
-  Frown, // Import Frown icon for 404
-  ClipboardList, // Icon for Confirmations list
-  UserCheck, // Icon for Confirmation Export
-} from "lucide-react";
+  AlertTriangle,
+  Frown,
+  ClipboardList,
+  UserCheck,
+} from 'lucide-react';
 import {
   getGifts,
   getEventSettings,
   exportGiftsToCSV,
-  exportConfirmationsToCSV, // Import new export function
+  exportConfirmationsToCSV,
   getConfirmations,
   type GiftItem,
   type EventSettings,
   type Confirmation,
-} from "@/data/gift-store"; // Ensure correct path
-import AdminItemManagementTable from "@/components/admin/item-management-table"; // Import the missing component
-import AdminSelectionViewer from "@/components/admin/selection-viewer";
-import AdminEventSettingsForm from "@/components/admin/event-settings-form";
-import AdminConfirmationsList from "@/components/admin/confirmations-list"; // Import new component
-import useAuth from "@/hooks/useAuth"; // Import useAuth hook
-import { ThemeToggle } from "@/components/theme-toggle"; // Import ThemeToggle
-import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
-import { useRouter } from "next/navigation"; // Import useRouter
+} from '@/data/gift-store'; // Ensure correct path
+import AdminItemManagementTable from '@/components/admin/item-management-table';
+import AdminSelectionViewer from '@/components/admin/selection-viewer';
+import AdminEventSettingsForm from '@/components/admin/event-settings-form';
+import AdminConfirmationsList from '@/components/admin/confirmations-list';
+import useAuth from '@/hooks/useAuth';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useRouter } from 'next/navigation';
 
 export default function AdminPage() {
-  const [gifts, setGifts] = useState<GiftItem[]>([]); // State for gifts
-  const [confirmations, setConfirmations] = useState<Confirmation[]>([]); // State for confirmations
+  const [gifts, setGifts] = useState<GiftItem[]>([]);
+  const [confirmations, setConfirmations] = useState<Confirmation[]>([]);
   const [eventSettings, setEventSettings] = useState<EventSettings | null>(
-    null,
+    null
   );
-  const [isDataLoading, setIsDataLoading] = useState(true); // Separate loading state for page data
-  const [error, setError] = useState<string | null>(null); // State for page data errors
-  const router = useRouter(); // Initialize router
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  // Use the custom hook for authentication
   const { user, loading: authLoading, error: authError, logout } = useAuth();
 
-  // Combine loading states: page is loading if auth is checking OR if data is fetching AFTER auth is confirmed
   const isLoading = authLoading || (user && isDataLoading);
 
-  // Fetch data function using useCallback for stability
   const refreshData = useCallback(
     async (source?: string) => {
-      console.log(
-        `AdminPage: Refresh data triggered by ${source || "initial load"}`,
-      );
+      console.log(`AdminPage: refreshData triggered by ${source || 'initial load or manual refresh'}`);
       setIsDataLoading(true);
-      setError(null); // Clear previous errors
+      setError(null);
 
       try {
-        // Only fetch data if the user is authenticated
         if (user) {
           console.log(
-            "AdminPage: User authenticated. Calling getGifts, getEventSettings, and getConfirmations...",
+            'AdminPage: User authenticated. Fetching data (gifts, settings, confirmations)...'
           );
-          // Fetch gifts, settings, AND confirmations in parallel
-          const giftsPromise = getGifts();
-          const settingsPromise = getEventSettings();
-          const confirmationsPromise = getConfirmations(); // Fetch confirmations
-
           const [giftsData, settingsData, confirmationsData] =
             await Promise.all([
-              giftsPromise,
-              settingsPromise,
-              confirmationsPromise, // Await confirmations
+              getGifts(),
+              getEventSettings(),
+              getConfirmations(),
             ]);
 
           console.log(`AdminPage: Fetched ${giftsData?.length ?? 0} gifts.`);
-          console.log(
-            "AdminPage: Fetched Event Settings:",
-            settingsData ? "Data received" : "Null/Undefined",
-          );
-          console.log(
-            `AdminPage: Fetched ${confirmationsData?.length ?? 0} confirmations.`,
-          ); // Log confirmations count
-          // Log raw gifts data immediately after fetch
-          console.log(
-            "AdminPage: Raw Gifts Data from getGifts:",
-            giftsData ? giftsData.length : "null",
-          );
+          console.log('AdminPage: Fetched Event Settings:', settingsData ? 'Data received' : 'Null/Undefined');
+          console.log(`AdminPage: Fetched ${confirmationsData?.length ?? 0} confirmations.`);
+          // console.log('AdminPage: Raw Gifts Data for debugging:', JSON.stringify(giftsData, null, 2));
 
-          // Update state with fetched data, handling potential null/undefined
-          // Log details of the first few gifts to verify data structure before setting state
-          console.log(
-            "AdminPage: Sample gifts being set to state:",
-            JSON.stringify(giftsData?.slice(0, 5), null, 2),
-          );
-          setGifts(giftsData || []); // Set empty array if null/undefined
-          setConfirmations(confirmationsData || []); // Set confirmations data
-          setEventSettings(settingsData); // Set directly (can be null)
+
+          setGifts(giftsData || []);
+          setConfirmations(confirmationsData || []);
+          setEventSettings(settingsData);
         } else {
           console.log(
-            "AdminPage: Skipping data fetch, user not authenticated.",
+            'AdminPage: Skipping data fetch, user not authenticated.'
           );
-          // Clear data if user becomes unauthenticated during refresh
           setGifts([]);
-          setConfirmations([]); // Clear confirmations
+          setConfirmations([]);
           setEventSettings(null);
         }
       } catch (err: any) {
-        console.error("AdminPage: Error fetching data:", err);
+        console.error('AdminPage: Error fetching data:', err);
         setError(
-          `Erro ao carregar dados: ${err.message || "Erro desconhecido"}`,
+          `Erro ao carregar dados: ${err.message || 'Erro desconhecido'}`
         );
-        // Clear data on error
         setGifts([]);
-        setConfirmations([]); // Clear confirmations on error
+        setConfirmations([]);
         setEventSettings(null);
       } finally {
         setIsDataLoading(false);
-        console.log("AdminPage: Data fetching complete, loading set to false.");
+        console.log('AdminPage: Data fetching complete.');
       }
-      // Dependency: user object. Refetch if user changes.
     },
-    [user],
+    [user]
   );
 
-  // Fetch data on mount and when authentication status changes (user object changes)
   useEffect(() => {
-    // Only trigger refreshData if user is definitively authenticated (not null)
-    // and auth is no longer loading.
     if (user && !authLoading) {
       console.log(
-        "AdminPage: User authenticated, fetching data via useEffect.",
+        'AdminPage: User authenticated and auth check complete, initiating data fetch via useEffect.'
       );
-      refreshData("useEffect[user, authLoading]");
+      refreshData('useEffect[user, authLoading]');
     } else if (!authLoading && !user) {
       console.log(
-        "AdminPage: User not authenticated or auth check complete. Clearing data.",
+        'AdminPage: Auth check complete, user not authenticated. Clearing data.'
       );
-      // Clear data and loading state if user is not logged in after auth check
       setGifts([]);
-      setConfirmations([]); // Clear confirmations
+      setConfirmations([]);
       setEventSettings(null);
-      setIsDataLoading(false); // Ensure data loading stops if user isn't logged in
-      setError(null); // Clear any previous data errors
+      setIsDataLoading(false);
+      setError(null);
     }
-    // Dependency array includes user and authLoading to refetch when auth state is confirmed
+     // Add refreshData to dependency array if its definition might change, though useCallback should stabilize it.
   }, [user, authLoading, refreshData]);
 
-  // Helper function for triggering file download
   const triggerDownload = (csvData: string, baseFilename: string) => {
-    const blob = new Blob([csvData], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
+    link.setAttribute('href', url);
     link.setAttribute(
-      "download",
-      `${baseFilename}_${new Date().toISOString().split("T")[0]}.csv`,
+      'download',
+      `${baseFilename}_${new Date().toISOString().split('T')[0]}.csv`
     );
-    link.style.visibility = "hidden";
+    link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Handle CSV Gift Export
   const handleGiftExport = async () => {
-    if (isDataLoading || gifts.length === 0) return; // Prevent export if loading or no data
-    console.log("AdminPage: Exporting Gifts CSV...");
+    if (isDataLoading || gifts.length === 0) return;
+    console.log('AdminPage: Exporting Gifts CSV...');
     try {
       const csvData = await exportGiftsToCSV();
-      triggerDownload(csvData, "lista_presentes");
-      console.log("AdminPage: Gifts CSV downloaded successfully.");
+      triggerDownload(csvData, 'lista_presentes');
+      console.log('AdminPage: Gifts CSV downloaded successfully.');
     } catch (error) {
-      console.error("AdminPage: Error exporting gifts CSV:", error);
-      setError("Erro ao gerar o arquivo CSV de presentes."); // Show error to user
+      console.error('AdminPage: Error exporting gifts CSV:', error);
+      setError('Erro ao gerar o arquivo CSV de presentes.');
     }
   };
 
-  // Handle CSV Confirmation Export
   const handleConfirmationExport = async () => {
-    if (isDataLoading || confirmations.length === 0) return; // Prevent export if loading or no data
-    console.log("AdminPage: Exporting Confirmations CSV...");
+    if (isDataLoading || confirmations.length === 0) return;
+    console.log('AdminPage: Exporting Confirmations CSV...');
     try {
       const csvData = await exportConfirmationsToCSV();
-      triggerDownload(csvData, "lista_presenca");
-      console.log("AdminPage: Confirmations CSV downloaded successfully.");
+      triggerDownload(csvData, 'lista_presenca');
+      console.log('AdminPage: Confirmations CSV downloaded successfully.');
     } catch (error) {
-      console.error("AdminPage: Error exporting confirmations CSV:", error);
-      setError("Erro ao gerar o arquivo CSV de presença."); // Show error to user
+      console.error('AdminPage: Error exporting confirmations CSV:', error);
+      setError('Erro ao gerar o arquivo CSV de presença.');
     }
   };
 
-  // Show initial loading state while authenticating
   if (authLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">Verificando acesso...</p>
-        {/* Optional: Skeleton loading for the layout */}
-        <div className="mt-8 w-full max-w-4xl space-y-6">
-          <Skeleton className="h-48 w-full" />
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-32 w-full" />
+      <div className='flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background'>
+        <Loader2 className='h-12 w-12 animate-spin text-primary mb-4' />
+        <p className='text-lg text-muted-foreground'>Verificando acesso...</p>
+        <div className='mt-8 w-full max-w-4xl space-y-6'>
+          <Skeleton className='h-48 w-full' />
+          <Skeleton className='h-64 w-full' />
+          <Skeleton className='h-32 w-full' />
         </div>
       </div>
     );
   }
 
-  // Handle Authentication Error or Unauthenticated User (after auth check)
-  // Display a 404-like message instead of "Access Denied"
   if (authError || !user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background">
-        <Frown className="h-16 w-16 text-muted-foreground mb-4" />
-        <h1 className="text-4xl font-bold text-foreground mb-2">404</h1>
-        <p className="text-xl text-muted-foreground mb-6">
+      <div className='flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background'>
+        <Frown className='h-16 w-16 text-muted-foreground mb-4' />
+        <h1 className='text-4xl font-bold text-foreground mb-2'>404</h1>
+        <p className='text-xl text-muted-foreground mb-6'>
           Esta página não pôde ser encontrada.
         </p>
-        {authError && // Optionally log the auth error internally but don't show it to the user
-          console.error("Auth Error:", authError) /* Log auth error */}
-        <Link href="/admin/login">
-          <Button variant="default">Ir para Login</Button>
+        {authError && console.error('Auth Error:', authError)}
+        <Link href='/admin/login'>
+          <Button variant='default'>Ir para Login</Button>
         </Link>
-        <Link href="/">
-          <Button variant="outline" className="mt-2">
+        <Link href='/'>
+          <Button variant='outline' className='mt-2'>
             Voltar para a Página Inicial
           </Button>
         </Link>
@@ -242,79 +202,74 @@ export default function AdminPage() {
     );
   }
 
-  // Show data loading state *after* authentication is confirmed
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">
+      <div className='flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background'>
+        <Loader2 className='h-12 w-12 animate-spin text-primary mb-4' />
+        <p className='text-lg text-muted-foreground'>
           Carregando dados do painel...
         </p>
-        {/* Skeleton loading for the layout */}
-        <div className="mt-8 w-full max-w-4xl space-y-6">
-          <Skeleton className="h-48 w-full" />
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-32 w-full" />
+        <div className='mt-8 w-full max-w-4xl space-y-6'>
+          <Skeleton className='h-48 w-full' />
+          <Skeleton className='h-64 w-full' />
+          <Skeleton className='h-32 w-full' />
         </div>
       </div>
     );
   }
 
-  // Handle Data Loading Error after authentication
   if (error && !isDataLoading) {
-    // Show error only if data loading finished with an error
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background">
-        <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-semibold mb-2 text-foreground">
+      <div className='flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background'>
+        <AlertTriangle className='h-12 w-12 text-destructive mb-4' />
+        <h1 className='text-2xl font-semibold mb-2 text-foreground'>
           Erro ao Carregar Dados
         </h1>
-        <p className="text-muted-foreground mb-6">{error}</p>
-        <Button onClick={() => refreshData("retry button")} variant="outline">
+        <p className='text-muted-foreground mb-6'>{error}</p>
+        <Button onClick={() => refreshData('retry button')} variant='outline'>
           Tentar Novamente
         </Button>
-        <Link href="/" className="mt-4">
-          <Button variant="link">Voltar para a Página Inicial</Button>
+        <Link href='/' className='mt-4'>
+          <Button variant='link'>Voltar para a Página Inicial</Button>
         </Link>
       </div>
     );
   }
 
-  // Render the admin dashboard if authenticated and data loaded
-  console.log(`AdminPage: Rendering dashboard. Passing ${gifts.length} gifts.`);
   console.log(
-    `AdminPage: Rendering dashboard. Passing ${confirmations.length} confirmations.`,
-  ); // Log confirmations count before render
+    `AdminPage: Rendering dashboard. Passing ${gifts.length} gifts to AdminItemManagementTable.`
+  );
+   console.log(
+    `AdminPage: Rendering dashboard. Passing ${confirmations.length} confirmations to AdminConfirmationsList.`
+  );
+
 
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-8 bg-background text-foreground">
-      <div className="flex flex-wrap justify-between items-center gap-4">
-        <h1 className="text-3xl font-semibold">Painel de Administração</h1>
-        <div className="flex items-center gap-2">
+    <div className='container mx-auto p-4 md:p-8 space-y-8 bg-background text-foreground'>
+      <div className='flex flex-wrap justify-between items-center gap-4'>
+        <h1 className='text-3xl font-semibold'>Painel de Administração</h1>
+        <div className='flex items-center gap-2'>
           <ThemeToggle />
-          <Link href="/">
+          <Link href='/'>
             <Button
-              variant="outline"
-              size="sm"
-              title="Voltar para a Página Inicial"
+              variant='outline'
+              size='sm'
+              title='Voltar para a Página Inicial'
             >
-              <Home className="h-4 w-4 mr-1" /> {/* Added mr-1 */}
+              <Home className='h-4 w-4 mr-1' />
               Início
             </Button>
           </Link>
-          <Button onClick={logout} variant="outline" size="sm" title="Sair">
-            <LogOut className="h-4 w-4 mr-1" /> {/* Added mr-1 */}
+          <Button onClick={logout} variant='outline' size='sm' title='Sair'>
+            <LogOut className='h-4 w-4 mr-1' />
             Sair
           </Button>
         </div>
       </div>
-      {/* Single Column Layout */}
-      <div className="space-y-6 lg:space-y-8 max-w-4xl mx-auto">
-        {/* Center content */}
-        {/* 1. Event Settings Card */}
-        <Card className="bg-card shadow-sm">
+      <div className='space-y-6 lg:space-y-8 max-w-4xl mx-auto'>
+        <Card className='bg-card shadow-sm'>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className='flex items-center gap-2'>
               <Settings /> Configurações do Evento
             </CardTitle>
             <CardDescription>
@@ -325,19 +280,18 @@ export default function AdminPage() {
             <AdminEventSettingsForm
               key={
                 user
-                  ? `admin-settings-${eventSettings?.title || "loading"}`
-                  : "no-settings"
+                  ? `admin-settings-${eventSettings?.title || 'loading'}`
+                  : 'no-settings'
               }
               initialSettings={eventSettings}
-              onSave={() => refreshData("event settings save")} // More specific source
+              onSave={() => refreshData('event settings save')}
               isLoading={isDataLoading}
             />
           </CardContent>
         </Card>
-        {/* 2. Confirmations List Card */}
-        <Card className="bg-card shadow-sm">
+        <Card className='bg-card shadow-sm'>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className='flex items-center gap-2'>
               <ClipboardList /> Lista de Presença Confirmada
             </CardTitle>
             <CardDescription>
@@ -346,14 +300,13 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <AdminConfirmationsList
-              confirmations={confirmations} // Pass the fetched confirmations
+              confirmations={confirmations}
             />
           </CardContent>
         </Card>
-        {/* 3. Selection Viewer Card */}
-        <Card className="bg-card shadow-sm">
+        <Card className='bg-card shadow-sm'>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className='flex items-center gap-2'>
               <Users /> Visualizar Seleções de Presentes
             </CardTitle>
             <CardDescription>
@@ -362,21 +315,20 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <AdminSelectionViewer
-              key={`selection-viewer-${gifts.filter((g) => g && g.status === "selected").length}-${confirmations.length}`}
+              key={`selection-viewer-${gifts.filter((g) => g && g.status === 'selected').length}`}
               selectedItems={gifts.filter(
                 (g) =>
-                  (g && g.status === "selected") ||
-                  (typeof g.selectedQuantity === "number" &&
-                    g.selectedQuantity > 0),
-              )} // Include quantity items
-              onDataChange={() => refreshData("selection viewer change")} // More specific source
+                  (g && g.status === 'selected') ||
+                  (typeof g.selectedQuantity === 'number' &&
+                    g.selectedQuantity > 0)
+              )}
+              onDataChange={() => refreshData('selection viewer change')}
             />
           </CardContent>
         </Card>
-        {/* 4. Item Management Card */}
-        <Card className="bg-card shadow-sm">
+        <Card className='bg-card shadow-sm'>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className='flex items-center gap-2'>
               <Gift /> Gerenciar Itens da Lista
             </CardTitle>
             <CardDescription>
@@ -385,41 +337,40 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <AdminItemManagementTable
-              key={`item-table-${gifts.length}-${gifts[0]?.id || "no-items"}-${confirmations.length}`}
-              onDataChange={() => refreshData("item table change")}
+              key={`item-table-${gifts.length}`} // Simplified key
+              gifts={gifts} // Pass the fetched gifts
+              onDataChange={() => refreshData('item table change')} // Pass stable refresh callback
             />
           </CardContent>
         </Card>
-        {/* 5. Export Card */}
-        <Card className="bg-card shadow-sm">
+        <Card className='bg-card shadow-sm'>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className='flex items-center gap-2'>
               <FileDown /> Exportar Dados
             </CardTitle>
             <CardDescription>Baixar listas em formato CSV.</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-4">
+          <CardContent className='flex flex-wrap gap-4'>
             <Button
               onClick={handleGiftExport}
-              className="mt-4"
-              disabled={isDataLoading || !gifts || gifts.length === 0} // Disable if data is loading or no gifts
+              className='mt-4'
+              disabled={isDataLoading || !gifts || gifts.length === 0}
             >
-              <Gift className="mr-2 h-4 w-4" /> Exportar Presentes (CSV)
+              <Gift className='mr-2 h-4 w-4' /> Exportar Presentes (CSV)
             </Button>
             <Button
               onClick={handleConfirmationExport}
-              className="mt-4"
-              variant="outline" // Different style for second button
+              className='mt-4'
+              variant='outline'
               disabled={
                 isDataLoading || !confirmations || confirmations.length === 0
-              } // Disable if data is loading or no confirmations
+              }
             >
-              <UserCheck className="mr-2 h-4 w-4" /> Exportar Presença (CSV)
+              <UserCheck className='mr-2 h-4 w-4' /> Exportar Presença (CSV)
             </Button>
           </CardContent>
         </Card>
       </div>
-      {/* End of Single Column Layout */}
     </div>
   );
 }

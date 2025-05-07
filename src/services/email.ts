@@ -1,7 +1,7 @@
 'use server';
 
 import type { GiftItem, EventSettings } from '@/data/gift-store';
-import { addToCalendar } from './calendar'; // Import calendar service
+// Removed: import { addToCalendar } from './calendar'; // Import calendar service
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@example.com'; // Use default if not set

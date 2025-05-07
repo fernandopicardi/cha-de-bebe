@@ -329,7 +329,10 @@ export default function SuggestItemDialog({
                   className={` ${errors.imageFile ? 'border-destructive' : ''} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer`}
                   disabled={isSubmitting}
                 />
-                 <p className='text-xs text-muted-foreground mt-1'>JPG, PNG, GIF, WebP, MP4, MOV (Máx 50MB).</p>{errors.imageFile &&
+                <p className='text-xs text-muted-foreground mt-1'>
+                  JPG, PNG, GIF, WebP, MP4, MOV (Máx 50MB).
+                </p>
+                {errors.imageFile &&
                   typeof errors.imageFile.message === 'string' && (
                     <p className='text-sm text-destructive mt-1'>
                       {errors.imageFile.message}

@@ -637,14 +637,12 @@ export default function AdminGiftTable({
               <TableHead className="hidden lg:table-cell">
                 Descrição
               </TableHead>{" "}
-             
               <TableHead className="hidden md:table-cell">
                 Categoria
-              </TableHead>{" "}
-             
+              </TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Quantidade</TableHead> {/* New Quantity Column */}
-              <TableHead className="hidden xl:table-cell">
+              <TableHead className="hidden xl:table-cell"> 
                 Selecionado Por
               </TableHead>{" "}
               {/* Changed breakpoint */}
@@ -713,11 +711,9 @@ export default function AdminGiftTable({
                     <TableCell className="hidden lg:table-cell text-muted-foreground text-sm max-w-xs truncate">
                       {item.description || "-"}
                     </TableCell>{" "}
-                   
                     <TableCell className="hidden md:table-cell">
                       {item.category}
-                    </TableCell>{" "}
-                    {/* Changed breakpoint */}
+                    </TableCell>
                     <TableCell>{getStatusBadge(displayedStatus)}</TableCell>
                     {/* Quantity Display */}
                     <TableCell className="text-center text-sm">
@@ -731,8 +727,6 @@ export default function AdminGiftTable({
                       )}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
-                      {" "}
-                     
                       {/* Show selectedBy if NOT a quantity item OR if fully selected */}
                       {(!isQuantityItem || displayedStatus === "selected") && // Display selectedBy if not a quantity item or fully selected
                         item.selectedBy ? (
@@ -899,7 +893,6 @@ export default function AdminGiftTable({
                       <SelectContent>
                         {categories.map((cat) => (
                           <SelectItem key={cat} value={cat}>
-                            {" "}
                             {cat}
                           </SelectItem>
                         ))}
@@ -948,4 +941,6 @@ export default function AdminGiftTable({
               <Label htmlFor="imageFile-dialog" className="text-right pt-2">
                 Imagem
               </Label>
-              <div className="col-span-3"></div>
+              <div className="col-span-3">
+              </div>
+            </div>

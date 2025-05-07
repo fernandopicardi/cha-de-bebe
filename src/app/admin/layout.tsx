@@ -1,8 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: "Admin - Chá de Bebê", // Changed title for login context
-  description: "Acesso ao painel de administração da lista de presentes.",
+  title: 'Admin - Chá de Bebê', // Changed title for login context
+  description: 'Acesso ao painel de administração da lista de presentes.',
 };
 
 export default function AdminLayout({
