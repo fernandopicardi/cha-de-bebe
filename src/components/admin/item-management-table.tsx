@@ -102,7 +102,7 @@ const giftFormSchema = z.object({
     .optional()
     .or(z.literal('')),
   imageUrl: z.string().optional().nullable(),
-  imageFile: z.any().optional().nullable(),
+  imageFile: z.any().optional().nullable(), // Simplified for RHF with client-side validation
   totalQuantity: z.preprocess(
     (val) => (val === '' || val === undefined ? null : Number(val)),
     z
@@ -123,7 +123,7 @@ export default function AdminItemManagementTable({
   gifts: giftsFromParent,
   onDataChange,
 }: AdminItemManagementTableProps) {
-  const [isAddEditDialogOpen] = useState(false);
+  const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<GiftItem | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { toast } = useToast();
@@ -174,37 +174,30 @@ export default function AdminItemManagementTable({
     if (!isClient) return;
 
     let fileList: FileList | null = null;
-    // Check if FileList is defined and if watchedImageFile is an instance of it
     if (
       typeof FileList !== 'undefined' &&
       watchedImageFile instanceof FileList
     ) {
       fileList = watchedImageFile;
     } else if (watchedImageFile === null || watchedImageFile === undefined) {
-      // Handle case where input is cleared or initially empty
       const initialUrl = editingItem?.imageUrl || null;
       const currentRHFUrl = getValues('imageUrl');
-      // Only revert if a data URI was staged (meaning user selected a file then cleared)
       if (currentRHFUrl && currentRHFUrl.startsWith('data:')) {
         setValue('imageUrl', initialUrl);
         setImagePreview(initialUrl);
       } else if (!currentRHFUrl && !initialUrl) {
-        // If both current RHF and initial are null/empty, ensure preview is also cleared
         setImagePreview(null);
-        setValue('imageUrl', null); // Ensure RHF state is also null
+        setValue('imageUrl', null);
       }
-      return; // Exit early if no file or FileList object
+      return;
     } else {
-      // If watchedImageFile is not a FileList and not null/undefined, it's unexpected.
-      // Clear the input and revert to initial state to be safe.
       console.warn("AdminItemManagementTable: Unexpected imageFile type. Clearing input.", watchedImageFile);
       const initialUrl = editingItem?.imageUrl || null;
-      setValue('imageFile', null); // Clear the RHF file state
-      setValue('imageUrl', initialUrl); // Revert URL
-      setImagePreview(initialUrl); // Revert preview
+      setValue('imageFile', null);
+      setValue('imageUrl', initialUrl);
+      setImagePreview(initialUrl);
       return;
     }
-
 
     const file = fileList?.[0];
 
@@ -256,7 +249,6 @@ export default function AdminItemManagementTable({
             description: 'Não foi possível carregar a prévia.',
             variant: 'destructive',
         });
-        // Revert to initial state on error
         const initialUrl = editingItem?.imageUrl || null;
         setValue('imageFile', null);
         setValue('imageUrl', initialUrl);
@@ -272,10 +264,10 @@ export default function AdminItemManagementTable({
     toast,
     editingItem,
     getValues,
-    trigger,
-  ]);
+  ]); // Removed trigger from dependencies as it can cause loops if not used carefully
 
   const handleOpenAddDialog = () => {
+    console.log('AdminItemManagementTable: handleOpenAddDialog called');
     reset({
       name: '',
       description: '',
@@ -288,10 +280,11 @@ export default function AdminItemManagementTable({
     });
     setEditingItem(null);
     setImagePreview(null);
-    // setIsAddEditDialogOpen(true); // State removed
+    setIsAddEditDialogOpen(true);
   };
 
   const handleOpenEditDialog = (item: GiftItem) => {
+    console.log('AdminItemManagementTable: handleOpenEditDialog called for item:', item.id);
     setEditingItem(item);
     reset({
       name: item.name,
@@ -304,11 +297,12 @@ export default function AdminItemManagementTable({
       totalQuantity: item.totalQuantity ?? null,
     });
     setImagePreview(item.imageUrl || null);
-    // setIsAddEditDialogOpen(true); // State removed
+    setIsAddEditDialogOpen(true);
   };
 
   const handleDialogClose = () => {
-    // setIsAddEditDialogOpen(false); // State removed
+    console.log('AdminItemManagementTable: handleDialogClose called');
+    setIsAddEditDialogOpen(false);
     setEditingItem(null);
     setImagePreview(null);
     reset();
@@ -353,6 +347,7 @@ export default function AdminItemManagementTable({
   };
 
   const onSubmit = async (data: GiftFormData) => {
+    console.log('AdminItemManagementTable: onSubmit called with data:', data);
     const operation = editingItem ? 'atualizar' : 'adicionar';
     const itemName =
       data.name || (editingItem ? editingItem.name : 'Novo Item');
@@ -393,8 +388,8 @@ export default function AdminItemManagementTable({
           : null,
       totalQuantity: isQuantityItem ? data.totalQuantity : null,
       ...(editingItem
-        ? { imageUrl: imageValue } // For updates, use imageUrl (can be existing URL, new data URI, or null for removal)
-        : { imageDataUri: imageValue }), // For adds, pass as imageDataUri (can be new data URI or null)
+        ? { imageUrl: imageValue }
+        : { imageDataUri: imageValue }),
     };
 
     if (!editingItem) {
@@ -407,7 +402,6 @@ export default function AdminItemManagementTable({
         await updateGift(editingItem.id, finalPayload);
         handleSuccess(`Item "${finalPayload.name}" atualizado.`);
       } else {
-        // Pass the correct type to addGiftAdmin
         await addGiftAdmin(finalPayload as Omit<GiftItem, "id" | "createdAt" | "selectionDate"> & { imageDataUri?: string | null });
         handleSuccess(`Item "${finalPayload.name}" adicionado.`);
       }
@@ -417,6 +411,7 @@ export default function AdminItemManagementTable({
   };
 
   const handleDelete = async (item: GiftItem) => {
+    console.log('AdminItemManagementTable: handleDelete called for item:', item.id);
     if (actionLoading) return;
     if (confirm(`Excluir "${item.name}"? Ação irreversível.`)) {
       setActionLoading(`delete-${item.id}`);
@@ -436,6 +431,7 @@ export default function AdminItemManagementTable({
   };
 
   const handleRevert = async (item: GiftItem) => {
+    console.log('AdminItemManagementTable: handleRevert called for item:', item.id);
     if (actionLoading) return;
     if (item.status !== 'selected' && item.status !== 'not_needed') return;
     if (item.totalQuantity != null && item.totalQuantity > 0) {
@@ -449,7 +445,7 @@ export default function AdminItemManagementTable({
     }
 
     const actionText =
-      item.status === 'selected' ? 'reverter seleção' : 'remover "Não Precisa"';
+      item.status === 'selected' ? 'reverter seleção' : 'remover "Preferimos Não Utilizar"';
     const guestNameInfo = item.selectedBy ? ` por ${item.selectedBy}` : '';
     if (
       confirm(
@@ -469,6 +465,7 @@ export default function AdminItemManagementTable({
   };
 
   const handleMarkNotNeeded = async (item: GiftItem) => {
+    console.log('AdminItemManagementTable: handleMarkNotNeeded called for item:', item.id);
     if (actionLoading) return;
     if (item.status === 'not_needed') return;
     if (confirm(`Marcar "${item.name}" como "Preferimos Não Utilizar"?`)) {
@@ -486,8 +483,14 @@ export default function AdminItemManagementTable({
     }
   };
 
-  const getStatusBadge = (status: GiftItem['status']) => {
-    switch (status) {
+  const getStatusBadge = (item: GiftItem) => {
+    let statusToDisplay = item.status;
+    // If it's a quantity item and fully selected, display as 'selected'
+    if (item.totalQuantity && item.totalQuantity > 0 && item.selectedQuantity && item.selectedQuantity >= item.totalQuantity) {
+        statusToDisplay = 'selected';
+    }
+
+    switch (statusToDisplay) {
       case 'available':
         return (
           <Badge
@@ -545,6 +548,7 @@ export default function AdminItemManagementTable({
           onClick={handleOpenAddDialog}
           size='sm'
           disabled={isSubmitting || !!actionLoading}
+          aria-label="Adicionar Novo Item"
         >
           <PlusCircle className='mr-2 h-4 w-4' /> Adicionar Novo Item
         </Button>
@@ -608,14 +612,21 @@ export default function AdminItemManagementTable({
                             sizes='40px'
                             unoptimized={item.imageUrl.startsWith('data:')}
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = '';
-                              (e.target as HTMLImageElement).style.display =
-                                'none';
+                              (e.target as HTMLImageElement).src = ''; // Clear src
+                              (e.target as HTMLImageElement).style.display = 'none'; // Hide broken image icon
+                              // Optionally, show a placeholder in the div if the parent doesn't have one
+                              const parent = (e.target as HTMLImageElement).parentElement;
+                              if (parent && !parent.querySelector('.placeholder-icon')) {
+                                const placeholder = document.createElement('div');
+                                placeholder.className = 'placeholder-icon flex items-center justify-center h-full w-full';
+                                placeholder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image-off text-muted-foreground/50"><path d="M10.4 10.4A3 3 0 0 0 12 12a3 3 0 0 0 1.6-4.4Z"/><path d="m21 1-9.2 9.2"/><path d="M13.5 5.5C15 4.5 16.5 4 18 4c2.8 0 5 2.2 5 5c0 1.5-.5 3-1.5 4.5L19 16"/><path d="M3 3v18h18"/><path d="M12 12.7a4.8 4.8 0 0 0-5.1-4.9A5 5 0 0 0 2 12.5V13a5 5 0 0 0 5 5h1.5"/></svg>`;
+                                parent.appendChild(placeholder);
+                              }
                             }}
                           />
                         ) : (
-                          <div className='flex items-center justify-center h-full w-full'>
-                            <ImageIcon className='h-5 w-5 text-muted-foreground' />
+                          <div className='flex items-center justify-center h-full w-full placeholder-icon'>
+                            <ImageIcon className='h-5 w-5 text-muted-foreground/50' />
                           </div>
                         )}
                       </div>
@@ -629,7 +640,7 @@ export default function AdminItemManagementTable({
                     <TableCell className='hidden md:table-cell'>
                       {item.category}
                     </TableCell>
-                    <TableCell>{getStatusBadge(displayedStatus)}</TableCell>
+                    <TableCell>{getStatusBadge(item)}</TableCell>
                     <TableCell className='text-center text-sm'>
                       {isQuantityItem ? (
                         <span className='whitespace-nowrap'>
@@ -656,7 +667,7 @@ export default function AdminItemManagementTable({
                       )}
                     </TableCell>
                     <TableCell className='text-right space-x-1 whitespace-nowrap'>
-                      {actionLoading?.endsWith(item.id) ? (
+                      {actionLoading === `edit-${item.id}` || actionLoading === `delete-${item.id}` || actionLoading === `revert-${item.id}` || actionLoading === `mark-${item.id}` ? (
                         <Loader2 className='h-4 w-4 animate-spin inline-block text-muted-foreground' />
                       ) : (
                         <>
@@ -683,7 +694,9 @@ export default function AdminItemManagementTable({
                             </Button>
                           )}
                           {(displayedStatus === 'available' ||
-                            displayedStatus === 'selected') && (
+                            (displayedStatus === 'selected' && !isQuantityItem) || // Allow marking as not needed for selected single items
+                            (displayedStatus === 'selected' && isQuantityItem && (item.selectedQuantity ?? 0) < (item.totalQuantity ?? 0)) // Allow marking not needed if partially selected quantity item
+                          ) && (
                             <Button
                               variant='ghost'
                               size='icon'
@@ -824,9 +837,9 @@ export default function AdminItemManagementTable({
                     {errors.totalQuantity.message}
                   </p>
                 )}
-                {watchedStatus === 'selected' && (
+                {watchedStatus === 'selected' && !!watchedTotalQuantity && watchedTotalQuantity > 0 && (
                   <p className='text-xs text-muted-foreground mt-1'>
-                    Status 'Selecionado' não pode ter quantidade.
+                    Status 'Selecionado' não pode ter quantidade. Será ajustado para 'Disponível'.
                   </p>
                 )}
               </div>
@@ -841,14 +854,19 @@ export default function AdminItemManagementTable({
                   {imagePreview && (
                     <div className='relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0'>
                       <Image
-                        key={imagePreview}
+                        key={imagePreview} // Force re-render on preview change
                         src={imagePreview}
                         alt='Prévia da imagem'
                         fill
                         style={{ objectFit: 'cover' }}
                         sizes='64px'
-                        unoptimized={imagePreview.startsWith('data:')}
-                        onError={() => setImagePreview(null)}
+                        unoptimized={imagePreview.startsWith('data:')} // Disable optimization for data URIs
+                        onError={(e) => {
+                            console.error("Error loading image preview in dialog:", e);
+                            setImagePreview(null); // Clear preview on error
+                            setValue('imageFile', null); // Clear file input if preview fails
+                            setValue('imageUrl', editingItem?.imageUrl || null); // Revert to original if editing
+                        }}
                       />
                       <Button
                         type='button'
@@ -858,6 +876,7 @@ export default function AdminItemManagementTable({
                         onClick={removeImage}
                         title='Remover Imagem'
                         disabled={isSubmitting}
+                        aria-label="Remover Imagem"
                       >
                         <XCircle className='h-3 w-3' />
                       </Button>
@@ -875,10 +894,7 @@ export default function AdminItemManagementTable({
                       disabled={isSubmitting}
                     />
                     <p className='text-xs text-muted-foreground mt-1'>
-                      JPG, PNG, GIF, WebP (Máx 50MB).
-                    </p>
-                     <p className='text-xs text-muted-foreground mt-1'>
-                      Vídeos (MP4, MOV) também são aceitos.
+                      JPG, PNG, GIF, WebP, MP4, MOV (Máx 50MB).
                     </p>
                     {errors.imageFile &&
                       typeof errors.imageFile.message === 'string' && (
@@ -926,6 +942,7 @@ export default function AdminItemManagementTable({
                           <SelectItem
                             key={stat}
                             value={stat}
+                            // Disable 'selected' if it's a quantity item being added/edited
                             disabled={
                               stat === 'selected' &&
                               !!watchedTotalQuantity &&
@@ -957,6 +974,7 @@ export default function AdminItemManagementTable({
               </div>
             </div>
 
+            {/* Show "Selected By" only if status is 'selected' AND it's NOT a quantity item */}
             {watchedStatus === 'selected' &&
               (!watchedTotalQuantity || watchedTotalQuantity <= 0) && (
                 <div className='grid grid-cols-4 items-center gap-4 animate-fade-in'>
@@ -978,7 +996,7 @@ export default function AdminItemManagementTable({
                       </p>
                     ) : (
                       watchedStatus === 'selected' &&
-                      !watch('selectedBy') && (
+                      !watch('selectedBy') && ( // Check if selectedBy is empty when status is selected
                         <p className='text-sm text-destructive mt-1'>
                           Nome obrigatório.
                         </p>
