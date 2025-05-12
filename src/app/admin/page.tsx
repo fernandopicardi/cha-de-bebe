@@ -58,7 +58,7 @@ export default function AdminPage() {
 
   const refreshData = useCallback(
     async (source?: string) => {
-      console.log(`AdminPage: refreshData triggered by ${source || 'initial load or manual refresh'}`);
+      console.log(`AdminPage: refreshData start. Triggered by ${source || 'initial load or manual refresh'}`);
       setIsDataLoading(true);
       setError(null);
 
@@ -67,7 +67,9 @@ export default function AdminPage() {
           console.log(
             'AdminPage: User authenticated. Fetching data (gifts, settings, confirmations)...'
           );
+          console.log('AdminPage: Fetching data...');
           const [giftsData, settingsData, confirmationsData] =
+            console.log('AdminPage: Awaiting for Promise.all');
             await Promise.all([
               getGifts(),
               getEventSettings(),
