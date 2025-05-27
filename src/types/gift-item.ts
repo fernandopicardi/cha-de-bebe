@@ -12,4 +12,5 @@ export interface GiftItem {
   imageUrl: string | null;
   totalQuantity: number | null;
   selectedQuantity: number;
+  priority?: number | null; // 0: Low, 1: Medium, 2: High
 }

@@ -47,6 +47,7 @@ import {
   Image as ImageIcon,
   XCircle,
   Package,
+  Star, // Icon for Priority
 } from 'lucide-react';
 import {
   Table,
@@ -102,7 +103,7 @@ const giftFormSchema = z.object({
     .optional()
     .or(z.literal('')),
   imageUrl: z.string().optional().nullable(),
-  imageFile: z.any().optional().nullable(), // Simplified for RHF with client-side validation
+  imageFile: z.any().optional().nullable(),
   totalQuantity: z.preprocess(
     (val) => (val === '' || val === undefined ? null : Number(val)),
     z
@@ -112,12 +113,25 @@ const giftFormSchema = z.object({
       .nullable()
       .optional()
   ),
+  priority: z.preprocess(
+    // Convert string from select to number, default to 0 (Low) if empty or invalid
+    (val) => {
+      const numVal = Number(val);
+      return isNaN(numVal) ? 0 : numVal;
+    },
+    z.number().int().min(0).max(2).default(0) // 0: Low, 1: Medium, 2: High
+  ),
 });
 
 type GiftFormData = z.infer<typeof giftFormSchema>;
 
 const categories = ['Roupas', 'Higiene', 'Brinquedos', 'Alimentação', 'Outros'];
 const statuses: GiftItem['status'][] = ['available', 'selected', 'not_needed'];
+const priorities = [
+  { label: 'Baixa', value: 0 },
+  { label: 'Média', value: 1 },
+  { label: 'Alta', value: 2 },
+];
 
 export default function AdminItemManagementTable({
   gifts: giftsFromParent,
@@ -163,6 +177,7 @@ export default function AdminItemManagementTable({
       imageUrl: null,
       imageFile: null,
       totalQuantity: null,
+      priority: 0, // Default priority
     },
   });
 
@@ -264,7 +279,7 @@ export default function AdminItemManagementTable({
     toast,
     editingItem,
     getValues,
-  ]); // Removed trigger from dependencies as it can cause loops if not used carefully
+  ]);
 
   const handleOpenAddDialog = () => {
     console.log('AdminItemManagementTable: handleOpenAddDialog called');
@@ -277,6 +292,7 @@ export default function AdminItemManagementTable({
       imageUrl: null,
       imageFile: null,
       totalQuantity: null,
+      priority: 0, // Default priority for new items
     });
     setEditingItem(null);
     setImagePreview(null);
@@ -295,6 +311,7 @@ export default function AdminItemManagementTable({
       imageUrl: item.imageUrl || null,
       imageFile: null,
       totalQuantity: item.totalQuantity ?? null,
+      priority: item.priority ?? 0, // Set existing priority or default
     });
     setImagePreview(item.imageUrl || null);
     setIsAddEditDialogOpen(true);
@@ -387,6 +404,7 @@ export default function AdminItemManagementTable({
           ? data.selectedBy?.trim() || 'Admin'
           : null,
       totalQuantity: isQuantityItem ? data.totalQuantity : null,
+      priority: data.priority, // Include priority
       ...(editingItem
         ? { imageUrl: imageValue }
         : { imageDataUri: imageValue }),
@@ -485,7 +503,6 @@ export default function AdminItemManagementTable({
 
   const getStatusBadge = (item: GiftItem) => {
     let statusToDisplay = item.status;
-    // If it's a quantity item and fully selected, display as 'selected'
     if (item.totalQuantity && item.totalQuantity > 0 && item.selectedQuantity && item.selectedQuantity >= item.totalQuantity) {
         statusToDisplay = 'selected';
     }
@@ -522,6 +539,12 @@ export default function AdminItemManagementTable({
         return <Badge variant='outline'>Indefinido</Badge>;
     }
   };
+
+  const getPriorityText = (priorityValue?: number | null) => {
+    const foundPriority = priorities.find(p => p.value === priorityValue);
+    return foundPriority ? foundPriority.label : 'Baixa';
+  };
+
 
   const formatDateTime = (isoString: string | null | undefined): string => {
     if (!isoString) return '-';
@@ -562,6 +585,7 @@ export default function AdminItemManagementTable({
               <TableHead className='hidden lg:table-cell'>Descrição</TableHead>
               <TableHead className='hidden md:table-cell'>Categoria</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Prioridade</TableHead>
               <TableHead>Quantidade</TableHead>
               <TableHead className='hidden xl:table-cell'>
                 Selecionado Por
@@ -572,7 +596,7 @@ export default function AdminItemManagementTable({
           <TableBody>
             {safeGifts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className='h-24 text-center'>
+                <TableCell colSpan={9} className='h-24 text-center'>
                   Nenhum item na lista ainda. Adicione um item acima.
                 </TableCell>
               </TableRow>
@@ -612,9 +636,8 @@ export default function AdminItemManagementTable({
                             sizes='40px'
                             unoptimized={item.imageUrl.startsWith('data:')}
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = ''; // Clear src
-                              (e.target as HTMLImageElement).style.display = 'none'; // Hide broken image icon
-                              // Optionally, show a placeholder in the div if the parent doesn't have one
+                              (e.target as HTMLImageElement).src = '';
+                              (e.target as HTMLImageElement).style.display = 'none';
                               const parent = (e.target as HTMLImageElement).parentElement;
                               if (parent && !parent.querySelector('.placeholder-icon')) {
                                 const placeholder = document.createElement('div');
@@ -641,6 +664,7 @@ export default function AdminItemManagementTable({
                       {item.category}
                     </TableCell>
                     <TableCell>{getStatusBadge(item)}</TableCell>
+                    <TableCell className='text-sm text-muted-foreground'>{getPriorityText(item.priority)}</TableCell>
                     <TableCell className='text-center text-sm'>
                       {isQuantityItem ? (
                         <span className='whitespace-nowrap'>
@@ -658,7 +682,7 @@ export default function AdminItemManagementTable({
                           {item.selectedBy}
                           {item.selectionDate && (
                             <div className='text-[10px]'>
-                              ({formatDateTime(item.selectionDate)})
+                              ({formatDateTime(item.selectionDate as string)})
                             </div>
                           )}
                         </>
@@ -694,8 +718,8 @@ export default function AdminItemManagementTable({
                             </Button>
                           )}
                           {(displayedStatus === 'available' ||
-                            (displayedStatus === 'selected' && !isQuantityItem) || // Allow marking as not needed for selected single items
-                            (displayedStatus === 'selected' && isQuantityItem && (item.selectedQuantity ?? 0) < (item.totalQuantity ?? 0)) // Allow marking not needed if partially selected quantity item
+                            (displayedStatus === 'selected' && !isQuantityItem) ||
+                            (displayedStatus === 'selected' && isQuantityItem && (item.selectedQuantity ?? 0) < (item.totalQuantity ?? 0))
                           ) && (
                             <Button
                               variant='ghost'
@@ -819,6 +843,46 @@ export default function AdminItemManagementTable({
             </div>
 
             <div className='grid grid-cols-4 items-center gap-4'>
+              <Label htmlFor='priority-dialog' className='text-right'>
+                Prioridade
+              </Label>
+              <div className='col-span-3'>
+                <Controller
+                  name='priority'
+                  control={control}
+                  defaultValue={0}
+                  render={({ field }) => (
+                    <Select
+                      onValueChange={(value) => field.onChange(parseInt(value))}
+                      value={String(field.value ?? 0)}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger
+                        id='priority-dialog'
+                        className={errors.priority ? 'border-destructive' : ''}
+                      >
+                        <SelectValue placeholder='Selecione a prioridade' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {priorities.map((p) => (
+                          <SelectItem key={p.value} value={String(p.value)}>
+                            {p.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.priority && (
+                  <p className='text-sm text-destructive mt-1'>
+                    {errors.priority.message}
+                  </p>
+                )}
+              </div>
+            </div>
+
+
+            <div className='grid grid-cols-4 items-center gap-4'>
               <Label htmlFor='totalQuantity-dialog' className='text-right'>
                 Qtd. Total
               </Label>
@@ -854,18 +918,18 @@ export default function AdminItemManagementTable({
                   {imagePreview && (
                     <div className='relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0'>
                       <Image
-                        key={imagePreview} // Force re-render on preview change
+                        key={imagePreview}
                         src={imagePreview}
                         alt='Prévia da imagem'
                         fill
                         style={{ objectFit: 'cover' }}
                         sizes='64px'
-                        unoptimized={imagePreview.startsWith('data:')} // Disable optimization for data URIs
+                        unoptimized={imagePreview.startsWith('data:')}
                         onError={(e) => {
                             console.error("Error loading image preview in dialog:", e);
-                            setImagePreview(null); // Clear preview on error
-                            setValue('imageFile', null); // Clear file input if preview fails
-                            setValue('imageUrl', editingItem?.imageUrl || null); // Revert to original if editing
+                            setImagePreview(null);
+                            setValue('imageFile', null);
+                            setValue('imageUrl', editingItem?.imageUrl || null);
                         }}
                       />
                       <Button
@@ -942,7 +1006,6 @@ export default function AdminItemManagementTable({
                           <SelectItem
                             key={stat}
                             value={stat}
-                            // Disable 'selected' if it's a quantity item being added/edited
                             disabled={
                               stat === 'selected' &&
                               !!watchedTotalQuantity &&
@@ -974,7 +1037,6 @@ export default function AdminItemManagementTable({
               </div>
             </div>
 
-            {/* Show "Selected By" only if status is 'selected' AND it's NOT a quantity item */}
             {watchedStatus === 'selected' &&
               (!watchedTotalQuantity || watchedTotalQuantity <= 0) && (
                 <div className='grid grid-cols-4 items-center gap-4 animate-fade-in'>
@@ -996,7 +1058,7 @@ export default function AdminItemManagementTable({
                       </p>
                     ) : (
                       watchedStatus === 'selected' &&
-                      !watch('selectedBy') && ( // Check if selectedBy is empty when status is selected
+                      !watch('selectedBy') && (
                         <p className='text-sm text-destructive mt-1'>
                           Nome obrigatório.
                         </p>

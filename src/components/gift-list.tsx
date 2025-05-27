@@ -33,6 +33,7 @@ import {
   Loader2,
   ImageIcon, // Placeholder icon
   Package, // Icon for quantity
+  Star, // Icon for priority
 } from 'lucide-react';
 import SelectItemDialog from './select-item-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,14 +42,14 @@ import { useToast } from '@/hooks/use-toast';
 
 interface GiftListProps {
   items: GiftItem[] | null;
-  filterStatus?: 'available' | 'selected' | 'not_needed'; // Aligned with new categories
+  filterStatus?: 'available' | 'selected' | 'not_needed';
   filterCategory?: string;
   onItemAction?: () => void;
 }
 
 export default function GiftList({
   items,
-  filterStatus = 'available', // Default to 'available' for "Sugestões Disponíveis"
+  filterStatus = 'available',
   filterCategory,
   onItemAction,
 }: GiftListProps) {
@@ -65,9 +66,8 @@ export default function GiftList({
     );
   }, [items, filterStatus]);
 
-  // Helper function to determine the effective status based on quantity
   const getEffectiveStatus = (item: GiftItem): GiftItem['status'] => {
-    if (!item) return 'available'; // Should not happen, but safe default
+    if (!item) return 'available';
 
     const isQuantityItem =
       item.totalQuantity !== null && item.totalQuantity > 0;
@@ -80,7 +80,7 @@ export default function GiftList({
         ? 'selected'
         : 'available';
     }
-    return item.status; // For non-quantity items, return the stored status
+    return item.status;
   };
 
   const filteredItems = useMemo(() => {
@@ -99,26 +99,26 @@ export default function GiftList({
       }
       const effectiveStatus = getEffectiveStatus(item);
 
-      const statusMatch = effectiveStatus === filterStatus; // Direct match with the new categories
+      const statusMatch = effectiveStatus === filterStatus;
       const categoryMatch =
         !filterCategory ||
         item.category?.toLowerCase() === filterCategory.toLowerCase();
       return statusMatch && categoryMatch;
     });
 
-    // Sort items: "Sugestões Disponíveis" (available) first, then by name for other categories
+    // Sort items:
+    // 1. By priority (descending: High (2) > Medium (1) > Low (0)/null)
+    // 2. Then by name (ascending)
     initiallyFiltered.sort((a, b) => {
-      const statusA = getEffectiveStatus(a);
-      const statusB = getEffectiveStatus(b);
+      const priorityA = a.priority ?? -1; // Treat null/undefined priority as lowest
+      const priorityB = b.priority ?? -1;
 
-      // Prioritize 'available' items for "Sugestões Disponíveis" tab
-      if (filterStatus === 'available') {
-        if (statusA === 'available' && statusB !== 'available') return -1;
-        if (statusA !== 'available' && statusB === 'available') return 1;
+      if (priorityB !== priorityA) {
+        return priorityB - priorityA; // Higher priority number comes first
       }
-      // For other tabs, or within status groups, sort by name
-      return a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name); // Secondary sort by name
     });
+
 
     console.log(
       `GiftList (${filterStatus}): Final filtered/sorted count: ${initiallyFiltered.length} items.`
@@ -148,7 +148,6 @@ export default function GiftList({
     setSelectedItem(null);
   };
 
-  // Updated handleItemSelectionSuccess signature
   const handleItemSelectionSuccess = async (
     itemId: string,
     guestName: string,
@@ -159,7 +158,6 @@ export default function GiftList({
     );
     setLoadingItemId(itemId);
     try {
-      // Pass only necessary parameters to selectGift
       const updatedItem = await selectGift(itemId, guestName, quantity);
 
       if (updatedItem) {
@@ -176,7 +174,7 @@ export default function GiftList({
           variant: 'default',
           className: 'bg-success text-success-foreground border-success',
         });
-        onItemAction?.(); // Refresh UI from parent
+        onItemAction?.();
       } else {
         console.warn(
           `GiftList (${filterStatus}): Failed to select item ${itemId} (likely unavailable). Triggering refresh.`
@@ -187,7 +185,7 @@ export default function GiftList({
             'Item não disponível ou quantidade insuficiente. Atualizando lista.',
           variant: 'destructive',
         });
-        onItemAction?.(); // Refresh UI from parent
+        onItemAction?.();
       }
     } catch (error: any) {
       console.error(
@@ -211,13 +209,13 @@ export default function GiftList({
   const getStatusBadge = (item: GiftItem) => {
     const isQuantityItem =
       item.totalQuantity !== null && item.totalQuantity > 0;
-    const displayStatus = getEffectiveStatus(item); // Use the helper function
+    const displayStatus = getEffectiveStatus(item);
     let quantityText = '';
 
     if (isQuantityItem && displayStatus !== 'not_needed') {
       const selected = item.selectedQuantity ?? 0;
       const total = item.totalQuantity ?? 0;
-      quantityText = `(${selected}/${total})`; // Add quantity text
+      quantityText = `(${selected}/${total})`;
     }
 
     switch (displayStatus) {
@@ -258,6 +256,19 @@ export default function GiftList({
     }
   };
 
+  const getPriorityIndicator = (priority?: number | null) => {
+    if (priority === 2) { // High
+      return <Star className="h-4 w-4 text-destructive fill-destructive" />;
+    }
+    if (priority === 1) { // Medium
+      return <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />;
+    }
+    // Low (0) or null/undefined can have no indicator or a subtle one
+    // return <Star className="h-4 w-4 text-muted-foreground/50" />;
+    return null;
+  };
+
+
   const isInitialLoad = items === null;
   const hasLoadedItems = Array.isArray(items);
   const hasNoItemsInDatabase = hasLoadedItems && items.length === 0;
@@ -275,24 +286,21 @@ export default function GiftList({
         {[...Array(8)].map(
           (
             _,
-            index // Show more skeletons
+            index
           ) => (
             <Card
               key={index}
               className='flex flex-col justify-between shadow-md rounded-lg overflow-hidden bg-card'
             >
               <CardHeader className='p-4'>
-                {' '}
-                {/* Adjust padding */}
-                <Skeleton className='h-40 w-full mb-4 rounded-md' />{' '}
-                {/* Image skeleton */}
-                <Skeleton className='h-6 w-3/4 mb-2' /> {/* Title */}
-                <Skeleton className='h-4 w-1/2 mb-2' /> {/* Description */}
-                <Skeleton className='h-4 w-1/4' /> {/* Category */}
+                <Skeleton className='h-40 w-full mb-4 rounded-md' />
+                <Skeleton className='h-6 w-3/4 mb-2' />
+                <Skeleton className='h-4 w-1/2 mb-2' />
+                <Skeleton className='h-4 w-1/4' />
               </CardHeader>
               <CardFooter className='flex items-center justify-between gap-2 p-4 border-t'>
-                <Skeleton className='h-5 w-24' /> {/* Status badge */}
-                <Skeleton className='h-9 w-28' /> {/* Button */}
+                <Skeleton className='h-5 w-24' />
+                <Skeleton className='h-9 w-28' />
               </CardFooter>
             </Card>
           )
@@ -340,18 +348,17 @@ export default function GiftList({
   );
   return (
     <>
-      {/* Responsive grid layout */}
       <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'>
         {filteredItems.map((item) => {
           const effectiveStatus = getEffectiveStatus(item);
           const isAvailableForSelection = effectiveStatus === 'available';
+          const priorityIndicator = getPriorityIndicator(item.priority);
 
           return (
             <Card
               key={item.id}
               className='flex flex-col justify-between shadow-md rounded-lg overflow-hidden animate-fade-in bg-card transition-transform duration-200 hover:scale-[1.02]'
             >
-              {/* Image Section - Takes significant portion */}
               <div className='relative aspect-[4/3] w-full bg-muted/50 overflow-hidden'>
                 {item.imageUrl ? (
                   <Image
@@ -359,8 +366,8 @@ export default function GiftList({
                     alt={`Imagem de ${item.name}`}
                     fill
                     style={{ objectFit: 'cover' }}
-                    sizes='(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw' // Adjusted sizes
-                    priority={filterStatus === 'available'} // Prioritize images in "Sugestões Disponíveis" tab
+                    sizes='(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw'
+                    priority={filterStatus === 'available'}
                     data-ai-hint='baby gift item'
                     onError={(e) => {
                       console.warn(`Failed to load image: ${item.imageUrl}`);
@@ -384,39 +391,32 @@ export default function GiftList({
                     <ImageIcon className='h-16 w-16 text-muted-foreground/30' />
                   </div>
                 )}
+                {priorityIndicator && (
+                  <div className="absolute top-2 right-2 bg-background/70 p-1 rounded-full shadow">
+                    {priorityIndicator}
+                  </div>
+                )}
               </div>
 
-              {/* Content Section */}
               <div className='flex flex-col flex-grow p-4'>
-                {' '}
-                {/* Use flex-grow */}
                 <CardHeader className='p-0 mb-2'>
-                  {' '}
-                  {/* Remove default padding */}
                   <CardTitle className='text-lg font-semibold leading-tight'>
                     {item.name}
                   </CardTitle>
                   {item.description && (
                     <CardDescription className='text-sm text-muted-foreground mt-1 line-clamp-2'>
-                      {' '}
-                      {/* Limit description lines */}
                       {item.description}
                     </CardDescription>
                   )}
                 </CardHeader>
                 <CardContent className='p-0 flex-grow'>
-                  {' '}
-                  {/* Remove padding, let flex handle space */}
                   <div className='flex items-center text-xs text-muted-foreground pt-1'>
                     <Tag className='mr-1 h-3 w-3' /> {item.category}
                   </div>
                 </CardContent>
               </div>
 
-              {/* Footer Section */}
               <CardFooter className='flex items-center justify-between gap-2 p-4 border-t mt-auto'>
-                {' '}
-                {/* Ensure footer is at bottom */}
                 {getStatusBadge(item)}
                 {isAvailableForSelection && (
                   <Button
@@ -442,7 +442,7 @@ export default function GiftList({
 
       {selectedItem && isDialogOpen && (
         <SelectItemDialog
-          item={selectedItem} // Pass the full item including quantity info
+          item={selectedItem}
           isOpen={isDialogOpen}
           onClose={handleDialogClose}
           onSuccess={handleItemSelectionSuccess}
