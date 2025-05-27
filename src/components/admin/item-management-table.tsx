@@ -550,9 +550,9 @@ export default function AdminItemManagementTable({
                 </div>
               </div>
             )}
-            <DialogFooter className='mt-4 grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-2 pt-4 border-t'>
-              <DialogClose asChild><Button type='button' variant='outline' disabled={isFormSubmitting || !!actionLoading} className="w-full sm:w-auto col-span-2 sm:col-auto">Cancelar</Button></DialogClose>
-              <Button type='submit' disabled={isFormSubmitting || !!actionLoading} className='w-full sm:w-auto col-span-2 sm:col-auto'>
+             <DialogFooter className='mt-4 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 pt-4 border-t'>
+              <DialogClose asChild><Button type='button' variant='outline' disabled={isFormSubmitting || !!actionLoading} className="w-full sm:w-auto">Cancelar</Button></DialogClose>
+              <Button type='submit' disabled={isFormSubmitting || !!actionLoading} className='w-full sm:w-auto'>
                 {isFormSubmitting && actionLoading === 'save' ? <Loader2 className='mr-2 h-4 w-4 animate-spin' /> : <Save className='mr-2 h-4 w-4' />}
                 {editingItem ? 'Salvar Alterações' : 'Adicionar Item'}
               </Button>
@@ -579,3 +579,4 @@ export default function AdminItemManagementTable({
     </div>
   );
 }
+
