@@ -67,7 +67,7 @@ export default function GiftList({
   }, [items, filterStatus]);
 
   const getEffectiveStatus = (item: GiftItem): GiftItem['status'] => {
-    if (!item) return 'available';
+    if (!item) return 'available'; // Default for safety, though item should always be defined here
 
     const isQuantityItem =
       item.totalQuantity !== null && item.totalQuantity > 0;
@@ -258,13 +258,12 @@ export default function GiftList({
 
   const getPriorityIndicator = (priority?: number | null) => {
     if (priority === 2) { // High
-      return <Star className="h-4 w-4 text-destructive fill-destructive" />;
+      return <Star className="h-5 w-5 text-destructive fill-destructive" aria-label="Prioridade alta" />;
     }
     if (priority === 1) { // Medium
-      return <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />;
+      return <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" aria-label="Prioridade média" />;
     }
-    // Low (0) or null/undefined can have no indicator or a subtle one
-    // return <Star className="h-4 w-4 text-muted-foreground/50" />;
+    // Low (0) or null/undefined will not show an icon for a cleaner look unless specified otherwise.
     return null;
   };
 
@@ -313,13 +312,20 @@ export default function GiftList({
     console.log(
       `GiftList (${filterStatus}): Rendering empty state (database has no items).`
     );
+    let message = "A lista de presentes ainda está vazia.";
+    if (filterStatus === 'available') message = "Nenhuma sugestão de presente adicionada ainda.";
+    else if (filterStatus === 'selected') message = "Nenhum presente foi escolhido ainda.";
+    else if (filterStatus === 'not_needed') message = "Nenhum item foi marcado como 'Preferimos Não Utilizar'.";
+    
     return (
       <div className='text-center py-16 text-muted-foreground'>
         <Gift className='mx-auto h-12 w-12 mb-4' />
-        <p>A lista de presentes ainda está vazia.</p>
-        <p className='text-sm mt-2'>
-          Use o botão "Adicionar um Item" acima para começar!
-        </p>
+        <p>{message}</p>
+        {filterStatus === 'available' && (
+             <p className='text-sm mt-2'>
+              Use o botão "Adicionar um Item" acima para sugerir algo!
+           </p>
+        )}
       </div>
     );
   }
@@ -392,7 +398,7 @@ export default function GiftList({
                   </div>
                 )}
                 {priorityIndicator && (
-                  <div className="absolute top-2 right-2 bg-background/70 p-1 rounded-full shadow">
+                  <div className="absolute top-2 right-2 bg-background/70 p-1 rounded-full shadow-md" title={item.priority === 2 ? "Prioridade Alta" : "Prioridade Média"}>
                     {priorityIndicator}
                   </div>
                 )}
