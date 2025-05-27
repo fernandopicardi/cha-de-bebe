@@ -453,59 +453,59 @@ export default function AdminItemManagementTable({
             <DialogTitle>{editingItem ? 'Editar Item' : 'Adicionar Novo Item'}</DialogTitle>
             <DialogDescription>{editingItem ? 'Modifique os detalhes.' : 'Preencha os detalhes.'}</DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className='grid gap-y-3 sm:gap-y-4 py-4'>
-            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline'>
+          <form onSubmit={handleSubmit(onSubmit)} className='grid gap-y-3 sm:gap-y-4 py-4 w-full min-w-0'>
+            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline w-full min-w-0'>
               <Label htmlFor='name-dialog' className='sm:text-right text-left sm:pt-1 font-medium'>Nome*</Label>
-              <div className='sm:col-span-3'>
-                <Input id='name-dialog' {...register('name')} className={errors.name ? 'border-destructive' : ''} maxLength={100} disabled={isFormSubmitting || !!actionLoading} />
+              <div className='sm:col-span-3 w-full min-w-0'>
+                <Input id='name-dialog' {...register('name')} className={`w-full ${errors.name ? 'border-destructive' : ''}`} maxLength={100} disabled={isFormSubmitting || !!actionLoading} />
                 {errors.name && <p className='text-sm text-destructive mt-1'>{errors.name.message}</p>}
               </div>
             </div>
-            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline'>
+            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline w-full min-w-0'>
               <Label htmlFor='description-dialog' className='sm:text-right text-left sm:pt-1 font-medium'>Descrição</Label>
-              <div className='sm:col-span-3'>
-                <Textarea id='description-dialog' {...register('description')} rows={3} maxLength={200} disabled={isFormSubmitting || !!actionLoading} className={errors.description ? 'border-destructive' : ''} />
+              <div className='sm:col-span-3 w-full min-w-0'>
+                <Textarea id='description-dialog' {...register('description')} rows={3} maxLength={200} disabled={isFormSubmitting || !!actionLoading} className={`w-full ${errors.description ? 'border-destructive' : ''}`} />
                 {errors.description && <p className='text-sm text-destructive mt-1'>{errors.description.message}</p>}
               </div>
             </div>
-            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline'>
+            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline w-full min-w-0'>
               <Label htmlFor='category-dialog' className='sm:text-right text-left sm:pt-1 font-medium'>Categoria*</Label>
-              <div className='sm:col-span-3'>
+              <div className='sm:col-span-3 w-full min-w-0'>
                 <Controller name='category' control={control} rules={{ required: 'Categoria é obrigatória.' }}
                   render={({ field }) => (
                     <Select onValueChange={field.onChange} value={field.value} defaultValue='' disabled={isFormSubmitting || !!actionLoading}>
-                      <SelectTrigger id='category-dialog' className={errors.category ? 'border-destructive' : ''}><SelectValue placeholder='Selecione uma categoria' /></SelectTrigger>
+                      <SelectTrigger id='category-dialog' className={`w-full ${errors.category ? 'border-destructive' : ''}`}><SelectValue placeholder='Selecione uma categoria' /></SelectTrigger>
                       <SelectContent>{categories.map((cat) => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent>
                     </Select>
                   )} />
                 {errors.category && <p className='text-sm text-destructive mt-1'>{errors.category.message}</p>}
               </div>
             </div>
-            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline'>
+            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline w-full min-w-0'>
               <Label htmlFor='priority-dialog' className='sm:text-right text-left sm:pt-1 font-medium'>Prioridade</Label>
-              <div className='sm:col-span-3'>
+              <div className='sm:col-span-3 w-full min-w-0'>
                 <Controller name='priority' control={control} defaultValue={0}
                   render={({ field }) => (
                     <Select onValueChange={(value) => field.onChange(parseInt(value))} value={String(field.value ?? 0)} disabled={isFormSubmitting || !!actionLoading}>
-                      <SelectTrigger id='priority-dialog' className={errors.priority ? 'border-destructive' : ''}><SelectValue placeholder='Selecione a prioridade' /></SelectTrigger>
+                      <SelectTrigger id='priority-dialog' className={`w-full ${errors.priority ? 'border-destructive' : ''}`}><SelectValue placeholder='Selecione a prioridade' /></SelectTrigger>
                       <SelectContent>{priorities.map((p) => (<SelectItem key={p.value} value={String(p.value)}>{p.label}</SelectItem>))}</SelectContent>
                     </Select>
                   )} />
                 {errors.priority && <p className='text-sm text-destructive mt-1'>{errors.priority.message}</p>}
               </div>
             </div>
-            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline'>
+            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline w-full min-w-0'>
               <Label htmlFor='totalQuantity-dialog' className='sm:text-right text-left sm:pt-1 font-medium'>Qtd. Total</Label>
-              <div className='sm:col-span-3'>
-                <Input id='totalQuantity-dialog' type='number' placeholder='Deixe vazio para item único' {...register('totalQuantity')} className={errors.totalQuantity ? 'border-destructive' : ''} min='1' disabled={isFormSubmitting || !!actionLoading || watchedStatus === 'selected'} />
+              <div className='sm:col-span-3 w-full min-w-0'>
+                <Input id='totalQuantity-dialog' type='number' placeholder='Deixe vazio para item único' {...register('totalQuantity')} className={`w-full ${errors.totalQuantity ? 'border-destructive' : ''}`} min='1' disabled={isFormSubmitting || !!actionLoading || watchedStatus === 'selected'} />
                 {errors.totalQuantity && <p className='text-sm text-destructive mt-1'>{errors.totalQuantity.message}</p>}
                 {watchedStatus === 'selected' && !!watchedTotalQuantity && watchedTotalQuantity > 0 && (<p className='text-xs text-muted-foreground mt-1'>Status 'Já Escolhido' para itens com quantidade é automático. Será 'Disponível'.</p>)}
               </div>
             </div>
-            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-start'>
+            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-start w-full min-w-0'>
               <Label htmlFor='imageFile-dialog' className='sm:text-right text-left sm:pt-2 font-medium'>Imagem</Label>
-              <div className='sm:col-span-3'>
-                <div className='flex flex-col sm:flex-row items-start sm:items-center gap-4'>
+              <div className='sm:col-span-3 w-full min-w-0'>
+                <div className='flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full'>
                   {imagePreview && (
                     <div className='relative w-16 h-16 border rounded-md overflow-hidden shadow-inner bg-muted/50 flex-shrink-0'>
                       <Image key={imagePreview} src={imagePreview} alt='Prévia da imagem' fill style={{ objectFit: 'cover' }} sizes='64px' unoptimized={imagePreview.startsWith('data:')}
@@ -513,7 +513,7 @@ export default function AdminItemManagementTable({
                       <Button type='button' variant='destructive' size='icon' className='absolute top-0.5 right-0.5 h-5 w-5 z-10 rounded-full opacity-70 hover:opacity-100' onClick={removeImage} title='Remover Imagem' disabled={isFormSubmitting || !!actionLoading} aria-label="Remover Imagem"><XCircle className='h-3 w-3' /></Button>
                     </div>
                   )}
-                  <div className='flex-1 w-full'>
+                  <div className='flex-1 w-full min-w-0'>
                     <Input id='imageFile-dialog' type='file' accept={ACCEPTED_MEDIA_TYPES.join(',')} {...register('imageFile')}
                       className={`${errors.imageFile ? 'border-destructive' : ''} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer w-full`} disabled={isFormSubmitting || !!actionLoading} />
                     <p className='text-xs text-muted-foreground mt-1'>JPG, PNG, GIF, WebP, MP4, MOV (Máx 50MB).</p>
@@ -523,13 +523,13 @@ export default function AdminItemManagementTable({
                 </div>
               </div>
             </div>
-            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline'>
+            <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline w-full min-w-0'>
               <Label htmlFor='status-dialog' className='sm:text-right text-left sm:pt-1 font-medium'>Status*</Label>
-              <div className='sm:col-span-3'>
+              <div className='sm:col-span-3 w-full min-w-0'>
                 <Controller name='status' control={control} defaultValue={editingItem?.status || 'available'} rules={{ required: 'Status é obrigatório.' }}
                   render={({ field }) => (
                     <Select onValueChange={field.onChange} value={field.value || 'available'} disabled={isFormSubmitting || !!actionLoading || (!!watchedTotalQuantity && watchedTotalQuantity > 0)}>
-                      <SelectTrigger id='status-dialog' className={errors.status ? 'border-destructive' : ''}><SelectValue placeholder='Selecione um status' /></SelectTrigger>
+                      <SelectTrigger id='status-dialog' className={`w-full ${errors.status ? 'border-destructive' : ''}`}><SelectValue placeholder='Selecione um status' /></SelectTrigger>
                       <SelectContent>{statuses.map((stat) => (<SelectItem key={stat} value={stat} disabled={stat === 'selected' && !!watchedTotalQuantity && watchedTotalQuantity > 0}>
                         {stat === 'available' && 'Sugestão Disponível'}
                         {stat === 'selected' && 'Já Escolhido'}
@@ -542,10 +542,10 @@ export default function AdminItemManagementTable({
               </div>
             </div>
             {watchedStatus === 'selected' && (!watchedTotalQuantity || watchedTotalQuantity <= 0) && (
-              <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline animate-fade-in'>
+              <div className='grid grid-cols-1 sm:grid-cols-4 gap-x-4 gap-y-1 sm:gap-y-2 sm:items-baseline animate-fade-in w-full min-w-0'>
                 <Label htmlFor='selectedBy-dialog' className='sm:text-right text-left sm:pt-1 font-medium'>Selecionado Por*</Label>
-                <div className='sm:col-span-3'>
-                  <Input id='selectedBy-dialog' {...register('selectedBy')} className={errors.selectedBy ? 'border-destructive' : ''} placeholder='Nome de quem selecionou' maxLength={50} disabled={isFormSubmitting || !!actionLoading} />
+                <div className='sm:col-span-3 w-full min-w-0'>
+                  <Input id='selectedBy-dialog' {...register('selectedBy')} className={`w-full ${errors.selectedBy ? 'border-destructive' : ''}`} placeholder='Nome de quem selecionou' maxLength={50} disabled={isFormSubmitting || !!actionLoading} />
                   {errors.selectedBy ? <p className='text-sm text-destructive mt-1'>{errors.selectedBy.message}</p> : (watchedStatus === 'selected' && !watch('selectedBy') && <p className='text-sm text-destructive mt-1'>Nome obrigatório para itens selecionados.</p>)}
                 </div>
               </div>
