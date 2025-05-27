@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -67,10 +68,11 @@ export default function AdminPage() {
           console.log(
             'AdminPage: User authenticated. Fetching data (gifts, settings, confirmations)...'
           );
-          console.log('AdminPage: Fetching data...');          const [giftsData, settingsData, confirmationsData] =
-            console.log('AdminPage: Awaiting for Promise.all');
+          console.log('AdminPage: Fetching data...');
+          console.log('AdminPage: Awaiting for Promise.all'); // Correct placement of console.log
 
-          await Promise.all([
+          const [giftsData, settingsData, confirmationsData] =
+            await Promise.all([ // Correctly assign result of Promise.all
               getGifts(),
               getEventSettings(),
               getConfirmations(),
@@ -188,7 +190,7 @@ export default function AdminPage() {
       <div className='flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background'>
         <Frown className='h-16 w-16 text-muted-foreground mb-4' />
         <h1 className='text-4xl font-bold text-foreground mb-2'>404</h1>
-        <p className='text-xl text-muted-foreground mb-6'> 
+        <p className='text-xl text-muted-foreground mb-6'>
           Esta página não pôde ser encontrada.
         </p>
         <Link href='/admin/login'>
@@ -204,10 +206,10 @@ export default function AdminPage() {
   }
 
   if (isLoading) {
-    return (
-      // Log auth error outside of JSX
-      authError && console.error('Auth Error:', authError),
+    // Log auth error outside of JSX
+    authError && console.error('Auth Error:', authError);
 
+    return (
       <div className='flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background'>
         <Loader2 className='h-12 w-12 animate-spin text-primary mb-4' />
         <p className='text-lg text-muted-foreground'>
@@ -341,9 +343,9 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <AdminItemManagementTable
-              key={`item-table-${gifts.length}`} // Simplified key
+              key={`item-table-${gifts.length}-${gifts[0]?.id || "no-items"}`}
               gifts={gifts} // Pass the fetched gifts
-              onDataChange={() => refreshData('item table change')} // Pass stable refresh callback
+              onDataChange={() => refreshData("item table change")} // More specific source
             />
           </CardContent>
         </Card>
@@ -378,3 +380,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
+    
