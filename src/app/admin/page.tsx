@@ -67,10 +67,10 @@ export default function AdminPage() {
           console.log(
             'AdminPage: User authenticated. Fetching data (gifts, settings, confirmations)...'
           );
-          console.log('AdminPage: Fetching data...');
-          const [giftsData, settingsData, confirmationsData] =
+          console.log('AdminPage: Fetching data...');          const [giftsData, settingsData, confirmationsData] =
             console.log('AdminPage: Awaiting for Promise.all');
-            await Promise.all([
+
+          await Promise.all([
               getGifts(),
               getEventSettings(),
               getConfirmations(),
@@ -188,10 +188,9 @@ export default function AdminPage() {
       <div className='flex flex-col items-center justify-center min-h-screen text-center p-4 bg-background'>
         <Frown className='h-16 w-16 text-muted-foreground mb-4' />
         <h1 className='text-4xl font-bold text-foreground mb-2'>404</h1>
-        <p className='text-xl text-muted-foreground mb-6'>
+        <p className='text-xl text-muted-foreground mb-6'> 
           Esta página não pôde ser encontrada.
         </p>
-        {authError && console.error('Auth Error:', authError)}
         <Link href='/admin/login'>
           <Button variant='default'>Ir para Login</Button>
         </Link>
@@ -206,6 +205,9 @@ export default function AdminPage() {
 
   if (isLoading) {
     return (
+      // Log auth error outside of JSX
+      authError && console.error('Auth Error:', authError),
+
       <div className='flex flex-col items-center justify-center min-h-screen p-4 text-center bg-background'>
         <Loader2 className='h-12 w-12 animate-spin text-primary mb-4' />
         <p className='text-lg text-muted-foreground'>

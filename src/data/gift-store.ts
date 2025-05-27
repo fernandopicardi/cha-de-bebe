@@ -24,7 +24,6 @@ import {
 } from 'firebase/firestore';
 import { db, storage } from '@/firebase/config'; // Ensure db and storage are imported correctly
 import { uploadImage, deleteImage } from '@/services/storage'; // Import storage service
-// Removed: import { sendGiftReminderEmail } from '@/services/email';
 
 // --- INTERFACE DEFINITIONS ---
 
@@ -41,9 +40,6 @@ export interface GiftItem {
 
   totalQuantity?: number | null;
   selectedQuantity?: number;
-  // Added for email reminder functionality - this will be removed if sendGiftReminderEmail is removed
-  sendReminderEmail?: boolean;
-  guestEmail?: string;
 }
 
 export interface SuggestionData {
@@ -51,8 +47,6 @@ export interface SuggestionData {
   itemDescription?: string;
   suggesterName: string;
   imageDataUri?: string | null;
-  // Removed: sendReminderEmail: boolean;
-  // Removed: guestEmail?: string;
 }
 
 export interface EventSettings {
@@ -78,7 +72,7 @@ export interface Confirmation {
 
 const defaultGiftItems: Omit<
   GiftItem,
-  'id' | 'createdAt' | 'selectionDate' | 'selectedQuantity' | 'totalQuantity' | 'sendReminderEmail' | 'guestEmail'
+  'id' | 'createdAt' | 'selectionDate' | 'selectedQuantity'
 >[] = [
   {
     name: 'Body Manga Curta (RN)',
@@ -182,14 +176,14 @@ const confirmationsCollectionRef = collection(
 const giftFromDoc = (
   docSnapshot: DocumentSnapshot | QueryDocumentSnapshot
 ): GiftItem | null => {
-  if (!docSnapshot.exists) {
+  if (!docSnapshot.exists()) {
     console.warn(
       `Firestore Convert: Document ID ${docSnapshot.id} does not exist.`
     );
     return null;
   }
 
-  const data = docSnapshot.data() as Partial<Omit<GiftItem, 'id'>>; // Use Partial for incoming data
+  const data = docSnapshot.data() as Partial<Omit<GiftItem, 'id'>>;
   const docId = docSnapshot.id;
 
   if (!data) {
@@ -199,7 +193,6 @@ const giftFromDoc = (
     return null;
   }
 
-  // Validate required fields with type checks
   if (typeof data.name !== 'string' || data.name.trim() === '') {
     console.error(
       `Firestore Convert: Invalid or missing 'name' for gift ID ${docId}. Found: ${data.name}`
@@ -224,8 +217,22 @@ const giftFromDoc = (
 
   let selectionDateISO: string | null = null;
   if (data.selectionDate) {
-    if (data.selectionDate instanceof Timestamp) {
-      selectionDateISO = data.selectionDate.toDate().toISOString();
+    if (
+      typeof data.selectionDate === 'object' &&
+      data.selectionDate !== null &&
+      'toDate' in data.selectionDate
+    ) {
+      const firestoreTimestamp = data.selectionDate as { toDate: () => Date };
+      if (typeof firestoreTimestamp.toDate === 'function') {
+        selectionDateISO = firestoreTimestamp.toDate().toISOString();
+      } else {
+        console.warn(
+          `Firestore Convert: selectionDate object found, but toDate is not a function for gift ID ${docId}:`,
+          data.selectionDate
+        );
+        // Potentially return null if this makes the item invalid
+        // return null;
+      }
     } else if (typeof data.selectionDate === 'string') {
       try {
         const parsedDate = new Date(data.selectionDate);
@@ -243,15 +250,30 @@ const giftFromDoc = (
         );
       }
     } else {
-      console.warn(`Firestore Convert: Unexpected type for selectionDate for gift ID ${docId}: ${typeof data.selectionDate}`);
+      console.warn(
+        `Firestore Convert: Unexpected type for selectionDate for gift ID ${docId}: ${typeof data.selectionDate}`
+      );
     }
   }
 
-
   let createdAtISO: string | null = null;
   if (data.createdAt) {
-    if (data.createdAt instanceof Timestamp) {
-      createdAtISO = data.createdAt.toDate().toISOString();
+    if (
+      typeof data.createdAt === 'object' &&
+      data.createdAt !== null &&
+      'toDate' in data.createdAt
+    ) {
+      const firestoreTimestamp = data.createdAt as { toDate: () => Date };
+      if (typeof firestoreTimestamp.toDate === 'function') {
+        createdAtISO = firestoreTimestamp.toDate().toISOString();
+      } else {
+        console.warn(
+          `Firestore Convert: createdAt object found, but toDate is not a function for gift ID ${docId}:`,
+          data.createdAt
+        );
+        // Potentially return null if this makes the item invalid
+        // return null;
+      }
     } else if (typeof data.createdAt === 'string') {
       try {
         const parsedDate = new Date(data.createdAt);
@@ -269,7 +291,9 @@ const giftFromDoc = (
         );
       }
     } else {
-       console.warn(`Firestore Convert: Unexpected type for createdAt for gift ID ${docId}: ${typeof data.createdAt}`);
+      console.warn(
+        `Firestore Convert: Unexpected type for createdAt for gift ID ${docId}: ${typeof data.createdAt}`
+      );
     }
   }
 
@@ -279,7 +303,7 @@ const giftFromDoc = (
     description:
       typeof data.description === 'string' ? data.description : null,
     category: data.category,
-    status: data.status as 'available' | 'selected' | 'not_needed', // Already validated
+    status: data.status as 'available' | 'selected' | 'not_needed',
     selectedBy: typeof data.selectedBy === 'string' ? data.selectedBy : null,
     selectionDate: selectionDateISO,
     createdAt: createdAtISO,
@@ -288,8 +312,6 @@ const giftFromDoc = (
       typeof data.totalQuantity === 'number' ? data.totalQuantity : null,
     selectedQuantity:
       typeof data.selectedQuantity === 'number' ? data.selectedQuantity : 0,
-    sendReminderEmail: typeof data.sendReminderEmail === 'boolean' ? data.sendReminderEmail : false,
-    guestEmail: typeof data.guestEmail === 'string' ? data.guestEmail : undefined,
   };
 };
 
@@ -328,8 +350,7 @@ const confirmationFromDoc = (
 const forceRevalidation = (path: string = '/') => {
   console.log(`Firestore Revalidate: Revalidating path: ${path}...`);
   try {
-    revalidatePath(path, 'layout'); // Revalidate the specific path
-    // Also revalidate common related paths if necessary
+    revalidatePath(path, 'layout');
     if (path === '/' || path.startsWith('/?category=')) {
       revalidatePath('/admin', 'layout');
     } else if (path === '/admin') {
@@ -346,7 +367,6 @@ const forceRevalidation = (path: string = '/') => {
   }
 };
 
-// --- INITIALIZATION ---
 export async function initializeFirestoreData(): Promise<void> {
   console.log('Firestore Init: Checking initialization status...');
   try {
@@ -376,8 +396,8 @@ export async function initializeFirestoreData(): Promise<void> {
         const docRef = doc(giftsCollectionRef);
         const fullItem = {
           ...itemData,
-          selectedQuantity: 0, // Ensure selectedQuantity is 0
-          totalQuantity: itemData.totalQuantity ?? null, // Ensure totalQuantity is null if not provided
+          selectedQuantity: 0,
+          totalQuantity: itemData.totalQuantity ?? null,
           createdAt: serverTimestamp(),
         };
         batch.set(docRef, fullItem);
@@ -401,8 +421,6 @@ export async function initializeFirestoreData(): Promise<void> {
     }
   }
 }
-
-// --- DATA STORE FUNCTIONS ---
 
 export const getEventSettings = async (): Promise<EventSettings> => {
   const settingsPath = settingsDocRef.path;
@@ -467,7 +485,6 @@ export const getGifts = async (): Promise<GiftItem[]> => {
       if (gifts.length !== querySnapshot.size) {
         console.warn(`Firestore GET_GIFTS: ${querySnapshot.size - gifts.length} documents were filtered out by giftFromDoc due to data validation issues.`);
       }
-      // console.log("Firestore GET_GIFTS: Sample gifts:", JSON.stringify(gifts.slice(0, 2), null, 2));
       return gifts;
     }
   } catch (error) {
@@ -502,7 +519,7 @@ export async function updateEventSettings(
 
     if (
       typeof newImageUrlInput === 'string' &&
-      newImageUrlInput.startsWith('data:') // Simplified check for data URI (image or video)
+      newImageUrlInput.startsWith('data:')
     ) {
       console.log(
         'Firestore UPDATE_SETTINGS: New header image data URI found. Uploading...'
@@ -633,11 +650,10 @@ export async function selectGift(
         selectedQuantity: newSelectedQuantity,
         status: newStatus,
         selectedBy: guestName,
-        selectionDate: new Date().toISOString(),
       };
       await updateDoc(itemDocRef, {
         ...updateData,
-        selectionDate: serverTimestamp(), // Use serverTimestamp for actual update
+        selectionDate: serverTimestamp(),
       });
       console.log(
         `Firestore SELECT_GIFT: Updated quantity for ${itemId}. New selected: ${newSelectedQuantity}. Status: ${newStatus}`
@@ -653,12 +669,11 @@ export async function selectGift(
       const updateData: Partial<GiftItem> = {
         status: 'selected' as const,
         selectedBy: guestName,
-        selectionDate: new Date().toISOString(), // For optimistic update
-        selectedQuantity: 1, // Explicitly set for single items
+        selectedQuantity: 1,
       };
       await updateDoc(itemDocRef, {
         ...updateData,
-        selectionDate: serverTimestamp(), // Use serverTimestamp
+        selectionDate: serverTimestamp(),
       });
       console.log(
         `Firestore SELECT_GIFT: Marked single item ${itemId} as selected.`
@@ -669,23 +684,7 @@ export async function selectGift(
     forceRevalidation('/admin');
 
     const updatedSnap = await getDoc(itemDocRef);
-    const updatedItem = updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
-
-    // Email sending logic removed
-    // if (updatedItem && currentItem.sendReminderEmail && currentItem.guestEmail) {
-    //   const eventSettings = await getEventSettings();
-    //   if (eventSettings) {
-    //      try {
-    //         await sendGiftReminderEmail(currentItem.guestEmail, updatedItem, eventSettings, guestName, quantityToSelect);
-    //      } catch (emailError) {
-    //         console.error("Failed to send reminder email:", emailError);
-    //         // Do not let email failure break the main gift selection flow
-    //      }
-    //   }
-    // }
-
-
-    return updatedItem;
+    return updatedSnap.exists() ? giftFromDoc(updatedSnap) : null;
   } catch (error) {
     console.error(
       `Firestore SELECT_GIFT: Error selecting gift ${itemId}:`,
@@ -733,15 +732,14 @@ export async function addSuggestion(
     const newItemData: Omit<GiftItem, 'id'> & { createdAt: any, selectionDate: any } = {
       name: suggestionData.itemName.trim(),
       description: suggestionData.itemDescription?.trim() || null,
-      category: 'Outros', // Default category for suggestions
-      status: 'selected' as const, // Suggestions are immediately marked as selected
+      category: 'Outros',
+      status: 'selected' as const,
       selectedBy: suggestionData.suggesterName.trim(),
       selectionDate: serverTimestamp(),
       createdAt: serverTimestamp(),
       imageUrl: uploadedImageUrl,
-      selectedQuantity: 1, // Quantity is 1 for user-suggested items
-      totalQuantity: 1, // Total quantity is also 1
-      // sendReminderEmail and guestEmail are no longer part of SuggestionData or GiftItem for this purpose
+      selectedQuantity: 1,
+      totalQuantity: 1,
     };
 
     if (!newItemData.name || !newItemData.selectedBy) {
@@ -763,31 +761,7 @@ export async function addSuggestion(
     forceRevalidation('/admin');
 
     const newDocSnap = await getDoc(docRef);
-    const newItem = newDocSnap.exists() ? giftFromDoc(newDocSnap) : null;
-
-    // Email sending logic removed
-    // if (newItem && suggestionData.sendReminderEmail && suggestionData.guestEmail) {
-    //   const eventSettings = await getEventSettings(); // Fetch current event settings
-    //   if (eventSettings) {
-    //     try {
-    //       await sendGiftReminderEmail(
-    //         suggestionData.guestEmail,
-    //         newItem,
-    //         eventSettings,
-    //         suggestionData.suggesterName,
-    //         1 // Quantity is 1 for suggested items
-    //       );
-    //     } catch (emailError) {
-    //       console.error("Firestore ADD_SUGGESTION: Failed to send reminder email:", emailError);
-    //       // Log error but don't fail the suggestion addition
-    //     }
-    //   } else {
-    //     console.warn("Firestore ADD_SUGGESTION: Event settings not found, cannot send email.");
-    //   }
-    // }
-
-
-    return newItem;
+    return newDocSnap.exists() ? giftFromDoc(newDocSnap) : null;
   } catch (error) {
     console.error('Firestore ADD_SUGGESTION: Error adding suggestion:', error);
     if (uploadedImageUrl) {
@@ -840,7 +814,7 @@ export async function addGiftAdmin(
       throw new Error('Nome, categoria e status são obrigatórios.');
     }
 
-    const finalDataToAdd: Omit<GiftItem, 'id'> & { createdAt: any, selectionDate: any | null } = { // Allow null for selectionDate
+    const finalDataToAdd: Omit<GiftItem, 'id'> & { createdAt: any, selectionDate: any | null } = {
       name: name.trim(),
       description: description?.trim() || null,
       category: category,
@@ -848,11 +822,11 @@ export async function addGiftAdmin(
         status === 'not_needed'
           ? 'not_needed'
           : isQuantityItem
-            ? 'available' // Quantity items added by admin default to available
+            ? 'available'
             : status,
       selectedBy:
         status === 'selected' && !isQuantityItem
-          ? selectedBy?.trim() || 'Admin' // Admin default for selected non-quantity items
+          ? selectedBy?.trim() || 'Admin'
           : null,
       selectionDate:
         status === 'selected' && !isQuantityItem
@@ -861,8 +835,8 @@ export async function addGiftAdmin(
       createdAt: serverTimestamp(),
       imageUrl: uploadedImageUrl,
       totalQuantity: isQuantityItem ? totalQuantity : null,
-      selectedQuantity: 0, // Always initialize to 0 for new items
-       ...(otherItemDetails as Partial<Omit<GiftItem, 'id' | 'createdAt' | 'selectionDate' | 'name' | 'category' | 'status' | 'totalQuantity' | 'selectedQuantity' | 'imageUrl' | 'description' | 'selectedBy'>>), // Include any other valid GiftItem fields
+      selectedQuantity: 0,
+       ...(otherItemDetails as Partial<Omit<GiftItem, 'id' | 'createdAt' | 'selectionDate' | 'name' | 'category' | 'status' | 'totalQuantity' | 'selectedQuantity' | 'imageUrl' | 'description' | 'selectedBy'>>),
     };
 
 
@@ -878,7 +852,6 @@ export async function addGiftAdmin(
       finalDataToAdd.selectionDate = null;
       finalDataToAdd.selectedQuantity = 0;
     }
-     // Explicitly set selectedQuantity for single selected items if not a quantity item
     if (finalDataToAdd.status === 'selected' && !isQuantityItem) {
         finalDataToAdd.selectedQuantity = 1;
     }
@@ -886,7 +859,7 @@ export async function addGiftAdmin(
 
     const cleanedData = Object.fromEntries(
       Object.entries(finalDataToAdd).filter(([, value]) => value !== undefined)
-    ) as Omit<GiftItem, 'id'> & { createdAt: any, selectionDate: any | null }; // Type assertion
+    ) as Omit<GiftItem, 'id'> & { createdAt: any, selectionDate: any | null };
 
     console.log('Firestore ADD_GIFT_ADMIN: Cleaned Data to Add:', cleanedData);
 
@@ -921,14 +894,14 @@ export async function addGiftAdmin(
 
 export async function updateGift(
   itemId: string,
-  updates: Partial<Omit<GiftItem, 'id' | 'createdAt'>> & { // selectedQuantity can be updated
+  updates: Partial<Omit<GiftItem, 'id' | 'createdAt'>> & {
     imageDataUri?: string | null | undefined;
   }
 ): Promise<GiftItem | null> {
   console.log(`Firestore UPDATE_GIFT: Updating gift ${itemId}...`);
   const {
     imageDataUri,
-    imageUrl: newImageUrlInput, // This might be a new URL or null for removal
+    imageUrl: newImageUrlInput,
     totalQuantity: newTotalQuantityInput,
     selectedQuantity: newSelectedQuantityInput,
     status: newStatusInput,
@@ -944,7 +917,7 @@ export async function updateGift(
       console.error(`Firestore UPDATE_GIFT: Item with ID ${itemId} not found.`);
       throw new Error(`Item with ID ${itemId} não encontrado.`);
     }
-    const currentItemData = currentItemSnap.data() as GiftItem; // Assuming data matches GiftItem
+    const currentItemData = currentItemSnap.data() as GiftItem;
     const currentImageUrl = currentItemData?.imageUrl || null;
 
 
@@ -984,7 +957,6 @@ export async function updateGift(
      dataToUpdate.imageUrl = finalImageUrl;
 
 
-    // Handle totalQuantity and selectedQuantity
     const currentTotalQuantity = currentItemData.totalQuantity ?? null;
     const currentSelectedQuantity = currentItemData.selectedQuantity ?? 0;
 
@@ -992,7 +964,7 @@ export async function updateGift(
     if (typeof newTotalQuantityInput === 'number' && newTotalQuantityInput >= 0) {
         finalTotalQuantity = newTotalQuantityInput;
     } else if (newTotalQuantityInput === null) {
-        finalTotalQuantity = null; // Explicitly setting to null (single item)
+        finalTotalQuantity = null;
     }
     dataToUpdate.totalQuantity = finalTotalQuantity;
 
@@ -1007,14 +979,12 @@ export async function updateGift(
             finalSelectedQuantity = newSelectedQuantityInput;
         }
     }
-     // If item becomes non-quantity, selectedQuantity should be 0 or 1 based on status
     if (!isNowQuantityItem) {
         finalSelectedQuantity = (newStatusInput === 'selected' || (!newStatusInput && currentItemData.status === 'selected')) ? 1 : 0;
     }
     dataToUpdate.selectedQuantity = finalSelectedQuantity;
 
 
-    // Determine status based on quantity and input
     let finalStatus = newStatusInput || currentItemData.status;
     if (isNowQuantityItem && finalTotalQuantity !== null) {
         if (finalSelectedQuantity >= finalTotalQuantity) {
@@ -1022,9 +992,8 @@ export async function updateGift(
         } else {
             finalStatus = 'available';
         }
-    } else { // Single item
+    } else {
         if (finalStatus === 'selected' && finalSelectedQuantity < 1) {
-            // If admin manually sets to selected but selectedQuantity is 0, make it 1
             dataToUpdate.selectedQuantity = 1;
         } else if (finalStatus === 'available' || finalStatus === 'not_needed') {
             dataToUpdate.selectedQuantity = 0;
@@ -1033,15 +1002,13 @@ export async function updateGift(
     dataToUpdate.status = finalStatus;
 
 
-    // Handle selectedBy and selectionDate
     if (dataToUpdate.status === 'selected') {
-      if (!isNowQuantityItem) { // Only for single items set via admin
+      if (!isNowQuantityItem) {
         dataToUpdate.selectionDate = updates.selectionDate
           ? (new Date(updates.selectionDate) instanceof Date ? Timestamp.fromDate(new Date(updates.selectionDate)) : serverTimestamp())
           : serverTimestamp();
         dataToUpdate.selectedBy = updates.selectedBy?.trim() || currentItemData.selectedBy || 'Admin';
       }
-       // For quantity items, selectedBy and selectionDate are typically updated by user actions, not directly here unless specified
     } else if (dataToUpdate.status === 'available' || dataToUpdate.status === 'not_needed') {
       dataToUpdate.selectedBy = null;
       dataToUpdate.selectionDate = null;
@@ -1287,7 +1254,7 @@ export async function exportGiftsToCSV(): Promise<string> {
         const selectedBy = item.selectedBy ?? '';
         const imageUrl = item.imageUrl ?? '';
         const totalQuantity = item.totalQuantity ?? null;
-        const selectedQuantity = item.selectedQuantity ?? 0; // Default to 0 if undefined
+        const selectedQuantity = item.selectedQuantity ?? 0;
 
         return [
           escapeCsv(item.id),
@@ -1376,8 +1343,6 @@ export async function exportConfirmationsToCSV(): Promise<string> {
   }
 }
 
-// --- Presence Confirmation Functions ---
-
 export async function addConfirmation(
   names: string[]
 ): Promise<Confirmation | null> {
@@ -1465,7 +1430,3 @@ export async function getConfirmations(): Promise<Confirmation[]> {
     return [];
   }
 }
-
-// Consider moving initializeFirestoreData to a separate script or a development-only call.
-// Calling it on every server render of a component using this module might be excessive.
-// initializeFirestoreData().catch(err => console.error("Initial Firestore check failed:", err));
