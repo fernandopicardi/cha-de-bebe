@@ -49,7 +49,7 @@ export default function RootLayout({
               <p className="text-sm text-muted-foreground">
                 Desenvolvido com <span role="img" aria-label="coração">❤️</span> por{' '}
                 <a
-                  href="https://fernandopicardi.com" // Replace with actual link if desired
+                  href="https://br.linkedin.com/in/fernando-picardi-aa3649221" // Updated link
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-primary hover:underline underline-offset-4"
